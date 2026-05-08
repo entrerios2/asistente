@@ -1,10 +1,12 @@
 import type { AudioProvider } from './types';
+import { WebAudioProvider } from './web/WebAudioProvider';
+import { TauriAudioProvider } from './tauri/TauriAudioProvider';
 
 export function getAudioProvider(): AudioProvider {
 	// @ts-ignore - Verificamos si estamos en el entorno de Tauri
 	if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
-		throw new Error('Tauri provider not implemented yet');
+		return new TauriAudioProvider();
 	}
 
-	throw new Error('Web provider not implemented yet');
+	return new WebAudioProvider();
 }
