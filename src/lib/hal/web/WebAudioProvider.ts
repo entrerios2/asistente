@@ -1,3 +1,4 @@
+import { base } from '$app/paths';
 import type { AudioProvider, AudioListener } from '../types';
 
 export class WebAudioProvider implements AudioProvider {
@@ -21,8 +22,8 @@ export class WebAudioProvider implements AudioProvider {
 			}
 		});
 
-		// 3. Cargar el módulo del worklet
-		await this.audioContext.audioWorklet.addModule('/asistente/worklets/audio-capture-processor.js');
+		// 3. Cargar el módulo del worklet usando la ruta dinámica
+		await this.audioContext.audioWorklet.addModule(`${base}/worklets/audio-capture-processor.js`);
 
 		const source = this.audioContext.createMediaStreamSource(this.stream);
 

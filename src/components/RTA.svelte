@@ -22,10 +22,14 @@
 			ctx.lineWidth = 3;
 			ctx.lineJoin = 'round';
 
-			const sliceWidth = width / audioData.length;
+			// OPTIMIZACIÓN: Solo dibujamos una cantidad fija de puntos (ej. 1024) 
+			// para mantener 60fps constantes sin importar el tamaño del buffer.
+			const pointsToDraw = 1024;
+			const step = Math.ceil(audioData.length / pointsToDraw);
+			const sliceWidth = width / (audioData.length / step);
 			let x = 0;
 
-			for (let i = 0; i < audioData.length; i++) {
+			for (let i = 0; i < audioData.length; i += step) {
 				const v = audioData[i];
 				const y = (v * height) / 2 + height / 2;
 
