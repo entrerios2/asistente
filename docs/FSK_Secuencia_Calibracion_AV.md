@@ -81,16 +81,63 @@ La innovación fundamental es que **el FSK viaja a través de la cadena de seña
 - El analizador en el extremo receptor escucha el header FSK y sabe exactamente qué medir, independientemente del tiempo de viaje de la señal
 - Los **errores de velocidad en reproducción de cinta**, que desincronizarían otros sistemas, son tolerados porque cada segmento se retempla desde su propio header FSK — no hay deriva acumulada
 
-### Codificación
+### Codificación FSK (Estándar Lindos)
 
 ```
-FSK estándar Lindos:
-  Mark (bit 1) = 1800 Hz
-  Space (bit 0) = 1200 Hz
-  Velocidad = 110 baudios
-  Duración de bit ≈ 9ms
-  Duración del header ≈ 200ms
+FSK estándar Lindos (LA100/LA101/LA102/MS20):
+  Mark  (bit 1) = 1650 Hz
+  Space (bit 0) = 1850 Hz
+  Velocidad     = 110 baudios
+  Duración de bit ≈ 9.09 ms (1/110 s)
+  Duración del header ≈ 200 ms por segmento
+  Tolerancia a errores de velocidad: ±4%
+
+Framing por carácter ASCII:
+  1 start bit
+  7 data bits (LSB primero)
+  1 bit de paridad par (even parity)
+  2 stop bits
+  Total = 11 bits por carácter
+
+El tono Mark (1650 Hz) se transmite durante al menos 2 bits
+before del primer carácter de datos para permitir la sincronización
+del receptor.
 ```
+
+> **Nota:** Las frecuencias 1200/1800 Hz corresponden al estándar V.21 (módem telefónico). El estándar Lindos utiliza 1650/1850 Hz — rango escogido deliberadamente para maximizar la robustez a través de cadenas de audio de radiodifusión (paso de banda garantizado entre ~80 Hz y ~15 kHz).
+
+### Cabecera de Baja Frecuencia (LF Header) para Subsistemas de Graves
+
+El FSK estándar (1650/1850 Hz) no puede atravesar dispositivos con corte por debajo de 2 kHz — caso típico de subwoofers y filtros de crossover de baja frecuencia. Para estos subsistemas se usa una cabecera alternativa:
+
+```
+FSK cabecera LF (para subsistemas de graves):
+  Mark  (bit 1) = 150 Hz
+  Space (bit 0) = 200 Hz
+  Velocidad     = 110 baudios
+  Framing       = idéntico al HF (1 start + 7 data + 1 parity + 2 stop)
+```
+
+**Criterio de selección automática:** El orquestador APST detecta el tipo de altavoz en el inventario de hardware. Si el crossover declarado del subsistema es ≤ 120 Hz, selecciona automáticamente la cabecera LF. El operador puede sobreescribir la selección manualmente (`Cabecera: Auto / HF / LF`).
+
+**Implementación en el detector Goertzel:** El motor WASM implementa dos bancos de filtros Goertzel en paralelo — uno sintonizado a 1650/1850 Hz y otro a 150/200 Hz. El orquestador indica al banco activo antes de iniciar cada segmento.
+
+### Direct Trigger (Disparo Directo)
+
+Modo alternativo para situaciones donde el FSK in-band no puede decodificarse aunque la cadena de señal esté funcionando. Casos de uso:
+- Subsistemas que no pasan las frecuencias FSK ni con cabecera LF (ej. altavoces con crossover a 80 Hz)
+- Salas con reverberación extrema que interfiere con la decodificación FSK
+- Pruebas de cable (loopback) sin altavoces activos
+
+En Direct Trigger, el identificador de segmento se pasa internamente del generador al analizador sin necesidad de FSK in-band. La medición comienza cuando el operador confirma manualmente o el orquestador envía la instrucción. La cadena de señal sigue siendo medida normalmente — solo el mecanismo de sincronización cambia.
+
+### Segmentos de Control de Secuencia
+
+**Terminación `.` + conteo:** Toda secuencia bien formada termina con un segmento `.` seguido de un conteo de 4 bits (0-15) que indica el número de segmentos de medición transmitidos. El analizador compara este conteo con los segmentos recibidos — si hay discrepancia, reporta segmentos perdidos.
+
+**Source ID `+`:** Segmento opcional que transmite un mensaje de texto libre de hasta 21 caracteres (ej. nombre del venue, ID del evento) via FSK. Útil para documentación automática en reportes.
+
+En la implementación APST, ambos segmentos se agregan automáticamente al final de toda secuencia generada.
 
 ---
 
@@ -129,34 +176,49 @@ El Web Audio API provee todo lo necesario para ambos lados del enlace FSK.
 ### Generación (equivalente al LA101)
 
 ```javascript
-// FSK de dos frecuencias: mark = 1800 Hz, space = 1200 Hz (110 baudios)
-// Idéntico al enfoque del hardware Lindos
-const oscillator = audioContext.createOscillator();
+// FSK estándar Lindos: mark = 1650 Hz, space = 1850 Hz (110 baudios)
+// Framing: 1 start + 7 data (LSB first) + 1 even parity + 2 stop = 11 bits/char
+// Referencia: LA100 Manual 6th Edition, Appendix H
 
-function charToBits(char) {
-  // 7-bit ASCII + bit de start + bit de stop = 9 bits por carácter
-  const code = char.charCodeAt(0);
-  const bits = [0]; // start bit
+const MARK_HZ  = 1650;  // bit 1
+const SPACE_HZ = 1850;  // bit 0
+const BAUD     = 110;   // baudios
+
+// Para cabecera LF (subsistemas de graves, crossover ≤ 120 Hz):
+// const MARK_HZ  = 150;
+// const SPACE_HZ = 200;
+
+function charToFSKBits(char) {
+  const code = char.charCodeAt(0) & 0x7F;  // 7 bits ASCII
+  const bits = [0];  // start bit (space)
+  let parity = 0;
   for (let i = 0; i < 7; i++) {
-    bits.push((code >> i) & 1);
+    const b = (code >> i) & 1;
+    bits.push(b);
+    parity ^= b;
   }
-  bits.push(1); // stop bit
-  return bits;
+  bits.push(parity);  // even parity bit
+  bits.push(1);       // stop bit 1
+  bits.push(1);       // stop bit 2
+  return bits;        // 11 bits totales
 }
 
-function sendFSKHeader(segmentCode) {
-  const bits = charToBits(segmentCode);
-  let t = audioContext.currentTime;
-  const bitDuration = 1 / 110; // 110 baudios → ~9.09ms por bit
+function sendFSKHeader(segmentCode, oscillator, startTime, markHz = MARK_HZ, spaceHz = SPACE_HZ) {
+  const bitDuration = 1 / BAUD;  // ~9.09 ms
+  let t = startTime;
 
+  // Preámbulo: 2 bits mark (1650 Hz) para sincronización del receptor
+  oscillator.frequency.setValueAtTime(markHz, t);
+  t += bitDuration * 2;
+
+  // Carácter del segmento
+  const bits = charToFSKBits(segmentCode);
   bits.forEach(bit => {
-    oscillator.frequency.setValueAtTime(
-      bit === 1 ? 1800 : 1200, // mark / space
-      t
-    );
+    oscillator.frequency.setValueAtTime(bit === 1 ? markHz : spaceHz, t);
     t += bitDuration;
   });
-  // Después del header, continúa inmediatamente con la señal de prueba del segmento
+  return t;  // tiempo de fin del header (~200ms desde startTime)
+  // La señal de prueba del segmento comienza inmediatamente después
 }
 ```
 
@@ -165,26 +227,48 @@ function sendFSKHeader(segmentCode) {
 El algoritmo de Goertzel es el detector óptimo para FSK. A diferencia de una FFT completa, computa la energía en una sola frecuencia objetivo con costo computacional mínimo — ideal para el AudioWorklet donde cada ciclo de CPU cuenta.
 
 ```rust
-// En el motor WASM — Algoritmo de Goertzel para detección FSK
+// Motor WASM — Detector FSK dual-banco (HF y LF en paralelo)
+// Referencia: LA100 Manual 6th Ed. Appendix H + MS20 Manual §3.7
+
 fn goertzel(samples: &[f32], target_freq: f32, sample_rate: f32) -> f32 {
     let k = (0.5 + (samples.len() as f32 * target_freq / sample_rate)) as usize;
     let omega = 2.0 * PI * k as f32 / samples.len() as f32;
     let coeff = 2.0 * omega.cos();
     let (mut s_prev, mut s_prev2) = (0.0f32, 0.0f32);
-
-    for &sample in samples {
-        let s = sample + coeff * s_prev - s_prev2;
+    for &s in samples {
+        let new_s = s + coeff * s_prev - s_prev2;
         s_prev2 = s_prev;
-        s_prev = s;
+        s_prev = new_s;
     }
-    // Retorna energía en la frecuencia objetivo
     s_prev2.powi(2) + s_prev.powi(2) - coeff * s_prev * s_prev2
 }
 
-fn detect_fsk_bit(samples: &[f32], sample_rate: f32) -> u8 {
-    let energy_mark  = goertzel(samples, 1800.0, sample_rate);
-    let energy_space = goertzel(samples, 1200.0, sample_rate);
+// Banco HF (estándar): 1650 / 1850 Hz
+fn detect_fsk_bit_hf(samples: &[f32], sample_rate: f32) -> u8 {
+    let energy_mark  = goertzel(samples, 1650.0, sample_rate);  // Mark
+    let energy_space = goertzel(samples, 1850.0, sample_rate);  // Space
     if energy_mark > energy_space { 1 } else { 0 }
+}
+
+// Banco LF (subwoofers/crossover ≤ 120 Hz): 150 / 200 Hz
+fn detect_fsk_bit_lf(samples: &[f32], sample_rate: f32) -> u8 {
+    let energy_mark  = goertzel(samples, 150.0, sample_rate);
+    let energy_space = goertzel(samples, 200.0, sample_rate);
+    if energy_mark > energy_space { 1 } else { 0 }
+}
+
+// Decodificador completo con verificación de paridad
+fn decode_fsk_char(bits: &[u8]) -> Option<char> {
+    // bits[0] = start (debe ser 0), bits[1..7] = data, bits[8] = parity, bits[9..10] = stop
+    if bits.len() < 11 || bits[0] != 0 { return None; }  // start bit inválido
+    let mut code = 0u8;
+    let mut parity = 0u8;
+    for i in 0..7 {
+        code |= bits[i + 1] << i;
+        parity ^= bits[i + 1];
+    }
+    if parity != bits[8] { return None; }  // error de paridad
+    Some(code as char)
 }
 ```
 
@@ -322,12 +406,14 @@ Este es uno de los diagnósticos más prácticamente útiles porque **los fallos
 | **A** | Alignment Level | Seno 1 kHz @ −18 dBFS | Desviación de ganancia vs. nominal | ±1 dB |
 | **M** | Mic Profile Verification | Sweeptones de tercio de octava | Desviación vs. curva almacenada | ±2 dB |
 | **N** | Noise Floor | Silencio | SPL ponderado A, curva NC | NC ≤ 35 |
-| **F** | Frequency Response | Sweep logarítmico 40 Hz–16 kHz | Desviación de magnitud vs. curva objetivo | ±3 dB (125 Hz–8 kHz) |
+| **F** | Frequency Response (Fast) | Sweep logarítmico 40 Hz–20 kHz (~15s) | Desviación de magnitud vs. respuesta plana | ±3 dB (80 Hz–16 kHz) |
+| **S** | Frequency Response (Slow) | Sweep logarítmico 40 Hz–20 kHz (20s) | Respuesta de alta resolución para FIR | ±3 dB (80 Hz–16 kHz) |
 | **P** | Phase & Coherence | Sweep dual-canal | Error de fase + coherencia < 0.85 | ±15° @ 1 kHz |
 | **T** | Time Alignment | Impulso MLS / sweep + deconvolución | Tiempo de llegada vs. delay calculado | ±0.5 ms |
 | **D** | Distortion THD+N | Seno 1 kHz @ 0 dBFS y −6 dBFS | Relación THD+N | ≤ 1% |
 | **X** | Crosstalk | Seno 1 kHz canal L only / R only | Sangrado entre canales | ≤ −60 dB |
 | **R** | Feedback Margin | Ruido rosa + rampa de ganancia | dB de headroom antes del primer anillo | ≥ 6 dB |
+| **H** | Headroom / Linearity | Seno 1 kHz en rampa 0 dBFS → clip | Punto de compresión, disto emergente | THD < 1% a 0 dBFS |
 | **I** | IR Capture & Export | (Post-procesamiento de T) | Respuesta al impulso + filtro FIR de corrección | — |
 
 ---
@@ -394,6 +480,41 @@ La tolerancia de ±3 dB para nivel en V es deliberadamente más amplia que el ±
 | Piso de ruido falla | "Ruido ambiente excesivo (NC-XX). Las mediciones tendrán confiabilidad reducida en bajas frecuencias." |
 | THD falla | "Distorsión severa en cadena. Sistema sobrecargado. Reducir ganancia antes de cualquier medición." |
 
+#### Pipeline de Procesamiento DSP
+
+```
+Contexto: AudioWorklet (tiempo real) — no puede bloquearse
+
+1. DECODIFICACIÓN FSK (×5 repeticiones)
+   - Buffer de entrada: ventanas de 9 ms (1 bit @ 110 baud, fs=48 kHz → 432 muestras/bit)
+   - Por cada ventana de bit: Goertzel dual-banco (1650 Hz y 1850 Hz)
+   - Decisión: bit = 1 si E_mark > E_space, else 0
+   - Acumular 11 bits → decode_fsk_char() con verificación de paridad par
+   - Contar decodificaciones correctas sobre 5 intentos → score FSK (0–5)
+   - Medir timestamp de llegada del último stop bit → latencia_medida_ms
+   - latencia_exceso_ms = latencia_medida_ms − (baseLatency + outputLatency) × 1000
+
+2. NIVEL DEL TONO PILOTO (ventana 2s @ 1 kHz)
+   - Ventana Hann sobre cada bloque de 4096 muestras
+   - RMS: nivel_rms_dbfs = 20·log10(√(Σx²/N))
+   - Comparar contra nivel_transmitido_dbfs → desviación_db
+
+3. ESTIMACIÓN RÁPIDA THD (durante tono piloto)
+   - FFT de 4096 puntos sobre ventana Hann
+   - Fundamental: bin más cercano a 1000 Hz → E1
+   - Armónicos: bins en 2k, 3k, 4k, 5k Hz → E2..E5
+   - THD_pct = 100 × √(E2²+E3²+E4²+E5²) / E1
+
+4. PISO DE RUIDO (ventana silencio 3s)
+   - FFT de 8192 puntos, 4 promedios con overlap 50%
+   - Aplicar ponderación A en dominio frecuencia
+   - RMS total ponderado → nivel_dBA
+   - Conversión rápida a rating NC: comparar contra curvas NC-25..NC-60 en 8 bandas de octava
+
+Outputs al Orchestrator (vía SharedArrayBuffer):
+  { fsk_score: 0-5, latency_ms, latency_excess_ms, level_deviation_db, thd_pct, noise_nc, noise_dba }
+```
+
 **Timing:** ~8 segundos
 
 ---
@@ -421,6 +542,36 @@ La tolerancia de ±3 dB para nivel en V es deliberadamente más amplia que el ±
 | Nivel ≥ −6 dB bajo objetivo | Sistema demasiado silencioso — margen de feedback se desperdicia, rango dinámico comprometido |
 | Variación >3 dB entre L y R | Ganancia asimétrica — un canal de amplificador, cable, o salida de consola difiere |
 | Nivel sobre objetivo | Sistema corriendo caliente — headroom reducido, riesgo de clipping elevado |
+
+#### Pipeline de Procesamiento DSP
+
+```
+Contexto: AudioWorklet (tiempo real)
+
+1. DESCARTE de los primeros 500 ms post-header FSK
+   (permite que el generador y la sala se estabilicen)
+
+2. RMS de NIVEL en 4 bloques consecutivos de 1024 muestras
+   - Ventana rectangular (el tono es estacionario, no hay fuga espectral relevante)
+   - nivel_rms[i] = 20·log10(√(Σx²/N))
+   - Promedio de los 4 bloques → nivel_medio_dbfs
+   - Varianza entre bloques: si > 0.5 dB → posible inestabilidad de nivel (reportar)
+
+3. DESVIACIÓN vs. REFERENCIA
+   - ganancia_cadena_db = nivel_medio_dbfs − nivel_tx_dbfs
+   - nivel_tx_dbfs: constante definida en la configuración del generador (ej. −18.0 dBFS)
+
+4. VERIFICACIÓN ESTÉREO (si aplica)
+   - Misma operación en canal L y canal R independientemente
+   - asimetría_db = |ganancia_L − ganancia_R|
+
+5. ALMACENAMIENTO del nivel de referencia
+   - nivel_referencia_dbfs = nivel_medio_dbfs
+   - Escrito en SharedArrayBuffer → accesible por todos los segmentos posteriores
+   - Todos los resultados de F, P, D, X se normalizan contra este valor
+
+Outputs: { gain_db, asymmetry_db, reference_level_dbfs }
+```
 
 **Timing:** ~7 segundos
 
@@ -453,6 +604,42 @@ El perfil almacenado en el inventario de hardware del Módulo 3.2 es la curva de
 | Severa (>8 dB) | Detener. El micrófono es el modelo incorrecto o está físicamente dañado |
 
 **Escenario de campo crítico:** El micrófono de medición designado fue olvidado en el estudio y el operador usa un SM58 de repuesto. Sin M, el sistema aplica la compensación incorrecta a cada medición de respuesta en frecuencia, produciendo correcciones de EQ que empeoran el sistema en lugar de mejorarlo.
+
+#### Pipeline de Procesamiento DSP
+
+```
+Contexto: Web Worker (procesamiento offline post-grabación)
+
+1. GRABACIÓN de la señal recibida durante los sweeptones (fs=48 kHz, Float32)
+
+2. SEGMENTACIÓN por tono de referencia
+   - Para cada banda de tercio de octava (31 bandas, 20 Hz–20 kHz):
+     a. Ventana sincronizada con el header FSK del tono correspondiente
+     b. Descarte de primeros 200 ms (transitorio)
+     c. Bloque de medición: 1024 muestras
+
+3. NIVEL POR BANDA
+   - Goertzel en la frecuencia central de cada banda de tercio de octava
+   - nivel_banda[i]_dbfs = 20·log10(√E_goertzel[i])
+   - Normalizar contra nivel_referencia_dbfs del segmento A
+   - curva_medida[i]_db = nivel_banda[i] − referencia
+
+4. COMPARACIÓN CON PERFIL ALMACENADO
+   - perfil_clm[i]: curva del fabricante del micrófono desde IndexedDB (31 valores en dB)
+   - desviación[i]_db = curva_medida[i] − perfil_clm[i]
+   - RMS de desviaciones → desviación_global_db
+
+5. DECISIÓN
+   - desviación_global ≤ 2 dB → PASS, actualizar perfil automáticamente
+   - 2–8 dB → WARNING, solicitar confirmación del operador
+   - > 8 dB → FAIL, bloquear mediciones hasta resolución
+
+6. CURVA DE COMPENSACIÓN
+   - curva_compensación[i]_db = −perfil_clm[i]
+   - Almacenada en SharedArrayBuffer para ser aplicada en tiempo real por segmentos F, P
+
+Outputs: { deviation_rms_db, per_band_deviation[31], mic_compensation_curve[31], pass/warn/fail }
+```
 
 **Timing:** ~20 segundos
 
@@ -498,6 +685,45 @@ El piso de ruido es el **piso de todo el rango dinámico del sistema**. Todo lo 
 
 **Rol sistémico:** El resultado de N establece directamente el **umbral mínimo de coherencia** para el segmento P. Si el piso de ruido es alto, la coherencia naturalmente será menor en niveles de señal bajos. El sistema debe ajustar automáticamente los umbrales de advertencia de coherencia basado en el resultado de N.
 
+#### Pipeline de Procesamiento DSP
+
+```
+Contexto: Web Worker (grabación continua + análisis offline)
+
+1. GRABACIÓN de ventana de silencio (15 s, fs=48 kHz)
+   Descarte de primeros 200 ms post-header (estabilización ADC)
+
+2. ESPECTRO DE POTENCIA
+   - FFT de N=65536 puntos (resolución: 48000/65536 ≈ 0.73 Hz/bin)
+   - Ventana Hann, overlap 50%, 8 promedios espectrales
+   - PSD[f] = (2/N²) · |X[f]|²  [en unidades de FS²/Hz]
+
+3. NIVEL BROADBAND PONDERADO A
+   - Curva de ponderación A: W_A(f) definida según IEC 61672-1
+   - W_A(f) = (12194² · f⁴) / ((f²+20.6²) · √((f²+107.7²)(f²+737.9²)) · (f²+12194²))
+   - PSD_A[f] = PSD[f] · W_A(f)²
+   - nivel_dBA = 10·log10(Σ PSD_A[f] · Δf) + 94  [ref. SPL absoluta si mic calibrado]
+   - Si mic sin calibración: nivel_dBFS relativo + estimación desde ganancia declarada
+
+4. CURVAS NC (Noise Criterion)
+   - Calcular potencia en 8 bandas de octava: 63, 125, 250, 500, 1k, 2k, 4k, 8k Hz
+   - banda[i]_db = 10·log10(Σ PSD[f] · Δf) para f ∈ [f_low_i, f_high_i]
+   - Comparar cada banda contra las curvas NC-15 a NC-70 (tabla ASHRAE)
+   - NC_rating = máximo NC que ninguna banda excede
+
+5. DIAGNÓSTICO ESPECTRAL
+   - Detectar picos estrechos: bin > media_banda + 10 dB → posible tono de red o RF
+   - Energía relativa en 50/60 Hz: si > −40 dBFS → posible hum eléctrico
+   - Gradiente espectral: si energía cae > 6 dB/octava desde LF → perfil HVAC
+
+6. UMBRAL DE COHERENCIA ADAPTATIVO
+   - SNR_estimado[f] = PSD_señal_esperada[f] / PSD_ruido[f]
+   - coherencia_umbral[f] = 0.95 − 0.3 · exp(−SNR_estimado[f] / 10)
+   - Almacenado en SharedArrayBuffer para segmento P
+
+Outputs: { noise_dba, nc_rating, nc_per_band[8], spectral_peaks[], coherence_threshold[f] }
+```
+
 **Timing:** ~15 segundos
 
 ---
@@ -506,7 +732,11 @@ El piso de ruido es el **piso de todo el rango dinámico del sistema**. Todo lo 
 
 **Qué es:** La medición más visualmente intuitiva y la que los operadores interactúan más directamente — la curva que muestra cuán fuerte es el sistema en cada frecuencia relativa al nivel de referencia establecido por el segmento A.
 
-**La señal:** Un sweep sinusoidal logarítmico de 20 Hz a 20 kHz (en práctica 40 Hz–16 kHz para voz hablada). Logarítmico porque la audición humana es logarítmica — el sweep pasa proporcionalmente más tiempo en bajas frecuencias donde la resolución importa más para la acústica de sala.
+**La señal (dos variantes):**
+- **Segmento F (Fast):** Sweep sinusoidal logarítmico 40 Hz–20 kHz en ~15 segundos. Velocidad estándar, resolución media. Uso principal para calibración pre-evento.
+- **Segmento S (Slow):** Sweep sinusoidal logarítmico 40 Hz–20 kHz en 20 segundos. Resolución máxima, recomendado antes de computar filtros FIR de alta precisión (segmento I). Equivalente al segmento `S` del LA100.
+
+Ambus sweeps son logarítmicos porque la audición humana es logarítmica — pasan proporcionalmente más tiempo en bajas frecuencias donde la resolución importa más para la acústica de sala.
 
 **Cómo funciona:**
 
@@ -517,20 +747,24 @@ El motor WASM compara el nivel instantáneo del sweep recibido contra una refere
 2. Contribución acústica de la sala
 3. Coloración propia del micrófono
 
-Con el perfil de micrófono aplicado desde el Módulo 3.2 (verificado por segmento M), lo que queda es la respuesta combinada de sala y altavoz — que es lo que se quiere ecualizar.
+Con el perfil de micrófono aplicado desde el inventario de hardware (verificado por segmento M), lo que queda es la respuesta combinada de sala y altavoz — que es lo que se quiere ecualizar.
 
-**La curva objetivo para voz hablada:**
+**Curva objetivo: Respuesta Plana (Programa Mixto)**
 
-Investigación sobre inteligibilidad del habla (ITU-T P.800, IEC 60268-16 STI) muestra consistentemente que un ligero boost de presencia y rolloff de graves controlado mejora la inteligibilidad sobre una respuesta plana:
+El tipo de eventos del sistema incluye **voz hablada en vivo, música pregrabada y reproducción de video**. La curva objetivo es por tanto una **respuesta plana extendida**, no una curva optimizada para un único tipo de contenido:
 
-| Rango | Objetivo | Razón |
-|---|---|---|
-| Sub-graves (20–80 Hz) | −6 a −12 dB aceptable | Modos de sala dominan, EQ rara vez mejora |
-| Graves (80–200 Hz) | Plano a −3 dB | Calidez suficiente sin turbidez |
-| Bajo-medio (200–800 Hz) | Plano ±2 dB | El cuerpo de la voz vive aquí |
-| Presencia (1–4 kHz) | Plano a +2 dB | Claridad de consonantes e inteligibilidad |
-| Alta presencia (4–8 kHz) | Plano a −3 dB | Control de sibilantes |
-| Aire (8–16 kHz) | −6 dB o mayor rolloff aceptable | Umbrales auditivos y absorción del aire |
+| Rango | Objetivo | Tolerancia | Razón |
+|---|---|---|---|
+| Sub-graves (20–80 Hz) | Plano | −6 a −12 dB aceptable | Modos de sala dominan; EQ raramente mejora |
+| Graves (80–200 Hz) | 0 dB | ±3 dB | Cuerpo del sistema |
+| Medio-bajo (200–800 Hz) | 0 dB | ±3 dB | Cuerpo de la voz |
+| Medio (800 Hz–4 kHz) | 0 dB | ±3 dB | Presencia y claridad de consonantes |
+| Agudo (4–16 kHz) | 0 dB | ±3 dB | Aire y brillo |
+| Muy agudo (>16 kHz) | Sin requisito | Rolloff aceptable | Límites de audición y absorción del aire |
+
+El sistema **no aplica ningún roll-off predeterminado**. Si la sala o el hardware requieren un HPF en graves (ej. 60–80 Hz), el operador lo aplica manualmente. Los roll-offs opcionales por zona están disponibles con el Motor de Simulación Nivel 2.
+
+**Relajación de tolerancia adaptativa:** En Modo Agnóstico (sin datos CLF del hardware), la tolerancia se relaja automáticamente a ±6 dB para evitar over-EQ basado en mediciones inciertas.
 
 **Tabla diagnóstica:**
 
@@ -544,6 +778,39 @@ Investigación sobre inteligibilidad del habla (ITU-T P.800, IEC 60268-16 STI) m
 | Respuesta varía dramáticamente entre L y R | Sala asimétrica, altavoces posicionados asimétricamente, o EQ diferente entre canales |
 
 **Conexión con el Módulo 3.2:** La curva de desviación entre medición y objetivo es exactamente el filtro que el sistema necesita aplicar. Módulo 3.2 traduce ese filtro ideal a lo que el hardware físico puede implementar.
+
+#### Pipeline de Procesamiento DSP
+
+```
+Contexto: Web Worker (grabación + análisis offline asíncrono)
+
+1. GRABACIÓN Y EXTRACCIÓN
+   - Grabación síncrona de 15s (F) o 20s (S) de sweep logarítmico (fs=48 kHz)
+   - Señal de excitación (referencia) generada sintéticamente en memoria idéntica a la enviada
+
+2. RESPUESTA AL IMPULSO (RIR) VÍA DECONVOLUCIÓN
+   - X(f) = FFT(señal_excitación)
+   - Y(f) = FFT(señal_recibida)
+   - H(f) = Y(f) / X(f)  (división compleja)
+   - h(t) = IFFT(H(f)) → Respuesta al Impulso de la Sala (RIR)
+
+3. VENTANEO Y SUAVIZADO
+   - Encontrar el pico de h(t) → t_directo
+   - Aplicar ventana asimétrica (Tukey/Hann) alrededor de t_directo (ej. -10ms a +100ms)
+   - Recalcular H_windowed(f) = FFT(h_windowed(t))
+   - Aplicar suavizado fraccional de octava (ej. 1/6 o 1/12 octava) sobre |H_windowed(f)|
+
+4. NORMALIZACIÓN Y COMPENSACIÓN
+   - Magnitud en dB: mag_db[f] = 20·log10(|H_windowed(f)|)
+   - Aplicar compensación de micrófono: mag_db_comp[f] = mag_db[f] + curva_compensación[f]
+   - Normalizar contra referencia de segmento A: respuesta_final_db[f] = mag_db_comp[f] - referencia_dbfs
+
+5. EVALUACIÓN DE TOLERANCIAS
+   - Comparar respuesta_final_db[f] contra curva objetivo (Respuesta Plana extendida)
+   - Calcular desviación máxima y % dentro de tolerancia (±3 dB)
+
+Outputs: { magnitude_response[f], peak_deviation_hz, max_deviation_db, within_tolerance_pct }
+```
 
 **Timing:** ~30 segundos por posición de medición
 
@@ -594,6 +861,40 @@ La coherencia se convierte en el **mapa de confianza** para todas las mediciones
 | Coherencia cae sobre 4 kHz | Micrófono demasiado lejos para coherencia HF, o absorción de aire significativa |
 | Pendiente de fase más pronunciada que lo esperado | Dispositivo de latencia adicional en la cadena (procesador digital, receptor inalámbrico) |
 
+#### Pipeline de Procesamiento DSP
+
+```
+Contexto: Web Worker (análisis concurrente o post-grabación)
+
+1. PREPARACIÓN DE DATOS (Overlap-Add)
+   - Señal x[n] (referencia enviada), señal y[n] (micrófono recibido)
+   - Dividir en M bloques de N=16384 muestras, con 50% o 75% de overlap
+   - Aplicar ventana Hann a cada bloque
+
+2. CÁLCULO DE AUTO Y CROSS-ESPECTROS (Por cada bloque m)
+   - X_m(f) = FFT(x_m[n]), Y_m(f) = FFT(y_m[n])
+   - Sxx_m(f) = X_m(f) * conj(X_m(f))  (Auto-espectro Entrada)
+   - Syy_m(f) = Y_m(f) * conj(Y_m(f))  (Auto-espectro Salida)
+   - Sxy_m(f) = Y_m(f) * conj(X_m(f))  (Cross-espectro)
+
+3. PROMEDIADO ENERGÉTICO (Promedio de M bloques)
+   - Sxx(f) = (1/M) * Σ Sxx_m(f)
+   - Syy(f) = (1/M) * Σ Syy_m(f)
+   - Sxy(f) = (1/M) * Σ Sxy_m(f)   (Nota: promedio de números complejos)
+
+4. CÁLCULO DE COHERENCIA Y FASE
+   - Función de Transferencia H(f) = Sxy(f) / Sxx(f)
+   - Fase: fase_deg[f] = atan2(Im(H(f)), Re(H(f))) * (180/PI)
+   - Coherencia: γ²(f) = |Sxy(f)|² / (Sxx(f) * Syy(f))
+
+5. POST-PROCESAMIENTO
+   - Desenvolver fase (Unwrap phase)
+   - Restar delay de propagación puro de la fase (delay estimado en segmento T)
+   - Evaluar γ²(f) contra el umbral_coherencia calculado en segmento N
+
+Outputs: { phase_response_deg[f], coherence[f], data_quality_warnings[] }
+```
+
 **Timing:** 45–60 segundos (modo completo, 6 promedios) / 20–25 segundos (modo rápido, 2 promedios)
 
 ---
@@ -627,6 +928,34 @@ A 20°C el sonido viaja a 343 m/s, entonces 1 ms de delay corresponde a aproxima
 | Delay medido mayor que el esperado | Etapa digital agrega latencia, o altavoz más lejos, o temperatura mayor a la ingresada |
 | Pico secundario fuerte a 10–15ms | Reflexión temprana de pared paralela o techo — el más dañino para inteligibilidad de habla |
 | Múltiples picos secundarios de amplitud similar | Espacio reverberante — la sala trabaja contra la claridad del habla |
+
+#### Pipeline de Procesamiento DSP
+
+```
+Contexto: Web Worker (cálculo rápido post-grabación)
+
+1. DECONVOLUCIÓN PARA OBTENER RIR (Impulse Response)
+   - Si se usa MLS: Correlación circular rápida usando Transformada de Hadamard-Sylvester
+   - Si se usa Sweep: h(t) = IFFT( FFT(y) / FFT(x) )
+   - Filtrar pasa-banda (ej. 80 Hz - 16 kHz) para reducir ruido fuera de banda
+   - Computar Envolvente de Energía temporal (ETC - Energy Time Curve): ETC(t) = |h(t)|²
+
+2. DETECCIÓN DEL TIEMPO DE LLEGADA
+   - Buscar el pico máximo global de la ETC → t_max
+   - Buscar el "onset" (inicio de la energía): recorrer hacia atrás desde t_max hasta que la energía caiga X dB (ej. -20 dB) respecto al pico → t_onset
+   - t_arrival = t_onset (más preciso que t_max, que depende de fase)
+
+3. CÁLCULO DE DELAY Y LATENCIA
+   - Latencia de ida y vuelta: t_round_trip = t_arrival - t_tx_start
+   - Restar latencia de hardware (medida en segmento V): delay_acústico_ms = t_round_trip - latencia_medida_ms
+   - Validar rango físico: si delay_acústico_ms < 0 o > max_expected → Error
+
+4. ANÁLISIS DE REFLEXIONES (ETC)
+   - Buscar picos locales en ETC después de t_max
+   - Si pico local > (t_max - 10 dB) dentro de [t_max+2ms, t_max+30ms] → Reflexión Temprana Dañina detectada
+
+Outputs: { delay_acoustic_ms, early_reflections[{time_ms, relative_level_db}], impulse_response_raw }
+```
 
 **Timing:** ~5 segundos (PA estéreo simple) / ~18–22 segundos (sistema completo con 4 altavoces de delay)
 
@@ -665,6 +994,34 @@ $$\text{THD+N} = \frac{\sqrt{V_2^2 + V_3^2 + V_4^2 + ... + V_N^2}}{V_1} \times 1
 | THD+N crece abruptamente en HF | Driver distorsionando — cerca del límite de excursión o límite térmico de bobina |
 | Distorsión presente incluso en niveles bajos | Bucle de tierra, interferencia RF, o componente defectuoso en la cadena |
 
+#### Pipeline de Procesamiento DSP
+
+```
+Contexto: Web Worker (análisis concurrente o post-grabación)
+
+1. FILTRADO NOTCH DIGITAL
+   - Generar filtro IIR Notch de 2º orden centrado exactamente en la frecuencia fundamental detectada (f0 ≈ 1 kHz)
+   - Q elevado (ej. Q=10) para remover la fundamental sin atenuar excesivamente el 2º armónico
+   - x_notch[n] = filter(x[n])
+
+2. SEPARACIÓN DE ENERGÍAS
+   - Calcular energía total de la señal original: E_total = Σ(x[n]²)
+   - Calcular energía del residuo (ruido + armónicos): E_residuo = Σ(x_notch[n]²)
+   - Energía de la fundamental: E_fund = E_total - E_residuo
+
+3. CÁLCULO THD+N BROAD-BAND
+   - THD_N_ratio = √(E_residuo / E_fund)
+   - THD_N_pct = THD_N_ratio * 100
+   - Nota: si E_residuo > E_fund, el sistema está severamente no lineal (THD > 100%)
+
+4. ANÁLISIS ESPECTRAL DEL RESIDUO (OPCIONAL/DIAGNÓSTICO)
+   - FFT(x[n]) con ventana Blackman-Harris (minimiza fuga espectral de la fundamental)
+   - Medir magnitud en bins correspondientes a 2·f0, 3·f0, 4·f0, 5·f0
+   - Identificar el armónico dominante para diagnóstico
+
+Outputs: { thd_n_pct, thd_n_db, dominant_harmonic, raw_residue_rms }
+```
+
 **Timing:** ~16–18 segundos (dos niveles, estéreo)
 
 ---
@@ -697,6 +1054,30 @@ La diafonía se expresa en dB — el nivel de la señal filtrada en el canal sil
 - **Diafonía creciente con frecuencia:** Acoplamiento capacitivo entre cables
 - **Diafonía plana a través de frecuencias:** Acoplamiento resistivo — existe una conexión física entre canales que no debería estar
 - **Diafonía solo en frecuencias específicas:** Resonancia mecánica entre gabinetes de altavoces
+
+#### Pipeline de Procesamiento DSP
+
+```
+Contexto: AudioWorklet / Web Worker
+
+1. MEDICIÓN DE NIVEL SIMULTÁNEA
+   - Canal activo transmite tono 1 kHz, canal silencioso transmite silencio digital
+   - Aplicar filtro pasabanda estrecho centrado en 1 kHz en AMBOS canales receptores (L y R)
+   - Filtrar mejora la lectura de diafonía aislando la señal del ruido de fondo
+
+2. RMS POR CANAL
+   - nivel_activo = RMS(filtrado_activo[n])
+   - nivel_silencioso = RMS(filtrado_silencioso[n])
+
+3. CÁLCULO DE DIAFONÍA
+   - crosstalk_db = 20·log10(nivel_silencioso / nivel_activo)
+
+4. MODO SWEEP (Para caracterización de frecuencia)
+   - Mismo pipeline pero trackeando la frecuencia instantánea del sweep
+   - Evaluar si la pendiente de la curva de diafonía es de ~6 dB/octava (acoplamiento capacitivo) o plana (acoplamiento resistivo/ruteo)
+
+Outputs: { crosstalk_db, frequency_dependence_slope_db_oct, failure_reason }
+```
 
 **Timing:** ~15–25 segundos dependiendo del modo (tono único vs. sweep de frecuencias)
 
@@ -731,7 +1112,93 @@ El analizador monitorea la **flatness espectral** de la señal recibida durante 
 
 **Conexión con el Módulo 3.6:** Segmento R corre antes del evento en condiciones controladas. La frecuencia que identifica como la más vulnerable se convierte en el **objetivo de notch pre-cargado** en el módulo AFE. Cuando el monitor Centinela se activa durante el evento, ya conoce la frecuencia de problema más probable y puede reaccionar más rápido porque la está observando específicamente en lugar de escanear todo el espectro ciegamente.
 
+#### Pipeline de Procesamiento DSP
+
+```
+Contexto: AudioWorklet (monitoreo en tiempo real) + Módulo de Control de Ganancia
+
+1. ESTIMACIÓN ESPECTRAL CONTINUA
+   - FFT de 8192 puntos, overlapping de 75%, ventana Hann
+   - Calcular Power Spectral Density (PSD) en tiempo real
+   - Aplicar suavizado de "leaky integrator": PSD_smoothed[f] = α·PSD_current[f] + (1-α)·PSD_smoothed[f]
+
+2. DETECCIÓN DE ONSET DE FEEDBACK (Medida de Flatness/Peak-to-Average)
+   - Para cada bin espectral, calcular la relación Pico-a-Promedio-Local (Peak-to-Local-Average Ratio - PLAR)
+   - PLAR[f] = PSD[f] / Media(PSD en banda adyacente ±1/3 octava)
+   - Trackear la derivada de PSD[f]: dPSD[f]/dt. Si una frecuencia crece monótonamente mientras la ganancia sube, es candidata a feedback
+
+3. TRIGGER DE UMBRAL
+   - Si PLAR[f] > Umbral_Detección (ej. 12 dB) Y dPSD[f]/dt es positivo durante N tramas consecutivas
+   - Declarar ONSET DE FEEDBACK en frecuencia f_critical
+
+4. REGISTRO DE MARGEN
+   - margen_db = (ganancia_sistema_al_momento_del_onset) - (ganancia_sistema_nominal)
+   - Interrumpir inmediatamente la señal para evitar howling
+
+Outputs: { feedback_margin_db, critical_frequency_hz, severity_index }
+```
+
 **Timing:** ~12–15 segundos (solo mains) / ~35–45 segundos (mains + 2 monitores)
+
+---
+
+### H — Headroom y Linealidad
+
+**Qué es:** El segmento que mide si el sistema puede reproducir el nivel máximo previsto sin colapsar en distorsión o compresión no deseada. A diferencia del segmento D (que mide distorsión en condición estática), H ejecuta una **rampa de nivel** para detectar el punto exacto donde el sistema abandona el comportamiento lineal.
+
+**La señal:** Seno a 1 kHz (o frecuencia configurada por el operador) cuyo nivel sube progresivamente desde −18 dBFS hasta 0 dBFS en escalones de 3 dB. El analizador mide THD en cada escalon.
+
+**Qué mide:**
+- **Punto de compresión:** Nivel al que la salida deja de crecer 1 dB por cada 1 dB de incremento de entrada (primera señal de limitación)
+- **Knee de distorsión:** Nivel al que THD supera el 1% — umbral clásico de calidad profesional
+- **Headroom efectivo:** Diferencia entre el nivel operacional nominal (establecido por A) y el Knee de distorsión, en dB
+
+**Casos de uso:**
+- *Comisionamiento:* Confirmar que cada etapa de la cadena (consola, amplificador, altavoz) tiene headroom suficiente para los picos transientes del programa
+- *Diagnóstico de compresión térmica:* Correr H al inicio y al final del soundcheck; si el knee cae, el amplificador está limitando por temperatura
+- *Subwoofers:* Usar cabecera LF (150/200 Hz) automáticamente; frecuencia de prueba configurable (ej. 80 Hz) para evaluar el punto de excursión máxima del woofer
+
+**Tabla de interpretación:**
+
+| Resultado | Diagnóstico |
+|---|---|
+| Headroom ≥ 18 dB sobre nominal | Excelente. Margen amplio para picos transientes |
+| Headroom 12–18 dB | Adecuado para voz y reproducción estándar |
+| Headroom 6–12 dB | Marginal. Picos de percusión o música pueden limitar |
+| Headroom < 6 dB | Peligroso. Distorsión audible en material dinámico |
+| Knee a nivel bajo + 2° armónico dominante | Transformador o etapa analógica saturando antes del digital |
+| Knee abrupto con 3° armónico | Hard clip digital — compresor o limitador ajustado demasiado agresivo |
+
+**Conexión con segmento D:** El segmento H es una visión dinámica de la linealidad; D es una visión estática en un nivel fijo. Juntos dan un mapa completo del comportamiento del sistema.
+
+#### Pipeline de Procesamiento DSP
+
+```
+Contexto: Web Worker (análisis paso a paso post-grabación)
+
+1. SEGMENTACIÓN POR ESCALÓN DE NIVEL
+   - La grabación contiene 6 segmentos de ~2 segundos, cada uno 3 dB más fuerte
+   - Extraer el bloque estable del centro de cada segmento (ej. 1 segundo) descartando transitorios de cambio de ganancia
+
+2. ANÁLISIS DE CADA ESCALÓN (Iterativo)
+   - Nivel RMS Entrada (estimado desde diseño): L_in[i]
+   - Nivel RMS Salida Medido: L_out[i] = 20·log10(RMS(y_i[n]))
+   - THD+N Medido: THD_i = pipeline_THD(y_i[n])
+
+3. CÁLCULO DE COMPRESIÓN (Punto de Compresión)
+   - ganancia_paso[i] = L_out[i] - L_in[i]
+   - ganancia_referencia = ganancia_paso[0] (el paso más bajo, asumido lineal)
+   - compresion[i] = ganancia_referencia - ganancia_paso[i]
+   - Interpolar para encontrar el nivel de entrada donde compresion = 1.0 dB (Punto de Compresión a 1dB)
+
+4. CÁLCULO DE LINEALIDAD (Knee de Distorsión)
+   - Interpolar para encontrar el L_out donde THD cruza el umbral objetivo (ej. 1.0%)
+   - headroom_efectivo_db = L_out_al_1_pct_THD - nivel_operacional_nominal_db
+
+Outputs: { headroom_db, compression_point_dbfs, distortion_knee_dbfs, step_data[{level_in, level_out, thd}] }
+```
+
+**Timing:** ~10–15 segundos (6 escalones × ~2s/escalon)
 
 ---
 
@@ -822,20 +1289,32 @@ Si el operador llega a R y pasa, **cada capa del sistema debajo del evento ha si
 
 ---
 
-## 11. Secuencias Compuestas Recomendadas
+## 11. Secuencias Compuestas Recomendadas (Catálogo APST)
 
-Las secuencias se escriben como strings de códigos, exactamente como el sistema Lindos:
+Las secuencias se escriben como strings de códigos. El catálogo canónico del sistema APST es:
 
-| String | Nombre | Duración | Uso |
+| String | Nombre APST | Duración aprox. | Uso |
 |---|---|---|---|
 | `V A T R` | Quick Check | ~35s | Verificación rápida entre sets |
+| `V A R` | Monitor Tuning | ~20s | Tuning de monitores de escenario |
 | `V A F R` | Fast Pre-Show | ~60s | 30 minutos antes del evento |
-| `V A M N F P T D R` | Standard Pre-Event | ~3min | Setup estándar de evento |
-| `V A M N F P T D X R` | Full Commission | ~4min | Comisionamiento de nueva instalación |
-| `V A M N F P T D X R I` | Full + IR Capture | ~5min | Documentación completa con IR |
+| `V P T` | Subsystem Align | ~30s | Alineamiento de subsistemas (subs + mains) |
+| `V A M N F P T D R` | Wizard Base | ~3 min | Setup estándar de evento — wizard guiado |
+| `V A M N S P` | AutoEq Master | ~3 min | AutoEq de alta resolución para derivar FIR |
+| `V H` | Headroom Audit | ~15s | Auditoría de linealidad / compresión |
+| `V A M N F P T D X R` | Full Commission | ~4 min | Comisionamiento de nueva instalación |
+| `V A M N F P T D X R I` | Full + IR Capture | ~5 min | Documentación completa con captura de IR |
 | `T R` | Between-Set Check | ~20s | Verificación entre presentadores |
 | `F D` | EQ Verify | ~48s | Re-verificación post-corrección EQ |
 | `R` | Ring Out Only | ~15s | Check de margen de feedback aislado |
+
+**Reglas de Orquestación Obligatorias:**
+- Toda secuencia debe comenzar con `V` o `A` (verificación de cadena / normalización de nivel)
+- `AutoEq` requiere un segmento `N` previo con SNR > 15 dB; si no pasa, el orquestador bloquea y notifica
+- El segmento `P` actúa como juez de calidad de datos: coherencia baja → resultados de EQ marcados con advertencia
+- `S` se usa en lugar de `F` cuando el objetivo es derivar filtros FIR (mayor resolución temporal)
+- Toda secuencia generada termina automáticamente con `.` + conteo de segmentos + `+EventID` (Source ID)
+- El operador puede saltarse pasos opcionales en el Wizard vía *Escape Hatch* individual por segmento
 
 ---
 
@@ -1234,5 +1713,52 @@ Ver Sección 13 completa de este documento.
 
 ---
 
+## 16. Correspondencia Lindos LA100 ↔ Códigos APST del Proyecto
+
+El sistema APST del proyecto adopta la filosofía de segmentos Lindos pero redefine los códigos de letra para que sean semánticamente intuitivos en el contexto de calibración AV en vivo. La siguiente tabla mapea cada código APST a su equivalente funcional en el LA100.
+
+| Código APST | Nombre APST | Equivalente LA100 | Diferencias notables |
+|:---:|---|---|---|
+| `V` | Path Audit | `T` (Test Level 1 kHz) + `V` (400 Hz) | APST agrega rotación FSK ×5 + ventana de silencio + THD instantáneo |
+| `A` | Alignment Level | `T` (Test Level 1 kHz) | Igual en concepto; APST es la referencia explícita de ganancia de la sesión |
+| `M` | Mic Profile Verification | Sin equivalente directo | Nuevo: verifica la curva del micrófono de medición contra el inventario CLF |
+| `N` | Noise Floor | `M` / `N` (Noise CCIR-468) | APST usa ponderación A + curva NC; Lindos usa CCIR 468-4 |
+| `F` | Frequency Response (Fast) | `U` (Sweep 5s) / `P` (Sweep 5s a −20 dB) | APST normaliza contra respuesta plana; LA100 normaliza contra TL OUT |
+| `S` | Frequency Response (Slow) | `S` (Sweep 20s) | Equivalente directo. Mismo concepto, misma duración |
+| `P` | Phase & Coherence | `Y` / `Z` (Phase a frecuencias discretas) | APST agrega coherencia γ²; Lindos LA100 solo mide fase en 6 frecuencias discretas |
+| `T` | Time Alignment (IR) | Sin equivalente directo en LA100 | LA100 no tiene deconvolución; APST usa MLS o sweep + IFFT para extraer RIR |
+| `D` | Distortion THD+N | `D` / `F` / `G` (Distorsión en frecuencias) | Equivalente cercano. APST agrega 2 niveles simultáneos |
+| `X` | Crosstalk | `A` / `B` / `C` (Crosstalk a 6 frecuencias) | Equivalente funcional. APST es estero simple (L↔R) |
+| `R` | Feedback Margin (Ring Out) | Sin equivalente en LA100 | Nuevo: la rampa de ganancia con detección de onset de feedback es específica del uso en vivo |
+| `H` | Headroom / Linearity | `H` (3% MOL en 1 kHz) | Equivalente parcial. APST agrega rampa progresiva y punto de compresión |
+| `I` | IR Capture & Export | Sin equivalente | Nuevo: post-procesamiento sobre resultado de `T`; exporta FIR + EQ paramétrico |
+
+### Segmentos LA100 No Adoptados en APST
+
+Los siguientes segmentos del LA100 no tienen equivalente en el sistema APST porque pertenecen a contextos de radiodifusión o hardware no relevantes para calibración AV en vivo:
+
+| Código LA100 | Descripción | Razón de exclusión |
+|:---:|---|---|
+| `W` | Wow & Flutter (3.125 kHz) | Específico de medidores de reproducción de cinta |
+| `E` / `I` LA100 | Distorsión multi-nivel (+8 dBu / −10 dBu) | Niveles de referencia de radiodifusión; cubierto por `D` + `H` |
+| `d` (min.) | Distorsión de diferencia de frecuencias (70 Hz, 2° orden a 1 kHz) | Medición de productores de cinta; innecesaria para PA en vivo |
+| `h` (min.) | 3% MOL a 315 Hz | Específico de sistemas de cinta a alta velocidad |
+| `K` | Niveles de usuario (1 kHz, 6 escalones) | Cubierto por `H` con rampa continua |
+| `–` | Secuencia CCITT O.33 | Compatibilidad con estándar legado; no relevante |
+| `+` | Source ID (texto) | *Sí adoptado:* se incluye automáticamente al final de toda secuencia APST con el ID del evento |
+| `.` | Terminación de secuencia | *Sí adoptado:* terminación + conteo de segmentos incluida automáticamente |
+
+### Compatibilidad de Nivel de Señal
+
+| Parámetro | Lindos LA100/MS20 | APST (PWA) |
+|---|---|---|
+| Nivel nominal FSK | 0 dBu | −18 dBFS (nivel de referencia digital) |
+| Rango operativo FSK | −30 a +20 dBu | Determinado por estructura de ganancia del sistema |
+| Medición de nivel | TL OUT (absoluto en dBu) | Relativo al nivel establecido por segmento `A` |
+| Autoranging | Sí (LA102) | Sí (WASM con normalización por segmento `A`) |
+
+---
+
 *Documento generado como especificación técnica complementaria al DDS principal.*
-*Versión: 1.0 | Proyecto: Plataforma PWA de Asistencia Proactiva para Calibración A/V*
+*Versión: 2.0 | Proyecto: Plataforma PWA de Asistencia Proactiva para Calibración A/V*
+*Fuente de referencia: Lindos LA100 Manual 6th Edition, MS20 Manual 2nd Edition (via corpus RAG NotebookLM §7.1)*
