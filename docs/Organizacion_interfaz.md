@@ -4,6 +4,10 @@
 
 ## Planificación
 
+### Sistema
+
+- Asistente de instalación de backend
+
 ### Inventario
 
 - Equipos
@@ -43,7 +47,7 @@
 
 - Estado de la instalación
 
-### Herramientas y soluciones
+### Herramientas
 
 - Asistentes de testeo
 - Asistente de conexiones
@@ -58,7 +62,7 @@
 
 ### Referencia
 
-- Biblioteca IA
+- Biblioteca con asistente IA
 - Asistentes para capacitación rápida
 - Asistente para solución de problemas
 
