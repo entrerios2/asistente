@@ -56,6 +56,7 @@
 ### Calibración
 
 - Herramientas de calibración
+  - Asistente de Ring-Out
 - Asistente de calibración
 
 ## Operación

@@ -1161,65 +1161,63 @@ Outputs: { crosstalk_db, frequency_dependence_slope_db_oct, failure_reason }
 
 ---
 
-### R — margen de retroalimentación (Ring Out)
+### R — margen de retroalimentación (Resonance & Decay Analysis)
 
-**Qué es:** El único segmento que mide no lo que el sistema hace, sino lo que *está por hacer* — el headroom restante antes de que la retroalimentación acústica se vuelva incontrolable.
+**Qué es:** El segmento predictivo que cruza datos de magnitud y tiempo para descubrir las frecuencias exactas donde el sistema acoplará primero, sin necesidad de generar realimentación acústica real.
 
-**La señal:** Ruido rosa a nivel bajo, con la ganancia del sistema incrementada en pasos conocidos de 1 dB mientras el analizador observa la firma característica del inicio de la retroalimentación.
+**El Problema del Bucle Abierto:** El sistema APST opera como un analizador pasivo (bucle abierto). Dado que la consola no re-inyecta la señal del micrófono de medición hacia los altavoces, es físicamente imposible inducir *howling* reproduciendo una secuencia. Por lo tanto, el Segmento R clásico (rampa de volumen hasta acoplar) se redefine como una prueba de resonancia matemática.
 
-**Cómo se detecta el inicio del feedback:**
+**La señal:** Un burst (ráfaga) de ruido rosa estático a -18 dBFS de 3 segundos de duración, seguido inmediatamente por 3 segundos de **silencio digital absoluto**.
 
-El feedback no comienza como un aullido completo. Comienza como una frecuencia de banda estrecha — una sola frecuencia donde la ganancia del bucle (sensibilidad del micrófono × ganancia del amplificador × salida del altavoz × acústica de sala × patrón polar del micrófono en ese ángulo) primero excede la unidad.
+**Cómo funciona la predicción (Análisis A+B):**
 
-El analizador monitorea la **flatness espectral** de la señal recibida durante la rampa de ganancia. Cuando una frecuencia comienza a crecer más rápido que el espectro circundante — específicamente cuando su tasa de crecimiento excede un umbral — eso es el precursor del feedback.
+Para que exista retroalimentación, una frecuencia necesita dos condiciones: alta ganancia (pico en magnitud) y persistencia temporal en la sala (resonancia).
+
+1. **Magnitud (A):** El sistema extrae los picos de magnitud más prominentes medidos previamente en el Segmento S (Slow Sweep) o Segmento F.
+2. **Decaimiento (B):** Durante los 3 segundos de silencio del Segmento R, el motor WASM ejecuta un Espectrograma de Tiempo (Waterfall). Observa cómo cae la energía en cada banda de frecuencia.
+3. **Síntesis:** Las frecuencias que exhiben "colas de resonancia" (*ringing*) significativas —es decir, que tardan inusualmente más en decaer que el resto del espectro— cruzadas matemáticamente con los picos de magnitud, son identificadas como los puntos críticos de inestabilidad.
 
 **Qué mide:**
 
-- **Margen de feedback:** Cuántos dB de ganancia adicional pueden aplicarse antes de que la primera frecuencia comience a repicar. Expresado como "X dB por debajo del feedback."
-- **Frecuencia más vulnerable:** La frecuencia específica donde ocurrirá primero el feedback — objetivo primario para el filtro notch del Módulo 3.6
-- **Carácter del feedback:** Si el inicio es agudo (indica resonancia acústica estrecha — fácil de notchear) o amplio (indica modo de sala difuso — más difícil de tratar)
+- **Frecuencias críticas predictivas:** Los 3 puntos exactos del espectro donde el sistema tiene mayor probabilidad matemática de acoplar.
+- **Headroom estimado:** Distancia en dB entre el nivel operativo nominal y el pico de ganancia del modo resonante.
+- **Carácter de la resonancia:** Diferencia entre un ringing puramente acústico (sala difusa) o un modo propio altamente Q (onda estacionaria).
 
 **Tabla de interpretación:**
 
+| Margen Estimado | Diagnóstico |
+| --- | --- |
+| > 12 dB | Excelente. El sistema tiene un margen predictivo amplio. |
+| 6–12 dB | Adecuado. Aplicar notches preventivos en las frecuencias críticas identificadas. |
+| < 6 dB | Peligroso. Fuerte inestabilidad estructural (micrófono cerca del PA o modo de sala severo). |
 
-| Margen                                            | Diagnóstico                                                                                                                        |
-| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| > 12 dB                                           | Excelente. El sistema tiene headroom amplio para el evento.                                                                        |
-| 6–12 dB                                           | Adecuado. Estándar para la mayoría de eventos en vivo. Aplicar uno o dos notches preventivos.                                      |
-| 3–6 dB                                            | Marginal. El sistema está cerca del límite. El posicionamiento del micrófono o el ángulo del PA necesitan ajuste antes del evento. |
-| < 3 dB                                            | Peligroso. No proceder sin cambios físicos — posición del micrófono, ángulo del monitor, o dirección del PA.                       |
-| Múltiples frecuencias activándose simultáneamente | El patrón polar del micrófono apunta directamente al altavoz — toda la geometría es incorrecta.                                    |
-
-
-**Conexión con el Módulo 3.6:** Segmento R corre antes del evento en condiciones controladas. La frecuencia que identifica como la más vulnerable se convierte en el **objetivo de notch pre-cargado** en el módulo AFE. Cuando el monitor Centinela se activa durante el evento, ya conoce la frecuencia de problema más probable y puede reaccionar más rápido porque la está observando específicamente en lugar de escanear todo el espectro ciegamente.
+**Conexión Sistémica:** La predicción del Segmento R le permite al operador insertar filtros Notch en el ecualizador general o en el grupo matriz de PA *antes* de que suba el fader del primer micrófono en vivo.
 
 #### Pipeline de procesamiento DSP
 
 ```
-Contexto: AudioWorklet (monitoreo en tiempo real) + Módulo de Control de Ganancia
+Contexto: Web Worker (análisis post-grabación)
 
-1. ESTIMACIÓN ESPECTRAL CONTINUA
-   - FFT de 8192 puntos, overlapping de 75%, ventana Hann
-   - Calcular Power Spectral Density (PSD) en tiempo real
-   - Aplicar suavizado de "leaky integrator": PSD_smoothed[f] = α·PSD_current[f] + (1-α)·PSD_smoothed[f]
+1. RECOLECCIÓN DE DATOS MAGNITUD
+   - Cargar matriz de picos (Magnitud[f]) identificados en Segmento S/F
 
-2. DETECCIÓN DE ONSET DE FEEDBACK (Medida de Flatness/Peak-to-Average)
-   - Para cada bin espectral, calcular la relación Pico-a-Promedio-Local (Peak-to-Local-Average Ratio - PLAR)
-   - PLAR[f] = PSD[f] / Media(PSD en banda adyacente ±1/3 octava)
-   - Trackear la derivada de PSD[f]: dPSD[f]/dt. Si una frecuencia crece monótonamente mientras la ganancia sube, es candidata a feedback
+2. ANÁLISIS DE DECAIMIENTO (Ringing Detection)
+   - Extraer audio correspondiente a los 3 segundos de SILENCIO del Segmento R
+   - Computar STFT (Short-Time Fourier Transform) con alto overlap
+   - Para cada bin espectral f, calcular el tiempo de decaimiento (Decay[f])
 
-3. TRIGGER DE UMBRAL
-   - Si PLAR[f] > Umbral_Detección (ej. 12 dB) Y dPSD[f]/dt es positivo durante N tramas consecutivas
-   - Declarar ONSET DE FEEDBACK en frecuencia f_critical
+3. MATRIZ DE RIESGO
+   - Normalizar vector Magnitud[f] (0.0 a 1.0)
+   - Normalizar vector Decay[f] (0.0 a 1.0)
+   - Riesgo_Feedback[f] = Magnitud[f] * Decay[f]
+   
+4. REPORTE
+   - Ordenar Riesgo_Feedback[f] descendentemente y extraer top 3 picos
 
-4. REGISTRO DE MARGEN
-   - margen_db = (ganancia_sistema_al_momento_del_onset) - (ganancia_sistema_nominal)
-   - Interrumpir inmediatamente la señal para evitar howling
-
-Outputs: { feedback_margin_db, critical_frequency_hz, severity_index }
+Outputs: { critical_frequencies[3], estimated_headroom_db, severity_index }
 ```
 
-**Timing:** ~12–15 segundos (solo mains) / ~35–45 segundos (mains + 2 monitores)
+**Timing:** ~6 segundos por canal (3s ruido + 3s silencio).
 
 ---
 
