@@ -1,6 +1,6 @@
-# Secuencia de Prueba FSK para Calibración A/V
+# Secuencia de prueba FSK para calibración A/V
 
-## Especificación Técnica para la Plataforma PWA de Asistencia Proactiva
+## Especificación técnica para la plataforma PWA de asistencia proactiva
 
 ---
 
@@ -41,7 +41,7 @@
 
 ---
 
-## 1. El Estándar Original: EBU 1985
+## 1. El estándar original: EBU 1985
 
 La prueba de secuencia automatizada nació con un bloque monolítico único de 32 segundos estandarizado por la EBU en 1985. Este estándar incorporaba:
 
@@ -54,7 +54,7 @@ Esta secuencia también se convirtió en el estándar CCITT O.33 en 1985. Su lim
 
 ---
 
-## 2. La Innovación Lindos: Secuencias Segmentadas
+## 2. La innovación Lindos: Secuencias segmentadas
 
 Lindos Electronics expandió el concepto reteniendo la sincronización FSK pero inventando las **secuencias segmentadas**: cada prueba se separa en un "segmento" que comienza con un carácter identificador transmitido como FSK a 110 baudios.
 
@@ -64,16 +64,16 @@ El sistema de secuencias Lindos es hoy un **estándar de facto** en radiodifusi�
 
 ---
 
-## 3. Cómo Funciona el FSK Técnicamente
+## 3. Cómo funciona el FSK técnicamente
 
-### La Capa Física
+### La capa física
 
 Cada segmento de prueba consiste en la señal de audio de prueba precedida por un **header FSK**. El header dura aproximadamente 200ms y cumple dos funciones simultáneas:
 
 1. **Sincronización:** actúa como trigger para que la unidad medidora comience a medir
 2. **Identificación:** transmite el código del segmento — el analizador sabe exactamente qué está midiendo antes de que llegue la señal de prueba
 
-### La Propiedad Crítica: Sincronización In-Band
+### La propiedad crítica: Sincronización in-band
 
 La innovación fundamental es que **el FSK viaja a través de la cadena de señal bajo prueba**, no por un cable de control separado. Esto significa:
 
@@ -81,7 +81,7 @@ La innovación fundamental es que **el FSK viaja a través de la cadena de seña
 - El analizador en el extremo receptor escucha el header FSK y sabe exactamente qué medir, independientemente del tiempo de viaje de la señal
 - Los **errores de velocidad en reproducción de cinta**, que desincronizarían otros sistemas, son tolerados porque cada segmento se retempla desde su propio header FSK — no hay deriva acumulada
 
-### Codificación FSK (Estándar Lindos)
+### Codificación FSK (estándar Lindos)
 
 ```
 FSK estándar Lindos (LA100/LA101/LA102/MS20):
@@ -106,7 +106,7 @@ del receptor.
 
 > **Nota:** Las frecuencias 1200/1800 Hz corresponden al estándar V.21 (módem telefónico). El estándar Lindos utiliza 1650/1850 Hz — rango escogido deliberadamente para maximizar la robustez a través de cadenas de audio de radiodifusión (paso de banda garantizado entre ~80 Hz y ~15 kHz).
 
-### Cabecera de Baja Frecuencia (LF Header) para Subsistemas de Graves
+### Cabecera de baja frecuencia (LF Header) para subsistemas de graves
 
 El FSK estándar (1650/1850 Hz) no puede atravesar dispositivos con corte por debajo de 2 kHz — caso típico de subwoofers y filtros de crossover de baja frecuencia. Para estos subsistemas se usa una cabecera alternativa:
 
@@ -122,7 +122,7 @@ FSK cabecera LF (para subsistemas de graves):
 
 **Implementación en el detector Goertzel:** El motor WASM implementa dos bancos de filtros Goertzel en paralelo — uno sintonizado a 1650/1850 Hz y otro a 150/200 Hz. El orquestador indica al banco activo antes de iniciar cada segmento.
 
-### Direct Trigger (Disparo Directo)
+### Direct Trigger (disparo directo)
 
 Modo alternativo para situaciones donde el FSK in-band no puede decodificarse aunque la cadena de señal esté funcionando. Casos de uso:
 
@@ -132,7 +132,7 @@ Modo alternativo para situaciones donde el FSK in-band no puede decodificarse au
 
 En Direct Trigger, el identificador de segmento se pasa internamente del generador al analizador sin necesidad de FSK in-band. La medición comienza cuando el operador confirma manualmente o el orquestador envía la instrucción. La cadena de señal sigue siendo medida normalmente — solo el mecanismo de sincronización cambia.
 
-### Segmentos de Control de Secuencia
+### Segmentos de control de secuencia
 
 **Terminación `.` + conteo:** Toda secuencia bien formada termina con un segmento `.` seguido de un conteo de 4 bits (0-15) que indica el número de segmentos de medición transmitidos. El analizador compara este conteo con los segmentos recibidos — si hay discrepancia, reporta segmentos perdidos.
 
@@ -142,9 +142,9 @@ En la implementación APST, ambos segmentos se agregan automáticamente al final
 
 ---
 
-## 4. Por Qué FSK es la Elección Correcta para Este Proyecto
+## 4. Por qué FSK es la elección correcta para este proyecto
 
-### Lo que FSK Hace que los Tokens en Memoria No Pueden
+### Lo que FSK hace que los tokens en memoria no pueden
 
 Una alternativa considerada inicialmente fue usar `SharedArrayBuffer` como mecanismo de sincronización entre el generador y el analizador. Esta es la elección incorrecta por una razón fundamental:
 
@@ -162,7 +162,7 @@ ADC → MediaDevices API → AudioWorklet (analizador / WASM)
 
 Un token en memoria bypasea completamente el hardware, los cables y el acoplamiento acústico — que son exactamente las cosas que se quieren probar. FSK que viaja por esa cadena completa mantiene la arquitectura honesta.
 
-### El Bono Inesperado: Diagnóstico de Fallo
+### El bono inesperado: Diagnóstico de fallo
 
 Un FSK no decodificado es en sí mismo un diagnóstico. Si el analizador nunca recibe el header para el segmento F, eso indica inmediatamente que la cadena de señal entre el generador y el micrófono de medición está rota, atenuada más allá de lo utilizable, o el micrófono no está ruteado correctamente. El sistema puede reportar **"Segmento F: FSK no recibido — verificar cadena de señal"** en lugar de producir silenciosamente una medición incorrecta.
 
@@ -170,7 +170,7 @@ Esta propiedad no existe con tokens en memoria.
 
 ---
 
-## 5. Implementación FSK en el Navegador
+## 5. Implementación FSK en el navegador
 
 El Web Audio API provee todo lo necesario para ambos lados del enlace FSK.
 
@@ -223,7 +223,7 @@ function sendFSKHeader(segmentCode, oscillator, startTime, markHz = MARK_HZ, spa
 }
 ```
 
-### Detección (equivalente al LA102) — en WASM/AudioWorklet
+### Detección (equivalente al LA102) — en wasm/audioworklet
 
 El algoritmo de Goertzel es el detector óptimo para FSK. A diferencia de una FFT completa, computa la energía en una sola frecuencia objetivo con costo computacional mínimo — ideal para el AudioWorklet donde cada ciclo de CPU cuenta.
 
@@ -275,7 +275,7 @@ fn decode_fsk_char(bits: &[u8]) -> Option<char> {
 
 A 110 baudios, cada bit dura ~9ms — muy por encima de la resolución temporal de cualquier tamaño de buffer de audio razonable. La decodificación es confiable incluso con SNR moderado.
 
-### La Única Consideración Real del Navegador
+### La única consideración real del navegador
 
 La latencia de audio de ida y vuelta del navegador introduce una ventana de búsqueda en lugar de un offset fijo. El analizador simplemente **observa el burst FSK, decodifica el código de segmento, y comienza la medición**. El tiempo de viaje variable del header por la cadena acústica es irrelevante porque el header **es** la referencia de tiempo — exactamente como Lindos resolvió el problema para los enlaces satelitales.
 
@@ -285,7 +285,7 @@ const baseLatency = audioContext.baseLatency + audioContext.outputLatency;
 const searchWindowMs = Math.max(50, baseLatency * 1000 + 30); // +30ms margen acústico
 ```
 
-### Rol Correcto del SharedArrayBuffer
+### Rol correcto del SharedArrayBuffer
 
 `SharedArrayBuffer` tiene un rol válido pero limitado: **leer resultados** del analizador WASM de vuelta al orquestador JS después de que la medición se completa. No para sincronización — eso es trabajo del FSK.
 
@@ -296,7 +296,7 @@ FSK in-band:       sincronización generador → analizador   ✓
 
 ---
 
-## 6. FSK como Instrumento de Diagnóstico de la Cadena de Señal
+## 6. FSK como instrumento de diagnóstico de la cadena de señal
 
 El FSK no es solo sincronización — es un **instrumento de diagnóstico en sí mismo**. Transporta tres propiedades simultáneamente por la cadena de señal:
 
@@ -308,7 +308,7 @@ Cada una puede fallar independientemente, y cada modo de fallo apunta a un probl
 
 ---
 
-### Nivel 1 — FSK No Recibido En Absoluto
+### Nivel 1 — FSK no recibido en absoluto
 
 El analizador ve silencio o ruido indiferenciado donde debería llegar el header.
 
@@ -327,17 +327,17 @@ El analizador ve silencio o ruido indiferenciado donde debería llegar el header
 
 ---
 
-### Nivel 2 — FSK Recibido pero No Decodificable
+### Nivel 2 — FSK recibido pero no decodificable
 
 El filtro Goertzel detecta energía en 1200 Hz y 1800 Hz, pero la secuencia de bits no decodifica a un código de segmento válido. Este es el nivel diagnóstico más rico.
 
-#### 2a. Nivel Demasiado Bajo
+#### 2a. Nivel demasiado bajo
 
 El FSK llega pero la relación de energía mark/space es demasiado cercana al ruido. El sistema está operando cerca de su piso de ruido — las mediciones serían no confiables incluso si corrieran.
 
 **Mensaje:** *"FSK marginal en segmento T. Aumentar ganancia o verificar posicionamiento del micrófono. Medición abortada — los resultados serían inválidos."*
 
-#### 2b. Clipping / Saturación
+#### 2b. Clipping / saturación
 
 El FSK llega pero está distorsionado más allá del reconocimiento. Las tonos de 1200 Hz y 1800 Hz están presentes pero dispersos harmónicamente. El path está sobrecargado en algún punto.
 
@@ -345,13 +345,13 @@ Detectable porque el clipping produce artefactos harmónicos predecibles: un ton
 
 **Mensaje:** *"FSK distorsionado en segmento T — clipping detectado en cadena de señal. Reducir nivel de salida o ganancia del preamplificador antes de continuar."*
 
-#### 2c. Problema Severo de Respuesta en Frecuencia
+#### 2c. Problema severo de respuesta en frecuencia
 
 Uno de los dos tonos FSK llega atenuado respecto al otro, sesgando el balance de amplitud mark/space. Por ejemplo, un rolloff severo de bajas frecuencias hace que el tono de "space" a 1200 Hz llegue mucho más débil que el de "mark" a 1800 Hz.
 
 **Mensaje:** *"Errores de decodificación FSK sesgados hacia frecuencia space (1200 Hz). Atenuación severa de LF en cadena de señal. Verificar filtros pasa-alto en consola o amplificador."*
 
-#### 2d. Multitrayecto / Interferencia de Fase
+#### 2d. Multitrayecto / interferencia de fase
 
 En una cadena acústica (altavoz → sala → micrófono), los tonos FSK pueden llegar por múltiples reflexiones creando filtrado tipo peine. Si la diferencia de longitud de camino entre el sonido directo y una reflexión fuerte crea un notch exactamente en 1200 Hz o 1800 Hz, el FSK fallará intermitentemente — incluso con nivel de señal adecuado.
 
@@ -361,7 +361,7 @@ Identificable porque el fallo es específico en frecuencia y repetible. El siste
 
 ---
 
-### Nivel 3 — FSK Decodificado pero Código Incorrecto
+### Nivel 3 — FSK decodificado pero código incorrecto
 
 La secuencia de bits decodifica exitosamente pero a un código de segmento diferente al enviado. Causa específica: **contaminación del entorno de medición**.
 
@@ -371,7 +371,7 @@ Si una segunda fuente de audio está presente en la sala — otro sistema PA, un
 
 ---
 
-### Nivel 4 — FSK Recibido con Retardo Fuera de Ventana
+### Nivel 4 — FSK recibido con retardo fuera de ventana
 
 El header llega, decodifica correctamente, pero llega más tarde que la ventana de ida y vuelta esperada. **Diagnóstico de latencia.**
 
@@ -389,7 +389,7 @@ El header llega, decodifica correctamente, pero llega más tarde que la ventana 
 
 ---
 
-### Nivel 5 — FSK Decodificado Correctamente en un Canal, No en el Otro
+### Nivel 5 — FSK decodificado correctamente en un canal, no en el otro
 
 Prueba de cadena estéreo. Canal izquierdo decodifica, canal derecho falla o decodifica con parámetros diferentes.
 
@@ -404,7 +404,7 @@ Este es uno de los diagnósticos más prácticamente útiles porque **los fallos
 
 ---
 
-## 7. Biblioteca de Segmentos Recomendados
+## 7. Biblioteca de segmentos recomendados
 
 
 | Código | Nombre                    | Señal de Prueba                       | Parámetro Medido                                | Tolerancia por Defecto |
@@ -426,11 +426,11 @@ Este es uno de los diagnósticos más prácticamente útiles porque **los fallos
 
 ---
 
-## 8. Especificación Detallada de Cada Código
+## 8. Especificación detallada de cada código
 
 ---
 
-### V — Verificación de Cadena de Señal (Path Audit)
+### V — verificación de cadena de señal (path audit)
 
 **Qué es:** El segmento de gateway obligatorio. El único que debe pasar antes de que cualquier otro segmento se ejecute. No mide ningún parámetro de calidad de audio — mide el **sistema de medición en sí mismo**.
 
@@ -491,7 +491,7 @@ La tolerancia de ±3 dB para nivel en V es deliberadamente más amplia que el ±
 | THD falla                | "Distorsión severa en cadena. Sistema sobrecargado. Reducir ganancia antes de cualquier medición."                      |
 
 
-#### Pipeline de Procesamiento DSP
+#### Pipeline de procesamiento DSP
 
 ```
 Contexto: AudioWorklet (tiempo real) — no puede bloquearse
@@ -530,7 +530,7 @@ Outputs al Orchestrator (vía SharedArrayBuffer):
 
 ---
 
-### A — Nivel de Alineamiento
+### A — nivel de alineamiento
 
 **Qué es:** El punto de referencia para toda la sesión. Cada otra medición es relativa a este.
 
@@ -557,7 +557,7 @@ Outputs al Orchestrator (vía SharedArrayBuffer):
 | Nivel sobre objetivo          | Sistema corriendo caliente — headroom reducido, riesgo de clipping elevado                    |
 
 
-#### Pipeline de Procesamiento DSP
+#### Pipeline de procesamiento DSP
 
 ```
 Contexto: AudioWorklet (tiempo real)
@@ -591,7 +591,7 @@ Outputs: { gain_db, asymmetry_db, reference_level_dbfs }
 
 ---
 
-### M — Verificación de Perfil de Micrófono
+### M — verificación de perfil de micrófono
 
 **Qué es:** El segmento que separa lo que la sala y el altavoz hacen de lo que el micrófono de medición hace. Sin esto, cada medición de respuesta en frecuencia es una lectura combinada de sistema + micrófono, y no se puede saber cuál corregir.
 
@@ -622,7 +622,7 @@ El perfil almacenado en el inventario de hardware del Módulo 3.2 es la curva de
 
 **Escenario de campo crítico:** El micrófono de medición designado fue olvidado en el estudio y el operador usa un SM58 de repuesto. Sin M, el sistema aplica la compensación incorrecta a cada medición de respuesta en frecuencia, produciendo correcciones de EQ que empeoran el sistema en lugar de mejorarlo.
 
-#### Pipeline de Procesamiento DSP
+#### Pipeline de procesamiento DSP
 
 ```
 Contexto: Web Worker (procesamiento offline post-grabación)
@@ -662,7 +662,7 @@ Outputs: { deviation_rms_db, per_band_deviation[31], mic_compensation_curve[31],
 
 ---
 
-### N — Piso de Ruido
+### N — piso de ruido
 
 **Qué es:** Una medición de todo lo que el sistema produce cuando debería producir nada. La línea base de silencio del venue y la cadena de señal combinados.
 
@@ -706,7 +706,7 @@ El piso de ruido es el **piso de todo el rango dinámico del sistema**. Todo lo 
 
 **Rol sistémico:** El resultado de N establece directamente el **umbral mínimo de coherencia** para el segmento P. Si el piso de ruido es alto, la coherencia naturalmente será menor en niveles de señal bajos. El sistema debe ajustar automáticamente los umbrales de advertencia de coherencia basado en el resultado de N.
 
-#### Pipeline de Procesamiento DSP
+#### Pipeline de procesamiento DSP
 
 ```
 Contexto: Web Worker (grabación continua + análisis offline)
@@ -749,7 +749,7 @@ Outputs: { noise_dba, nc_rating, nc_per_band[8], spectral_peaks[], coherence_thr
 
 ---
 
-### F — Respuesta en Frecuencia
+### F — respuesta en frecuencia
 
 **Qué es:** La medición más visualmente intuitiva y la que los operadores interactúan más directamente — la curva que muestra cuán fuerte es el sistema en cada frecuencia relativa al nivel de referencia establecido por el segmento A.
 
@@ -806,7 +806,7 @@ El sistema **no aplica ningún roll-off predeterminado**. Si la sala o el hardwa
 
 **Conexión con el Módulo 3.2:** La curva de desviación entre medición y objetivo es exactamente el filtro que el sistema necesita aplicar. Módulo 3.2 traduce ese filtro ideal a lo que el hardware físico puede implementar.
 
-#### Pipeline de Procesamiento DSP
+#### Pipeline de procesamiento DSP
 
 ```
 Contexto: Web Worker (grabación + análisis offline asíncrono)
@@ -843,7 +843,7 @@ Outputs: { magnitude_response[f], peak_deviation_hz, max_deviation_db, within_to
 
 ---
 
-### P — Fase y Coherencia
+### P — fase y coherencia
 
 **Qué es:** El segmento técnicamente más revelador de la suite y el más frecuentemente omitido en la práctica porque requiere entender dos mediciones simultáneas.
 
@@ -891,7 +891,7 @@ La coherencia se convierte en el **mapa de confianza** para todas las mediciones
 | Pendiente de fase más pronunciada que lo esperado             | Dispositivo de latencia adicional en la cadena (procesador digital, receptor inalámbrico) |
 
 
-#### Pipeline de Procesamiento DSP
+#### Pipeline de procesamiento DSP
 
 ```
 Contexto: Web Worker (análisis concurrente o post-grabación)
@@ -929,7 +929,7 @@ Outputs: { phase_response_deg[f], coherence[f], data_quality_warnings[] }
 
 ---
 
-### T — Alineamiento Temporal (Delay Finder)
+### T — alineamiento temporal (Delay Finder)
 
 **Qué es:** El segmento que responde *"¿cuándo llega el sonido?"* — no solo como un número sino como una medición de precisión del tiempo de llegada de la respuesta al impulso para cada altavoz del sistema.
 
@@ -962,7 +962,7 @@ A 20°C el sonido viaja a 343 m/s, entonces 1 ms de delay corresponde a aproxima
 | Múltiples picos secundarios de amplitud similar | Espacio reverberante — la sala trabaja contra la claridad del habla                        |
 
 
-#### Pipeline de Procesamiento DSP
+#### Pipeline de procesamiento DSP
 
 ```
 Contexto: Web Worker (cálculo rápido post-grabación)
@@ -994,7 +994,7 @@ Outputs: { delay_acoustic_ms, early_reflections[{time_ms, relative_level_db}], i
 
 ---
 
-### D — Distorsión THD+N
+### D — distorsión THD+N
 
 **Qué es:** La medición de todo lo que la cadena de señal agregó que no estaba en la señal original.
 
@@ -1031,7 +1031,7 @@ $$\text{THD+N} = \frac{\sqrt{V_2^2 + V_3^2 + V_4^2 + ... + V_N^2}}{V_1} \times 1
 | Distorsión presente incluso en niveles bajos | Bucle de tierra, interferencia RF, o componente defectuoso en la cadena            |
 
 
-#### Pipeline de Procesamiento DSP
+#### Pipeline de procesamiento DSP
 
 ```
 Contexto: Web Worker (análisis concurrente o post-grabación)
@@ -1063,7 +1063,7 @@ Outputs: { thd_n_pct, thd_n_db, dominant_harmonic, raw_residue_rms }
 
 ---
 
-### X — Diafonía y Aislamiento de Canales
+### X — diafonía y aislamiento de canales
 
 **Qué es:** La medición de cuánta señal de un canal sangra hacia el otro — el grado en que una señal que debería estar presente solo en el canal izquierdo aparece en el derecho.
 
@@ -1096,7 +1096,7 @@ La diafonía se expresa en dB — el nivel de la señal filtrada en el canal sil
 - **Diafonía plana a través de frecuencias:** Acoplamiento resistivo — existe una conexión física entre canales que no debería estar
 - **Diafonía solo en frecuencias específicas:** Resonancia mecánica entre gabinetes de altavoces
 
-#### Pipeline de Procesamiento DSP
+#### Pipeline de procesamiento DSP
 
 ```
 Contexto: AudioWorklet / Web Worker
@@ -1124,7 +1124,7 @@ Outputs: { crosstalk_db, frequency_dependence_slope_db_oct, failure_reason }
 
 ---
 
-### R — Margen de Retroalimentación (Ring Out)
+### R — margen de retroalimentación (Ring Out)
 
 **Qué es:** El único segmento que mide no lo que el sistema hace, sino lo que *está por hacer* — el headroom restante antes de que la retroalimentación acústica se vuelva incontrolable.
 
@@ -1156,7 +1156,7 @@ El analizador monitorea la **flatness espectral** de la señal recibida durante 
 
 **Conexión con el Módulo 3.6:** Segmento R corre antes del evento en condiciones controladas. La frecuencia que identifica como la más vulnerable se convierte en el **objetivo de notch pre-cargado** en el módulo AFE. Cuando el monitor Centinela se activa durante el evento, ya conoce la frecuencia de problema más probable y puede reaccionar más rápido porque la está observando específicamente en lugar de escanear todo el espectro ciegamente.
 
-#### Pipeline de Procesamiento DSP
+#### Pipeline de procesamiento DSP
 
 ```
 Contexto: AudioWorklet (monitoreo en tiempo real) + Módulo de Control de Ganancia
@@ -1186,7 +1186,7 @@ Outputs: { feedback_margin_db, critical_frequency_hz, severity_index }
 
 ---
 
-### H — Headroom y Linealidad
+### H — Headroom y linealidad
 
 **Qué es:** El segmento que mide si el sistema puede reproducir el nivel máximo previsto sin colapsar en distorsión o compresión no deseada. A diferencia del segmento D (que mide distorsión en condición estática), H ejecuta una **rampa de nivel** para detectar el punto exacto donde el sistema abandona el comportamiento lineal.
 
@@ -1219,7 +1219,7 @@ Outputs: { feedback_margin_db, critical_frequency_hz, severity_index }
 
 **Conexión con segmento D:** El segmento H es una visión dinámica de la linealidad; D es una visión estática en un nivel fijo. Juntos dan un mapa completo del comportamiento del sistema.
 
-#### Pipeline de Procesamiento DSP
+#### Pipeline de procesamiento DSP
 
 ```
 Contexto: Web Worker (análisis paso a paso post-grabación)
@@ -1250,9 +1250,9 @@ Outputs: { headroom_db, compression_point_dbfs, distortion_knee_dbfs, step_data[
 
 ---
 
-## 9. Duración de Cada Segmento y de la Suite Completa
+## 9. Duración de cada segmento y de la suite completa
 
-### Breakdown de Timing por Segmento
+### Breakdown de Timing por segmento
 
 
 | Código | Segmento                 | Duración                  | Notas                                    |
@@ -1269,7 +1269,7 @@ Outputs: { headroom_db, compression_point_dbfs, distortion_knee_dbfs, step_data[
 | **R**  | Feedback Margin          | ~15–45s                   | Varía con número de monitores            |
 
 
-### Totales por Alcance
+### Totales por alcance
 
 
 | Alcance                              | Secuencia                     | Duración Estimada |
@@ -1280,7 +1280,7 @@ Outputs: { headroom_db, compression_point_dbfs, distortion_knee_dbfs, step_data[
 | Con múltiples posiciones de medición | Suite completa × 3 posiciones | ~8–10 minutos     |
 
 
-### La Dominancia del Segmento P
+### La dominancia del segmento P
 
 El segmento P (45–60 segundos de ~120 total) domina el tiempo de la suite. La PWA debe ofrecer dos modos de sweep:
 
@@ -1291,7 +1291,7 @@ Predeterminar P Fast durante eventos y P Full durante el setup da al operador la
 
 ---
 
-## 10. Orden Recomendado y Cadena de Dependencias
+## 10. Orden recomendado y cadena de dependencias
 
 El orden `V A M N F P T D X R` no es arbitrario — cada segmento valida o invalida las suposiciones del siguiente. Es una **cadena de dependencias**, no solo una lista.
 
@@ -1341,7 +1341,7 @@ Si el operador llega a R y pasa, **cada capa del sistema debajo del evento ha si
 
 ---
 
-## 11. Secuencias Compuestas Recomendadas (Catálogo APST)
+## 11. Secuencias compuestas recomendadas (catálogo APST)
 
 Las secuencias se escriben como strings de códigos. El catálogo canónico del sistema APST es:
 
@@ -1371,9 +1371,9 @@ Las secuencias se escriben como strings de códigos. El catálogo canónico del 
 - Toda secuencia generada termina automáticamente con `.` + conteo de segmentos + `+EventID` (Source ID)
 - El operador puede saltarse pasos opcionales en el Wizard vía *Escape Hatch* individual por segmento
 
-## 12. Ecualización por Respuesta al Impulso (IR EQ)
+## 12. Ecualización por respuesta al impulso (IR EQ)
 
-### Qué Captura el Segmento T
+### Qué captura el segmento T
 
 Cuando el segmento T ejecuta su sweep logarítmico y deconvolución, el motor WASM produce la **Room Impulse Response (RIR)** como subproducto. Esta es una señal en el dominio del tiempo que describe completamente la función de transferencia acústica entre el altavoz y el micrófono en esa posición.
 
@@ -1385,7 +1385,7 @@ Donde $x(t)$ es la señal seca, $h(t)$ es la respuesta al impulso, y $y(t)$ es l
 
 ---
 
-### El Problema del Filtro Inverso
+### El problema del filtro inverso
 
 Si la función de transferencia de la sala es $H(f)$, el filtro inverso es $H^{-1}(f)$. Aplicándolo:
 
@@ -1401,9 +1401,9 @@ Donde $H^*(f)$ es el conjugado complejo de la función de transferencia y $\beta
 
 ---
 
-### Los Cuatro Problemas Prácticos
+### Los cuatro problemas prácticos
 
-#### Problema 1 — Dependencia de Posición
+#### Problema 1 — dependencia de posición
 
 La respuesta al impulso solo es perfectamente válida en la **posición exacta de medición**. Mover el micrófono 30 cm y se tiene una respuesta al impulso diferente. El filtro inverso corrige perfectamente en un punto y crea errores en todos los demás.
 
@@ -1412,7 +1412,7 @@ La respuesta al impulso solo es perfectamente válida en la **posición exacta d
 
 **Mitigación:** Promediar múltiples respuestas al impulso tomadas en varias posiciones a través del área de audiencia o escenario. La IR promediada representa un compromiso espacial — menos perfecta en cualquier punto único pero mejor a través del área de cobertura (**promediado espacial**).
 
-#### Problema 2 — Inversión de Tiempo (Pre-ringing)
+#### Problema 2 — inversión de tiempo (pre-ringing)
 
 Un filtro inverso de fase mínima verdadera es causal. Pero muchos problemas de sala no son de fase mínima. Las reflexiones llegan *después* del sonido directo, lo que significa que el inverso matemático de una reflexión debe llegar *antes* del sonido directo — pre-ringing en el dominio del tiempo.
 
@@ -1420,7 +1420,7 @@ El pre-ringing es perceptualmente más dañino que la reflexión original para e
 
 **Mitigación:** Usar una **extracción de fase mínima** de la respuesta al impulso en lugar de la IR completa. El equivalente de fase mínima corrige respuesta de magnitud sin introducir pre-ringing, al costo de no corregir la fase en exceso. Para inteligibilidad del habla, la corrección de magnitud importa mucho más que la corrección de fase en la mayoría de frecuencias.
 
-#### Problema 3 — Los Nulls Profundos No Pueden Corregirse
+#### Problema 3 — los nulls profundos no pueden corregirse
 
 Una frecuencia donde la sala produce salida casi nula (un null de interferencia destructiva) requiere ganancia casi infinita del filtro inverso para correger. Esto es físicamente imposible y cualquier intento produce feedback o clipping.
 
@@ -1433,7 +1433,7 @@ El término de regularización $\beta$ previene esto limitando la ganancia máxi
 
 **La coherencia se convierte en el mapa de confianza para la inversión** — diciéndole al algoritmo dónde puede empujar fuerte y dónde debe ceder.
 
-#### Problema 4 — Latencia
+#### Problema 4 — latencia
 
 Un EQ de IR basado en convolución introduce latencia igual a la mitad de la longitud de la respuesta al impulso. Una IR de 1 segundo a 48 kHz son 48,000 muestras — el filtro FIR de convolución tiene 48,000 taps, introduciendo ~500ms de latencia. Inaceptable para un micrófono de voz en vivo.
 
@@ -1445,7 +1445,7 @@ Una IR de 100ms a 48 kHz son 4,800 muestras — ~50ms de latencia.
 
 ---
 
-### Los Tres Outputs del Sistema
+### Los tres outputs del sistema
 
 ```javascript
 // Output A — IR completa de fase lineal (referencia / documentación)
@@ -1476,7 +1476,7 @@ const parametricEQ  = module32.translateFIRtoParametric(minPhaseFIR, eqInventory
 
 ---
 
-### Pipeline Completo de Medición a IR EQ
+### Pipeline completo de medición a IR EQ
 
 ```
 Segmento T (sweep logarítmico + deconvolución)
@@ -1505,7 +1505,7 @@ Segmento T (sweep logarítmico + deconvolución)
 
 ---
 
-### Promediado Espacial
+### Promediado espacial
 
 Con múltiples posiciones de medición (dirigidas por el generador de Sweet Spots del Módulo 3.1), el sistema puede promediar esas IRs antes de computar el filtro inverso.
 
@@ -1517,7 +1517,7 @@ Promediar los espectros de potencia, no los espectros complejos. Luego derivar l
 
 ---
 
-### Nuevo Segmento I — Captura y Exportación de IR
+### Nuevo segmento I — captura y exportación de IR
 
 La captura de IR emerge naturalmente del pipeline de medición existente y merece su propio segmento formal:
 
@@ -1539,7 +1539,7 @@ Porque la IR se almacena en IndexedDB junto con el JSON de configuración del ev
 
 ---
 
-### Limitaciones Honestas a Documentar
+### Limitaciones honestas a documentar
 
 Tres cosas que el sistema debe comunicar explícitamente al operador en lugar de ocultar:
 
@@ -1551,7 +1551,7 @@ Tres cosas que el sistema debe comunicar explícitamente al operador en lugar de
 
 ---
 
-## 13. Schema de Reporte de Secuencia
+## 13. Schema de reporte de secuencia
 
 ```json
 {
@@ -1613,7 +1613,7 @@ Tres cosas que el sistema debe comunicar explícitamente al operador en lugar de
 
 ---
 
-## 14. Correspondencia Lindos LA100 ↔ Códigos APST del Proyecto
+## 14. Correspondencia Lindos LA100 ↔ códigos APST del proyecto
 
 El sistema APST del proyecto adopta la filosofía de segmentos Lindos pero redefine los códigos de letra para que sean semánticamente intuitivos en el contexto de calibración AV en vivo. La siguiente tabla mapea cada código APST a su equivalente funcional en el LA100.
 
@@ -1635,7 +1635,7 @@ El sistema APST del proyecto adopta la filosofía de segmentos Lindos pero redef
 | `I`         | IR Capture & Export        | Sin equivalente                             | Nuevo: post-procesamiento sobre resultado de `T`; exporta FIR + EQ paramétrico               |
 
 
-### Segmentos LA100 No Adoptados en APST
+### Segmentos LA100 no adoptados en APST
 
 Los siguientes segmentos del LA100 no tienen equivalente en el sistema APST porque pertenecen a contextos de radiodifusión o hardware no relevantes para calibración AV en vivo:
 
@@ -1652,7 +1652,7 @@ Los siguientes segmentos del LA100 no tienen equivalente en el sistema APST porq
 | `.`             | Terminación de secuencia                                          | *Sí adoptado:* terminación + conteo de segmentos incluida automáticamente                      |
 
 
-### Compatibilidad de Nivel de Señal
+### Compatibilidad de nivel de señal
 
 
 | Parámetro           | Lindos LA100/MS20        | APST (PWA)                                         |

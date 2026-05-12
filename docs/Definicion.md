@@ -1,11 +1,11 @@
-# Documento de Definición del Sistema (DDS)
+# Documento de definición del sistema (DDS)
 
 **Proyecto:** Asistente para instalaciones de audio y video para asambleas.  
 **Arquitectura:** Progressive Web App (PWA) 100% Client-Side / Edge Computing
 
 ---
 
-## 1. Visión General del Sistema
+## 1. Visión general del sistema
 
 El sistema es una herramienta de ingeniería acústica integral, diseñada para asistir a operadores en el diseño espacial, configuración, calibración y monitoreo de audio para instalaciones audiovisuales en recintos y eventos en vivo. Funciona íntegramente en el navegador como una PWA. 
 
@@ -13,7 +13,7 @@ Su arquitectura se basa en la **independencia total de servidores para operar**.
 
 ---
 
-## 2. Arquitectura Tecnológica y Stack
+## 2. Arquitectura tecnológica y stack
 
 El diseño prioriza la latencia cero, la privacidad de los datos y la resiliencia offline.
 
@@ -29,7 +29,7 @@ El diseño prioriza la latencia cero, la privacidad de los datos y la resilienci
 | **Búsqueda Vectorial (RAG)** | Orama / Voy (WASM)         | Base de datos vectorial para consultas ultrarrápidas de literatura técnica.                                                                                        |
 
 
-### 2.1. Arquitectura de Degradación por Niveles (Tiered Capability)
+### 2.1. Arquitectura de degradación por niveles (Tiered Capability)
 
 El sistema implementa una evaluación de hardware en tiempo de ejecución para garantizar disponibilidad en cualquier dispositivo, degradando las capacidades semánticas sin interrumpir la seguridad acústica (DSP).
 
@@ -63,7 +63,7 @@ async function detectTier() {
 }
 ```
 
-### 2.2. Arquitectura de Captura y Procesamiento (AudioWorklet + WASM)
+### 2.2. Arquitectura de captura y procesamiento (AudioWorklet + WASM)
 
 El sistema adopta **AudioWorklet** como arquitectura definitiva de captura. La ingesta de audio se ejecuta en el hilo de audio isócrono, garantizando determinismo absoluto y cero pérdida de muestras. Esto es fundamental para la detección de transitorios de acople (AFE) ultra-rápidos.
 
@@ -74,13 +74,13 @@ El sistema adopta **AudioWorklet** como arquitectura definitiva de captura. La i
 
 > *Nota: Esta arquitectura requiere que el servidor envíe las cabeceras HTTP `Cross-Origin-Opener-Policy: same-origin` y `Cross-Origin-Embedder-Policy: require-corp` para habilitar `SharedArrayBuffer`. Ver Matriz de Compatibilidad en Sección 6.*
 
-### 2.3. Motor de Extracción de Características Acústicas (Meyda.js)
+### 2.3. Motor de extracción de características acústicas (Meyda.js)
 
 Para nutrir el motor heurístico (Fast-Rail) y semántico (Semantic-Rail), el sistema integrará la librería **Meyda.js** como capa de abstracción para la extracción de características acústicas, procesando los *buffers* directamente dentro del contexto asíncrono del `AudioWorklet` o acoplado al hilo principal según la estrategia de captura seleccionada.
 
 - **Extracción Perceptual Pre-calculada:** En lugar de desarrollar algoritmos complejos sobre transformadas de Fourier crudas desde cero, el sistema aprovechará los descriptores nativos de Meyda, tales como Coeficientes Cepstrales en las Frecuencias de Mel (MFCC), *Spectral Flatness* (Planitud Espectral), *Spectral Roll-off* y *ZCR (Zero-Crossing Rate)*.
 
-### 2.4. Estrategia de Despliegue Dual (Monorepo Web / Nativo)
+### 2.4. Estrategia de despliegue dual (Monorepo Web / Nativo)
 
 El proyecto adopta una filosofía de *Single Codebase, Multiple Targets* mediante la integración de **Svelte 5** y **Tauri**. Esto permite desarrollar la aplicación en paralelo para dos plataformas distintas sin duplicar el código de la interfaz gráfica ni la lógica de negocio, resolviendo el dilema entre accesibilidad web universal y rendimiento de hardware crudo.
 
@@ -98,7 +98,7 @@ El proyecto adopta una filosofía de *Single Codebase, Multiple Targets* mediant
 **Patrón de Abstracción de Hardware (HAL)**  
 Para lograr el desarrollo en paralelo sin dividir el código, el sistema implementará una capa de abstracción. Cuando la lógica central demande escuchar el micrófono, no llamará a una API específica, sino al HAL. El HAL evaluará el entorno: si corre en la web, invocará al `Web Audio API`; si corre dentro de Tauri, solicitará el *buffer* crudo de audio al backend en Rust. El motor de análisis matemático DSP recibe la misma información sin importarle el origen.
 
-### 2.5. Modelo de Persistencia Escalonado y Extensión Backend Opcional (GAS)
+### 2.5. Modelo de persistencia escalonado y extensión backend opcional (GAS)
 
 El sistema opera bajo un modelo de **tres niveles de escalabilidad** de almacenamiento. Cada nivel es una extensión opcional del anterior; la ausencia de internet o de configuración externa no genera errores ni degrada la funcionalidad base:
 
@@ -111,7 +111,7 @@ El sistema opera bajo un modelo de **tres niveles de escalabilidad** de almacena
 
 ---
 
-## 3. Arquitectura de Interfaz y Etapas Operativas
+## 3. Arquitectura de interfaz y etapas operativas
 
 La interfaz de usuario adopta una filosofía de **"Herramienta Profesional Primero, Asistente Después"**. La aplicación se estructura en **tres grandes bloques operativos** que reflejan el ciclo de vida real de una instalación A/V. La navegación entre bloques es libre; dentro de cada bloque el operador tiene libertad total para modificar cualquier parámetro. Los **Wizards (Asistentes Guiados) son estrictamente optativos**.
 
@@ -124,7 +124,7 @@ Gestión del contexto previo al evento. Contiene cuatro áreas de trabajo:
 - **3.1.3. Locales:** Diseño geométrico reutilizable de recintos (Árbol de Zonas, simulación predictiva, posicionamiento de altavoces). Un Local puede ser utilizado en múltiples Eventos. *Asistencia Optativa:* **Wizard de diseño de local** (entrevista conversacional → arma el Árbol de Zonas automáticamente) y **Wizard de diseño de sonido** (sugiere posicionamiento acústico óptimo a partir del inventario disponible). Si el diseño viene impuesto externamente (recinto con instalación fija), el usuario puede activar el modo **"Diseño Forzado"** que bloquea posiciones y equipos, impidiendo al Asistente IA sugerir modificaciones físicas.
 - **3.1.4. Eventos:** Instancia concreta que combina un **Local** con elementos del **Inventario**. El Evento reserva ítems del inventario y aplica el diseño del Local, validando que ningún equipo reservado se asigne simultáneamente a otro Evento activo. Contiene la ubicación y conexionado de equipos, y la organización del trabajo por función.
 
-### 3.2. Bloque 2: Instalación y Puesta a Punto
+### 3.2. Bloque 2: Instalación y puesta a punto
 
 Área de trabajo en campo, orientada al operador técnico durante el montaje.
 
@@ -141,9 +141,9 @@ Dashboard de operación durante el evento en vivo.
 
 ---
 
-## 4. Especificación de Módulos Principales
+## 4. Especificación de módulos principales
 
-### 4.1. Módulo de Planimetría y Setup Espacial (Stage Plot)
+### 4.1. Módulo de planimetría y setup espacial (Stage Plot)
 
 Asiste en el diseño físico y la validación acústica previa al evento mediante un lienzo interactivo, actuando como un simulador predictivo offline.
 
@@ -168,7 +168,7 @@ Asiste en el diseño físico y la validación acústica previa al evento mediant
 
 > **Faseado de Implementación:** El MVP incluye: árbol de zonas con sala rectangular base, posiciones XY de equipos, cálculo de Delays por temperatura, RT60 (Sabine), Modos de Sala, Reglas Geométricas y Mapa SPL Nivel 1. Las funcionalidades avanzadas (Simulación Nivel 2 por bandas, Nivel 3 con reflexiones ISM, ciclo de autocorrección completo) se desarrollan en fases posteriores.
 
-#### 4.1.1. Motor de Simulación Predictiva (3 Niveles)
+#### 4.1.1. Motor de simulación predictiva (3 niveles)
 
 Sistema de propagación acústica progresivo. Cada nivel extiende al anterior:
 
@@ -178,7 +178,7 @@ Sistema de propagación acústica progresivo. Cada nivel extiende al anterior:
 
 **Ciclo de Autocorrección:** La simulación no es un fin en sí misma sino un punto de partida. El flujo de trabajo es: Simulación v1 (en oficina, pre-evento) → Medición FSK on-site (Segmento F/S del APST) → Ajuste paramétrico del modelo → Simulación v2 (calibrada). Esto convierte el motor de simulación en un sistema vivo que mejora con cada evento.
 
-#### 4.1.2. Modelado Geométrico Aditivo (Árbol de Zonas)
+#### 4.1.2. Modelado geométrico aditivo (árbol de zonas)
 
 Estructura jerárquica para definir la geometría del recinto:
 
@@ -187,7 +187,7 @@ Estructura jerárquica para definir la geometría del recinto:
 - **Inclinación de Bandejas:** Cada zona hija puede tener un ángulo de inclinación, relevante para calcular la sombra acústica que el intradrós de la bandeja genera sobre las filas de abajo.
 - **Vistas 2D:** El lienzo muestra la planta (vista superior) y cortes transversales generados automáticamente del Árbol de Zonas.
 
-#### 4.1.3. Modelo de Datos: Inventario, Local y Evento
+#### 4.1.3. Modelo de datos: Inventario, Local y Evento
 
 El sistema organiza la información en tres entidades con relaciones claras:
 
@@ -195,7 +195,7 @@ El sistema organiza la información en tres entidades con relaciones claras:
 - **Local:** Diseño geométrico reutilizable de un recinto (Árbol de Zonas, posiciones de altavoces, reglas geométricas, historial de calibraciones). Es independiente del inventario y puede aplicarse a múltiples Eventos en distintos momentos.
 - **Evento:** Instancia concreta que combina un **Local** con ítems del **Inventario**. El Evento *ocupa* (reserva) equipos del inventario y aplica el diseño del Local. El sistema valida que ningún ítem reservado esté asignado simultáneamente a otro Evento activo. El Evento contiene además la topología de conexiones, la distribución del personal y el historial de reportes FSK post-calibración. Se puede generar un evento a partir de uno guardado, permitiendo al usuario seleccionar qué heredar.
 
-### 4.2. Capa de Traducción de Hardware y Telemetría Bidireccional
+### 4.2. Capa de traducción de hardware y telemetría bidireccional
 
 Adapta las matemáticas ideales a las capacidades físicas y lógicas de la consola del recinto, incorporando control remoto opcional cuando hay consolas digitales compatibles.
 
@@ -208,7 +208,7 @@ Adapta las matemáticas ideales a las capacidades físicas y lógicas de la cons
 - **Auto-descubrimiento de Consolas (mDNS/Bonjour):** En la versión Tauri, el sistema detecta automáticamente consolas compatibles en la red local vía mDNS (ej. servicios `_osc._udp`), mostrando al usuario las consolas disponibles sin necesidad de ingresar IPs manualmente.
 - **Undo/Rollback OSC (Snapshot de Canal):** Antes de enviar cualquier comando OSC a la consola, el sistema lee y almacena el estado previo del parámetro afectado. Un botón de "Deshacer Último Cambio" permite revertir al estado anterior, protegiendo contra errores en Modo Semiautomático.
 
-### 4.3. Asistente Guiado de Calibración (Arquitectura Híbrida)
+### 4.3. Asistente guiado de calibración (arquitectura híbrida)
 
 El flujo de calibración utiliza un modelo de responsabilidad dividida, donde el cálculo matemático y la asistencia semántica operan en tándem para garantizar seguridad acústica y usabilidad.
 
@@ -218,7 +218,7 @@ El flujo de calibración utiliza un modelo de responsabilidad dividida, donde el
   - El LLM local redacta la instrucción final, traduciendo los números fríos en directivas operativas específicas para la consola del usuario, explicando pedagógicamente el *porqué* del ajuste basándose en el corpus RAG.
 - **Desplazamiento de Autoridad (Semantic Override):** Cuando se opera bajo la *Variante B (Micrófono Vocal Genérico)*, la autoridad del diagnóstico se desplaza del motor DSP determinista al motor Semántico (LLM). El sistema interceptará las matemáticas dudosas y solicitará validación humana antes de mostrar el *Trace Math* (Ej. *"La medición sugiere un corte severo en 4 kHz, pero los micrófonos vocales suelen inflar esa zona artificialmente. ¿Sientes la voz sibilante o dolorosa al oído, o suena natural?"*)
 
-#### 4.3.1. Curva Objetivo de Referencia (Respuesta Plana — Programa Mixto)
+#### 4.3.1. Curva objetivo de referencia (respuesta plana — programa mixto)
 
 El tipo de eventos al que está destinado el sistema incluye **voz hablada en vivo, música pregrabada y reproducción de video**. Por esta razón, la curva objetivo de referencia es una **respuesta plana extendida** en todo el espectro audible, en lugar de una curva optimizada para un único tipo de contenido:
 
@@ -228,7 +228,7 @@ El tipo de eventos al que está destinado el sistema incluye **voz hablada en vi
 - **Roll-offs ajustables por el operador (opcionales):** El operador puede aplicar manualmente un filtro de corte en graves (HPF, ej. 60-80 Hz) para mitigar ruidos de sala o baja frecuencias no deseadas según la acústica del recinto. El sistema no aplica ningún roll-off predeterminado.
 - **Curva por zona (Nivel 2 de simulación):** Cuando el Motor de Simulación Nivel 2 está activo, el operador puede definir curvas objetivo diferenciadas por zona (ej. zona de audiencia principal vs. zona de catering), permitiendo optimizar cada sector para su contenido específico.
 
-#### 4.3.2. Protocolo de Calibración APST (Automated Progressive System Test)
+#### 4.3.2. Protocolo de calibración APST (Automated Progressive System Test)
 
 El flujo principal de calibración utiliza secuencias FSK estructuradas (ver §4.13). Los métodos clásicos (sweep manual, ruido rosa) quedan disponibles como herramientas del **Modo Manual**.
 
@@ -247,11 +247,11 @@ Prioridad en el Segmento `R` (micrófono vocal real en posición de uso) para ev
 **C. Modo Manual:**  
 Ruido Rosa continuo, Sweep logarítmico manual, o cadena APST personalizada (cualquier combinación válida de segmentos). El operador tiene acceso directo al analizador RTA y al AutoEq sin intermediación del orquestador.
 
-#### 4.3.2a. Promediado Espacial Multi-punto (Medición Guiada)
+#### 4.3.2a. Promediado espacial multi-punto (medición guiada)
 
 Para evitar ecualizar anomalías específicas de un solo punto de escucha, el sistema guía activamente al usuario para realizar mediciones en múltiples posiciones representativas de la audiencia (3-6 puntos), indicando visualmente en el Stage Plot dónde colocar el micrófono en cada paso (ej. *"Medición 2 de 4: Coloque el micrófono en la primera fila izquierda"*). El motor DSP promedia las respuestas capturadas para generar una curva de compromiso espacial más representativa. El módulo de "Generador de Sweet Spots" (Sección 4.1) se integra directamente con este flujo.
 
-#### 4.3.2b. Modo de Ensayo (Rehearsal Mode)
+#### 4.3.2b. Modo de ensayo (Rehearsal Mode)
 
 Durante la prueba de sonido previa al evento, el sistema puede entrar en un "Modo Ensayo" como parte del proceso de calibración:
 
@@ -259,7 +259,7 @@ Durante la prueba de sonido previa al evento, el sistema puede entrar en un "Mod
 - Se permite experimentar con filtros más radicales que luego se suavizan para el evento real.
 - Se documenta automáticamente un **"Cheat Sheet" del recinto** (frecuencias problemáticas, delays óptimos, ganancia máxima antes de feedback) para referencia rápida durante el evento.
 
-#### 4.3.3. Renderizado Predictivo Interactivo y AutoEq a Voluntad
+#### 4.3.3. Renderizado predictivo interactivo y AutoEq a voluntad
 
 Para dotar al operador de confianza visual antes de alterar la consola física, la UI implementa un lienzo de renderizado de "Matemática de Trazos Viva" (Trace Math Visualizer).
 
@@ -270,31 +270,31 @@ Para dotar al operador de confianza visual antes de alterar la consola física, 
   3. *Respuesta Prevista (Predicted):* Suma algebraica en decibelios ($R_{prevista} = R_{medida} + R_{filtro}$).
 - **Interacción de Pre-aplicación:** El operador puede pre-visualizar el impacto de su ecualización. Si ajusta faders virtuales o altera la sugerencia manual, la *Respuesta Prevista* se recalcula instantáneamente, asegurando control predictivo total antes de tocar el hardware real.
 
-### 4.4. Ecualización Semántica para Voz Hablada
+### 4.4. Ecualización semántica para voz hablada
 
 - **Traducción Lenguaje $\rightarrow$ DSP:** El operador describe el problema auditivo (ej. "suena encajonado").
 - **Motor LLM Local:** Entrega instrucciones directas de EQ o compresión dinámica adaptadas al hardware físico.
 
-### 4.5. Módulo de Gestión de Conocimiento (Local RAG)
+### 4.5. Módulo de gestión de conocimiento (Local RAG)
 
 Garantiza asistencia técnica precisa, basada en literatura acústica comprobada.
 
 - **Pre-compilación Offline:** Los textos se fragmentan y vectorizan generando un *Payload de Conocimiento* estático.
 - **Inferencia en Vivo:** `Transformers.js` vectoriza la consulta y el motor de búsqueda vectorial recupera fragmentos clave para inyectarlos en el prompt del LLM.
 
-#### 4.5.1. Especificación del Corpus RAG
+#### 4.5.1. Especificación del corpus RAG
 
 - **Fuentes Primarias:** Extractos de "Sound Systems: Design and Optimization" (McCarthy), estándares IEC 60268-16 STI y fichas técnicas OEM de micrófonos (Shure MX, Sennheiser EW). *Se excluye categóricamente* todo material relacionado con técnicas de mezcla musical.
 - **Estrategia y Tamaño:** Embeddings en inglés y español usando `Xenova/paraphrase-multilingual-MiniLM-L12-v2`. Presupuesto máximo del payload vectorial: **15 MB**.
 
-### 4.6. Prevención y Monitoreo de Acoples (AFE)
+### 4.6. Prevención y monitoreo de acoples (AFE)
 
 Sistema defensivo contra la retroalimentación.
 
 - **Pitar la Sala (Pre-evento):** Sugiere Notch Filters quirúrgicos durante el proceso de ganancia inicial.
 - **Modo Centinela:** Función activa durante todo el evento alertando de frecuencias persistentes.
 
-#### 4.6.1. Algoritmo de Detección AFE (Automatic Feedback Elimination)
+#### 4.6.1. Algoritmo de detección AFE (Automatic Feedback Elimination)
 
 Sea $X(k, n)$ la magnitud del bin $k$ en el frame $n$. Se declara un precursor de feedback si se cumplen ambas condiciones por $M$ frames (Ventana temporal $\sim 100 \text{ ms}$):
 
@@ -303,7 +303,7 @@ Sea $X(k, n)$ la magnitud del bin $k$ en el frame $n$. Se declara un precursor d
 2. **Tonalidad Aislada:** La energía supera el promedio de su vecindad espectral (ancho de ventana $W$).
   $$ X(k, n) > \frac{1}{2W+1} \sum_{i=k-W}^{k+W} X(i, n) + \theta_{prominence} $$
 
-#### 4.6.2. Monitoreo Dinámico y Auditoría Dirigida (Telemetría de Solo)
+#### 4.6.2. Monitoreo dinámico y auditoría dirigida (telemetría de solo)
 
 En eventos de voz hablada (conferencias, paneles, corporativos), no se realiza un monitoreo intrusivo constante. El "Modo Centinela" optimiza el uso del bus de monitoreo de la consola trabajando en dos etapas:
 
@@ -314,13 +314,13 @@ En eventos de voz hablada (conferencias, paneles, corporativos), no se realiza u
   3. Recorre a alta velocidad *únicamente* los canales sospechosos o abiertos, aislando su huella acústica.
   4. Una vez identificado el origen exacto del problema (ej. el Micrófono 3 del panel de invitados), libera el bus de Solo y lanza el *Smart Toast* al operador con la solución sugerida.
 
-### 4.7. Diagnóstico Proactivo (El Copiloto Acústico)
+### 4.7. Diagnóstico proactivo (el copiloto acústico)
 
 Auditoría continua y no intrusiva del evento en vivo.
 
 - **Optimización de Rendimiento:** El motor visual del hilo principal opera a 20 fps (con retención de picos y decaimiento suave) para evitar el sobrecalentamiento del equipo.
 
-#### 4.7.1. Arquitectura Dual-Rail y Muros de Seguridad DSP para Smart Toasts
+#### 4.7.1. Arquitectura Dual-Rail y muros de seguridad DSP para Smart Toasts
 
 - **Gráfico de Coherencia (El "Semáforo"):** Se inyecta una regla estricta de validación. Si la métrica de *Coherencia* de la Transformada de Fourier cae por debajo del 50% en una frecuencia particular, el Asistente bloquea temporalmente la sugerencia de *AutoEq* para esa zona, advirtiendo al operador que está intentando ecualizar un rebote acústico de la sala en lugar de sonido directo, lo cual es inútil y destructivo.
 - **Espectrograma de Cascada (Waterfall Plot):** Herramienta diagnóstica primaria para el decaimiento. Se degrada desde un modelo 3D interactivo en Tier 2 a un mapa de calor 2D en Tier 0. Permite observar qué frecuencias tardan mucho en desaparecer en la sala, advirtiendo de acoples latentes antes de que el micrófono empiece a pitar.
@@ -338,7 +338,7 @@ Auditoría continua y no intrusiva del evento en vivo.
 - **Puntaje de Salud del Sistema (Health Score):** Un indicador numérico global del **1 al 10**, siempre visible en el dashboard de la Fase 4 (Ejecución), que sintetiza el estado general del sistema. Se calcula cruzando: nivel de señal promedio, THD, coherencia, relación señal-ruido, cantidad de alertas activas del Fast-Rail y estado de canales según la Guía de A/V. Visualmente distinto del semáforo de confianza de las sugerencias individuales.
 - **Monitoreo Opcional de Nivel SPL:** Si el usuario lo habilita, el micrófono de medición funciona como sonómetro básico permanente durante el evento. Si la presión sonora supera los 85 dB SPL sostenidos, el sistema advierte al operador. Las quejas del público sobre volumen se canalizan como cualquier otra consulta al Copiloto LLM, que puede apoyarse en los datos de SPL disponibles para contextualizar su respuesta.
 
-#### 4.7.2. Triage y Asistente de Ruteo Físico (Pre-Vuelo)
+#### 4.7.2. Triage y asistente de ruteo físico (Pre-Vuelo)
 
 Un problema común es que usuarios novatos intentan diagnosticar problemas físicos obvios con ecualización, o se frustran por limitaciones de hardware (falta de placas de sonido dedicadas). Antes de sugerir ajustes de DSP, el sistema ejecuta un diagnóstico híbrido (físico/algorítmico) y un "Onboarding" de hardware para descartar fallas eléctricas o de ruteo:
 
@@ -362,7 +362,7 @@ Un problema común es que usuarios novatos intentan diagnosticar problemas físi
   - *Sin Telemetría:* Instrucciones visuales paso a paso con referencias a las marcas físicas de la consola.
   - *Validación:* Al final del wizard, el sistema verifica que no haya saturación ni niveles excesivamente bajos.
 
-### 4.8. Portabilidad y Flujo Asimétrico
+### 4.8. Portabilidad y flujo asimétrico
 
 Separación de la responsabilidad de "Diseño" y "Operación" mediante la gestión del estado.
 
@@ -395,7 +395,7 @@ La exportación del estado (`.json`) validará contra un JSON Schema formal (dra
 
 *Política Backward Compatibility:* El importador soporta un delta de 2 versiones *Minor* hacia atrás mediante *Upcasting* in-memory (añadiendo valores predeterminados para claves nuevas).
 
-#### 4.8.2. Modo de Emergencia y Exportación Imprimible (Failover)
+#### 4.8.2. Modo de emergencia y exportación imprimible (Failover)
 
 Ante fallas inminentes de hardware del dispositivo anfitrión, el sistema provee salidas estáticas para garantizar la continuidad.
 
@@ -407,7 +407,7 @@ Ante fallas inminentes de hardware del dispositivo anfitrión, el sistema provee
   - *Sin OSC:* Muestra en pantalla completa la instrucción: *"BAJE EL MASTER FADER A CERO"*.
   - *Recuperación Guiada:* Tras el silencio, el sistema guía al operador a desmutear un canal a la vez para identificar el origen del problema: *"Desmutee solo el Canal 1... ¿Suena limpio? → [Sí] [No] → Siguiente..."*.
 
-#### 4.8.3. Reporte Post-Evento Automático
+#### 4.8.3. Reporte post-evento automático
 
 Al finalizar el evento, el sistema genera automáticamente un resumen técnico del evento.
 
@@ -415,7 +415,7 @@ Al finalizar el evento, el sistema genera automáticamente un resumen técnico d
 - **Formato:** Exportable como PDF offline (reutilizando `jsPDF`) o como JSON para alimentar la Memoria de Recinto (4.12).
 - **Beneficio:** La organización que contrató al operador recibe evidencia objetiva de la calidad técnica, y el próximo evento en el mismo lugar arranca con datos históricos.
 
-### 4.9. UX Adaptativa y Soporte Educativo Integrado
+### 4.9. UX adaptativa y soporte educativo integrado
 
 El sistema está diseñado para ser operado tanto por personas sin background técnico ni de audio profesional, como por técnicos experimentados (sin convertirse en un obstáculo para estos últimos).
 
@@ -430,13 +430,13 @@ El sistema está diseñado para ser operado tanto por personas sin background t�
   - *Formato:* Micro-lecciones interactivas accesibles desde el menú de ayuda, con ilustraciones esquemáticas y explicaciones en lenguaje coloquial.
   - *Activación:* Se sugiere automáticamente al usuario que seleccionó nivel "Básico", pero está disponible para todos.
 
-### 4.10. Gestión de Contextos Específicos de Voz Hablada
+### 4.10. Gestión de contextos específicos de voz hablada
 
 - **Gestor de Múltiples Oradores (Pre-sets Dinámicos):** Al no ser viable tener una base de características exactas de cada orador previo al evento, el sistema implementa "Macro-Perfiles Generales" predefinidos (Ej. *Voz Masculina Grave*, *Voz Femenina Sibilante*, *Voz Débil/Lejana*). Esto permite aplicar compensaciones relativas inmediatas mediante botones rápidos (One-Tap) cuando hay un cambio repentino de orador en el escenario, adaptando los umbrales de seguridad y ecualización al vuelo.
 - **Detector de Técnica de Micrófono (Conciencia Espacial):** El motor DSP diferencia acústicamente el uso del micrófono (ej. Micrófono en jirafa/atril frente a Micrófono de mano) mediante la variabilidad de bajas frecuencias (efecto proximidad), caídas temporales de agudos (fuera de eje) o incrementos nasales (orador tapando la cápsula).
   - *Resolución de Técnica Deficiente:* Si el sistema advierte una mala técnica y resulta imposible ajustar la posición física (orador inmanejable), proveerá al usuario de un modo alternativo ("Workarounds"). Por ejemplo, si es un orador de atril muy alejado, sugerirá abandonar la "búsqueda de ecualización plana" y pasará a sugerir el uso de una Puerta de Ruido / Expansor, compresión con ratio suave para compensar la caída de señal, y un filtro pasa-altos mucho más agresivo para maximizar la inteligibilidad sacrificando calidad natural.
 
-### 4.11. Guía de Audio y Video
+### 4.11. Guía de Audio y video
 
 Para optimizar el rol del Asistente durante el evento en vivo, el sistema permite cargar el programa detallado. Al cruzar el itinerario temporal con la telemetría de la consola, el Asistente adquiere "conciencia" de lo que debería estar ocurriendo, actuando como un apuntador inteligente y un monitor de seguridad preventivo.
 
@@ -463,7 +463,7 @@ Para optimizar el rol del Asistente durante el evento en vivo, el sistema permit
   - **Suspensión Inteligente del AFE:** Cuando la guía marca una sección tipo `"video"`, el sistema asume la entrada de energía acústica musical/efectos y suspende temporalmente los algoritmos de Prevención de Acoples (AFE) para evitar falsas alarmas de retroalimentación.
   - **Aplicación Opcional de Perfiles de Voz:** Si en la carga del programa se definió de antemano el perfil del orador, el sistema mostrará la sugerencia de cargar ese EQ. Adicionalmente, el sistema ofrecerá una configuración donde la **aplicación automática de este perfil de voz queda a criterio y autorización explícita del usuario** (pudiendo permitir que el Asistente lo inyecte por sí solo al avanzar de sección).
 
-### 4.12. Memoria de Recinto (Venue Memory)
+### 4.12. Memoria de recinto (Venue Memory)
 
 El sistema almacena un historial de calibraciones indexado por recinto. Cuando el usuario regresa a un lugar previamente calibrado:
 
@@ -473,7 +473,7 @@ El sistema almacena un historial de calibraciones indexado por recinto. Cuando e
 
 ---
 
-## 5. Flujo de Datos Híbrido (Data Pipeline)
+## 5. Flujo de datos híbrido (Data Pipeline)
 
 **Inferencia y Traducción Híbrida:** El motor WASM arroja los parámetros matemáticos del filtro (AutoEq). JS ensambla un *System Prompt* oculto que incluye este filtro ideal y el hardware disponible. El **LLM en WebGPU** lo procesa y devuelve el *Smart Toast* con las instrucciones físicas para el operador.
 
@@ -544,7 +544,7 @@ Protocolo de calibración asistida por secuencias de audio FSK. Reemplaza el flu
 
 ---
 
-### 4.14. Módulo de Telemetría Distribuida (Mapa de Calor en Vivo)
+### 4.14. Módulo de telemetría distribuida (mapa de calor en vivo)
 
 Módulo **opcional**, activo únicamente cuando se ha configurado la integración GAS (§2.5, Nivel 3).
 
@@ -556,14 +556,14 @@ Módulo **opcional**, activo únicamente cuando se ha configurado la integració
 
 ---
 
-## 6. Requisitos No Funcionales (RNF)
+## 6. Requisitos no funcionales (RNF)
 
 - **Autonomía Total (Offline-First):** Una vez guardados en caché los *assets* y *Payloads*, la app opera indefinidamente sin internet.
 - **Rendimiento Sostenido (Thermal Management):** La división de procesamiento asíncrono y la reducción de renderizado visual a 20 fps deben garantizar operación continua (>8 horas) sin *thermal throttling*.
 - **Privacidad Nativa:** Cero telemétrica. Ningún audio o texto abandona el dispositivo.
 - **Interfaz de Alto Contraste:** Interfaz legible con colores contrastantes, targets táctiles razonables y tipografía clara.
 
-### 6.1. Matriz de Compatibilidad de Navegadores
+### 6.1. Matriz de compatibilidad de navegadores
 
 
 | Funcionalidad             | Chrome/Edge            | Firefox                | Safari (iOS/macOS)            |
@@ -580,13 +580,13 @@ Módulo **opcional**, activo únicamente cuando se ha configurado la integració
 
 ---
 
-## 7. Referencias y Repositorios Base (Open Source)
+## 7. Referencias y repositorios base (Open Source)
 
-### 7.1. Corpus de Conocimiento (Base RAG del Sistema)
+### 7.1. Corpus de conocimiento (base RAG del sistema)
 
 - **Referencias de Audio (NotebookLM) —** [notebooklm.google.com/notebook/d5ce2b32-5bd2-4cf7-8dce-5827ecb03b18](https://notebooklm.google.com/notebook/d5ce2b32-5bd2-4cf7-8dce-5827ecb03b18): **Fuente primaria del RAG del sistema.** Contiene las referencias técnicas de ingeniería de sonido en vivo que alimentan al Semantic-Rail del Copiloto y a los asistentes de diagnóstico. El contenido de este notebook es la "biblia técnica" a partir de la cual el LLM local fundamenta sus diagnósticos, traduce mediciones a lenguaje operativo y genera recomendaciones contextualizadas. Toda consulta semántica del sistema debe estar anclada a este corpus antes de responder.
 
-### 7.2. Repositorios de Referencia (Open Source)
+### 7.2. Repositorios de referencia (Open Source)
 
 - **Open Sound Meter (OSM) —** [github.com/psmokotnin/osm](https://github.com/psmokotnin/osm): Arquitectura de referencia para el cálculo de Función de Transferencia (Magnitud, Fase y Coherencia) y alineamiento de retardo. Referencia principal para el flujo de análisis de doble canal.
 - **AutoEq —** [github.com/jaakkopasanen/AutoEq](https://github.com/jaakkopasanen/AutoEq): Base teórica para el cálculo del error entre medición y curva objetivo, y derivación de parámetros de filtros paramétricos (PEQ). Referencia del motor AutoEq del §4.3.2.
@@ -597,7 +597,7 @@ Módulo **opcional**, activo únicamente cuando se ha configurado la integració
 
 ---
 
-## 8. Estrategia de Verificación y Validación
+## 8. Estrategia de verificación y validación
 
 Para los módulos críticos de seguridad acústica, el proyecto implementará una estrategia formal de testing:
 
@@ -607,25 +607,25 @@ Para los módulos críticos de seguridad acústica, el proyecto implementará un
 
 ---
 
-## 9. Integración con el Sistema de Gestión Audiovisual (AV Management SPA)
+## 9. Integración con el sistema de gestión audiovisual (AV Management SPA)
 
 El Asistente de Audio se concibe inicialmente como herramienta independiente (*standalone*). Su arquitectura de datos basada en las entidades **Inventario, Local y Evento** (§4.1.3) permite una integración profunda con la **SPA de Gestión de Inventario AV** existente, transformando ambas plataformas en un ecosistema unificado que cubre desde la logística de almacén hasta la optimización acústica del evento.
 
-### 8.1. Sincronización de Inventario y Perfiles de Hardware
+### 8.1. Sincronización de Inventario y perfiles de hardware
 
 En la fase integrada, el asistente dejará de depender de la entrada manual del inventario o del "Modo Agnóstico" forzado.
 
 - **Lectura de Base de Datos:** El Asistente de Audio consumirá directamente la base de datos de equipos de la SPA (vía IndexedDB compartido o API local), importando automáticamente las especificaciones técnicas, patrones polares y curvas de respuesta de los micrófonos y altavoces asignados al evento.
 - **Validación Logística:** Antes de sugerir un filtro o ruteo, el Asistente verificará si el hardware necesario (ej. un ecualizador gráfico adicional o un procesador de delay) está realmente disponible en el almacén o ya está asignado a ese evento específico.
 
-### 8.2. Convergencia de Topología (AntV X6 $\leftrightarrow$ Stage Plot)
+### 8.2. Convergencia de topología (antv X6 $\leftrightarrow$ Stage Plot)
 
 El módulo de *Stage Plot* del asistente y el mapa de *Topología de Red* (AntV X6) de la SPA compartirán el mismo modelo de datos subyacente.
 
 - **Diseño Bidireccional:** Un operador podrá esbozar el ruteo de señal en la vista de topología de la SPA en el almacén. Al llegar al recinto, el técnico abrirá el Asistente de Audio y verá exactamente ese mismo ruteo pre-cargado, listo para la fase de medición acústica.
 - **Persistencia de Calibración:** Los valores resultantes de la calibración (tiempos de delay precisos, filtros EQ aplicados, niveles de ganancia) se inyectarán como metadatos (`AvSetupPayload`) directamente en los nodos de los equipos dentro de la base de datos de la SPA, documentando el "estado final (*as-built*)" del evento para futuras referencias.
 
-### 8.3. Flujo de Trabajo Unificado (Warehouse to Stage)
+### 8.3. Flujo de trabajo unificado (Warehouse to Stage)
 
 La integración permitirá un flujo de trabajo continuo y sin fricciones:
 
