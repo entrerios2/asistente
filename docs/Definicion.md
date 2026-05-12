@@ -1,6 +1,6 @@
 # Documento de definición del sistema (DDS)
 
-**Proyecto:** Asistente para instalaciones de audio y video para asambleas.  
+**Proyecto:** Asistente de audio y video para asambleas.  
 **Arquitectura:** Progressive Web App (PWA) 100% Client-Side / Edge Computing
 
 ---
@@ -98,7 +98,19 @@ El proyecto adopta una filosofía de *Single Codebase, Multiple Targets* mediant
 **Patrón de Abstracción de Hardware (HAL)**  
 Para lograr el desarrollo en paralelo sin dividir el código, el sistema implementará una capa de abstracción. Cuando la lógica central demande escuchar el micrófono, no llamará a una API específica, sino al HAL. El HAL evaluará el entorno: si corre en la web, invocará al `Web Audio API`; si corre dentro de Tauri, solicitará el *buffer* crudo de audio al backend en Rust. El motor de análisis matemático DSP recibe la misma información sin importarle el origen.
 
-### 2.5. Modelo de persistencia escalonado y extensión backend opcional (GAS)
+### 2.5. Utilidad de generación de secuencias (APST Builder)
+
+Para garantizar la pureza matemática de las señales de prueba y optimizar el rendimiento en dispositivos móviles (Tier 0/1), el sistema se apoya en una utilidad externa de línea de comandos (APST Builder). Este será uno de los primeros módulos a desarrollar en el *roadmap*.
+
+Esta utilidad pre-renderiza las secuencias acústicas completas y sus cabeceras de sincronización, produciendo archivos `.flac` (lossless) que la PWA descargará y reproducirá según sea necesario, evitando la síntesis de audio computacionalmente pesada en tiempo real.
+
+**Características de la matriz de generación:**
+- **Granularidad:** Genera tanto los segmentos atómicos individuales (ej. `Segmento_F`) como las secuencias compuestas pre-ensambladas (ej. `Secuencia_VAF`).
+- **Cabeceras Dinámicas pre-horneadas:** Cada archivo se genera en dos versiones: con cabecera estándar (HF: 1650/1850 Hz) y con cabecera para subwoofers (LF: 150/200 Hz).
+- **Frecuencias de Muestreo (Sample Rates):** Los archivos se renderizan nativamente en las frecuencias de salida más habituales de las interfaces de audio (44.1 kHz, 48 kHz y 96 kHz). La PWA detectará el *sample rate* de su `AudioContext` y descargará la versión exacta para evitar que el navegador aplique algoritmos de *resampling* al vuelo, asegurando precisión *bit-perfect* y cálculos de fase inalterados.
+- **Uso Externo (Playback USB):** Al ser archivos `.flac` pre-generados, pueden exportarse a un pendrive USB para que el operador reproduzca las secuencias directamente desde la consola digital, utilizando la tablet o teléfono exclusivamente como analizador inalámbrico.
+
+### 2.6. Modelo de persistencia escalonado y extensión backend opcional (GAS)
 
 El sistema opera bajo un modelo de **tres niveles de escalabilidad** de almacenamiento. Cada nivel es una extensión opcional del anterior; la ausencia de internet o de configuración externa no genera errores ni degrada la funcionalidad base:
 
@@ -609,20 +621,20 @@ Para los módulos críticos de seguridad acústica, el proyecto implementará un
 
 ## 9. Integración con el sistema de gestión audiovisual (AV Management SPA)
 
-El Asistente de Audio se concibe inicialmente como herramienta independiente (*standalone*). Su arquitectura de datos basada en las entidades **Inventario, Local y Evento** (§4.1.3) permite una integración profunda con la **SPA de Gestión de Inventario AV** existente, transformando ambas plataformas en un ecosistema unificado que cubre desde la logística de almacén hasta la optimización acústica del evento.
+El Asistente de audio y video para asambleas se concibe inicialmente como herramienta independiente (*standalone*). Su arquitectura de datos basada en las entidades **Inventario, Local y Evento** (§4.1.3) permite una integración profunda con la **SPA de Gestión de Inventario AV** existente, transformando ambas plataformas en un ecosistema unificado que cubre desde la logística de almacén hasta la optimización acústica del evento.
 
 ### 8.1. Sincronización de Inventario y perfiles de hardware
 
 En la fase integrada, el asistente dejará de depender de la entrada manual del inventario o del "Modo Agnóstico" forzado.
 
-- **Lectura de Base de Datos:** El Asistente de Audio consumirá directamente la base de datos de equipos de la SPA (vía IndexedDB compartido o API local), importando automáticamente las especificaciones técnicas, patrones polares y curvas de respuesta de los micrófonos y altavoces asignados al evento.
+- **Lectura de Base de Datos:** El Asistente de audio y video para asambleas consumirá directamente la base de datos de equipos de la SPA (vía IndexedDB compartido o API local), importando automáticamente las especificaciones técnicas, patrones polares y curvas de respuesta de los micrófonos y altavoces asignados al evento.
 - **Validación Logística:** Antes de sugerir un filtro o ruteo, el Asistente verificará si el hardware necesario (ej. un ecualizador gráfico adicional o un procesador de delay) está realmente disponible en el almacén o ya está asignado a ese evento específico.
 
 ### 8.2. Convergencia de topología (antv X6 $\leftrightarrow$ Stage Plot)
 
 El módulo de *Stage Plot* del asistente y el mapa de *Topología de Red* (AntV X6) de la SPA compartirán el mismo modelo de datos subyacente.
 
-- **Diseño Bidireccional:** Un operador podrá esbozar el ruteo de señal en la vista de topología de la SPA en el almacén. Al llegar al recinto, el técnico abrirá el Asistente de Audio y verá exactamente ese mismo ruteo pre-cargado, listo para la fase de medición acústica.
+- **Diseño Bidireccional:** Un operador podrá esbozar el ruteo de señal en la vista de topología de la SPA en el almacén. Al llegar al recinto, el técnico abrirá el Asistente de audio y video para asambleas y verá exactamente ese mismo ruteo pre-cargado, listo para la fase de medición acústica.
 - **Persistencia de Calibración:** Los valores resultantes de la calibración (tiempos de delay precisos, filtros EQ aplicados, niveles de ganancia) se inyectarán como metadatos (`AvSetupPayload`) directamente en los nodos de los equipos dentro de la base de datos de la SPA, documentando el "estado final (*as-built*)" del evento para futuras referencias.
 
 ### 8.3. Flujo de trabajo unificado (Warehouse to Stage)
@@ -630,6 +642,6 @@ El módulo de *Stage Plot* del asistente y el mapa de *Topología de Red* (AntV 
 La integración permitirá un flujo de trabajo continuo y sin fricciones:
 
 1. **Pre-Producción (SPA):** El productor reserva los equipos y diseña el diagrama de bloques (patching) en la oficina.
-2. **Despliegue (SPA $\rightarrow$ Asistente):** El técnico de sala abre el evento en su tablet. La PWA lanza el *Asistente de Audio*, el cual auto-configura su contexto ambiental y perfiles de dispositivos en base a la reserva logística.
+2. **Despliegue (SPA $\rightarrow$ Asistente):** El técnico de sala abre el evento en su tablet. La PWA lanza el *Asistente de audio y video para asambleas*, el cual auto-configura su contexto ambiental y perfiles de dispositivos en base a la reserva logística.
 3. **Calibración (Asistente):** Se ejecuta el flujo guiado interactuando con el hardware físico y el entorno acústico.
 4. **Cierre (Asistente $\rightarrow$ SPA):** Finalizado el show, el Asistente exporta el reporte de estado acústico e incidentes (ej. alertas de *feedback* recurrentes) de vuelta a la ficha del evento en la SPA, permitiendo auditorías de calidad técnica y documentando ajustes para futuros eventos en el mismo recinto.

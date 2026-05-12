@@ -11,7 +11,7 @@ export default defineConfig({
 			registerType: 'autoUpdate',
 			includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
 			manifest: {
-				name: 'Asistente de Audio Proactivo',
+				name: 'Asistente de audio y video para asambleas',
 				short_name: 'AsistenteAudio',
 				description: 'Análisis de audio proactivo en tiempo real',
 				theme_color: '#ffffff',

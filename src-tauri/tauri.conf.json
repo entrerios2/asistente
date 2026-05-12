@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Asistente de Audio",
+        "title": "Asistente de audio y video para asambleas",
         "width": 800,
         "height": 600,
         "resizable": true,

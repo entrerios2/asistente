@@ -13,7 +13,7 @@ Dado que estos modelos pierden memoria fácilmente, cada prompt está "autoconte
 
 ### [PROMPT 1] Scaffolding, Tailwind y Seguridad Web
 ```text
-Actúa como un Desarrollador Svelte 5 Senior. Estamos construyendo un "Asistente de Audio Proactivo" (una PWA que analiza audio en vivo). 
+Actúa como un Desarrollador Svelte 5 Senior. Estamos construyendo un "Asistente de audio y video para asambleas" (una PWA que analiza audio en vivo). 
 
 Necesito que me des los comandos de terminal exactos y el código para inicializar el scaffolding del proyecto con las siguientes restricciones:
 1. Usa Svelte 5 con TypeScript y Vite.

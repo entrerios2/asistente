@@ -1,6 +1,6 @@
 # Prompts de Implementación: Fase 1 (Motor de Calibración)
 
-Este documento contiene la secuencia de prompts para ejecutar la Fase 1 del Asistente de Audio Proactivo usando Gemini 3 Flash. 
+Este documento contiene la secuencia de prompts para ejecutar la Fase 1 del Asistente de audio y video para asambleas usando Gemini 3 Flash. 
 
 ## Instrucciones de uso
 1. Abre un nuevo chat con Gemini 3 Flash.
@@ -11,7 +11,7 @@ Este documento contiene la secuencia de prompts para ejecutar la Fase 1 del Asis
 
 ### [PROMPT 1] Preparación y Librerías Matemáticas
 ```text
-Actúa como un Ingeniero de Audio DSP y Desarrollador Svelte 5 Senior. Estamos en la "Fase 1" de nuestro Asistente de Audio Proactivo (una PWA de calibración acústica). Ya tenemos el scaffolding con Vite, Tailwind y el HAL de audio funcionando.
+Actúa como un Ingeniero de Audio DSP y Desarrollador Svelte 5 Senior. Estamos en la "Fase 1" de nuestro Asistente de audio y video para asambleas (una PWA de calibración acústica). Ya tenemos el scaffolding con Vite, Tailwind y el HAL de audio funcionando.
 
 Nuestro objetivo es implementar el "Motor de Calibración" capaz de medir la Función de Transferencia Dual-Canal (Magnitud, Fase y Coherencia).
 

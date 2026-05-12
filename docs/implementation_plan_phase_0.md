@@ -1,7 +1,7 @@
 # Implementación Fase 0: Fundación, Scaffolding y HAL
 
 ## Objetivo
-Establecer la arquitectura base del proyecto "Asistente de Audio Proactivo" con un enfoque dual-target (PWA y Tauri nativo). La fase incluye la configuración del entorno Svelte 5 + Vite, la creación de la Capa de Abstracción de Hardware (HAL) para audio, el procesamiento de audio crudo y la visualización de un analizador de espectro (RTA) en Canvas.
+Establecer la arquitectura base del proyecto "Asistente de audio y video para asambleas" con un enfoque dual-target (PWA y Tauri nativo). La fase incluye la configuración del entorno Svelte 5 + Vite, la creación de la Capa de Abstracción de Hardware (HAL) para audio, el procesamiento de audio crudo y la visualización de un analizador de espectro (RTA) en Canvas.
 
 ## Decisiones de Diseño Aprobadas
 - **UI y Estilos:** Se utilizará **TailwindCSS** para un desarrollo rápido de la interfaz. Dado que la herramienta se usará en asambleas y entornos iluminados, el diseño priorizará temas claros de alto contraste (aunque soportará dark mode). Todo el renderizado intensivo (RTA, Stage Plot) se aislará en **Canvas API** para no comprometer el rendimiento de los estilos CSS.

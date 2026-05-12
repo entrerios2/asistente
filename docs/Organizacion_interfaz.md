@@ -1,6 +1,6 @@
 # Organización de interfaz UX/UI
 
-**Proyecto:** Asistente para instalaciones de A/V en asambleas
+**Proyecto:** Asistente de audio y video para asambleas
 
 ## Planificación
 

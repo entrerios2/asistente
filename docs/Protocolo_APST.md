@@ -1,6 +1,6 @@
-# Secuencia de prueba FSK para calibración A/V
+# Protocolo APST para calibración A/V
 
-## Especificación técnica para la plataforma PWA de asistencia proactiva
+## Especificación técnica para el asistente de audio y video para asambleas
 
 ---
 
@@ -8,10 +8,10 @@
 
 1. [El Estándar Original: EBU 1985](#1-el-estándar-original-ebu-1985)
 2. [La Innovación Lindos: Secuencias Segmentadas](#2-la-innovación-lindos-secuencias-segmentadas)
-3. [Cómo Funciona el FSK Técnicamente](#3-cómo-funciona-el-fsk-técnicamente)
-4. [Por Qué FSK es la Elección Correcta para Este Proyecto](#4-por-qué-fsk-es-la-elección-correcta-para-este-proyecto)
-5. [Implementación FSK en el Navegador](#5-implementación-fsk-en-el-navegador)
-6. [FSK como Instrumento de Diagnóstico de la Cadena de Señal](#6-fsk-como-instrumento-de-diagnóstico-de-la-cadena-de-señal)
+3. [Cómo Funciona la Sincronización FSK Técnicamente](#3-cómo-funciona-la-sincronización-fsk-técnicamente)
+4. [Por Qué la Sincronización FSK es la Elección Correcta para el Protocolo APST](#4-por-qué-la-sincronización-fsk-es-la-elección-correcta-para-el-protocolo-apst)
+5. [Implementación de la Sincronización FSK](#5-implementación-de-la-sincronización-fsk)
+6. [La Cabecera FSK como Instrumento de Diagnóstico](#6-la-cabecera-fsk-como-instrumento-de-diagnóstico)
 7. [Biblioteca de Segmentos Recomendados](#7-biblioteca-de-segmentos-recomendados)
 8. [Especificación Detallada de Cada Código](#8-especificación-detallada-de-cada-código)
   - [V — Verificación de Cadena de Señal (Path Audit)](#v--verificación-de-cadena-de-señal-path-audit)
@@ -64,7 +64,7 @@ El sistema de secuencias Lindos es hoy un **estándar de facto** en radiodifusi�
 
 ---
 
-## 3. Cómo funciona el FSK técnicamente
+## 3. Cómo funciona la sincronización FSK técnicamente
 
 ### La capa física
 
@@ -142,7 +142,7 @@ En la implementación APST, ambos segmentos se agregan automáticamente al final
 
 ---
 
-## 4. Por qué FSK es la elección correcta para este proyecto
+## 4. Por qué la sincronización FSK es la elección correcta para el protocolo APST
 
 ### Lo que FSK hace que los tokens en memoria no pueden
 
@@ -170,56 +170,79 @@ Esta propiedad no existe con tokens en memoria.
 
 ---
 
-## 5. Implementación FSK en el navegador
+## 5. Implementación de la sincronización FSK
 
 El Web Audio API provee todo lo necesario para ambos lados del enlace FSK.
 
-### Generación (equivalente al LA101)
+### Generación (APST Builder - Script Offline)
+
+La generación de las secuencias se realiza de manera anticipada (pre-renderizada) mediante una utilidad *offline* (APST Builder). Esta utilidad genera archivos estáticos `.flac` en múltiples frecuencias de muestreo (44.1, 48, 96 kHz) para asegurar precisión a nivel de bit y evitar que el navegador tenga que hacer *resampling* o síntesis de audio computacionalmente pesada.
 
 ```javascript
-// FSK estándar Lindos: mark = 1650 Hz, space = 1850 Hz (110 baudios)
-// Framing: 1 start + 7 data (LSB first) + 1 even parity + 2 stop = 11 bits/char
-// Referencia: LA100 Manual 6th Edition, Appendix H
+// Pseudocódigo APST Builder (Utilidad Offline Node.js / Python)
+// Generación estática de archivos .flac para la biblioteca del sistema
 
-const MARK_HZ  = 1650;  // bit 1
-const SPACE_HZ = 1850;  // bit 0
-const BAUD     = 110;   // baudios
+const BAUD = 110;
+const SAMPLE_RATES = [44100, 48000, 96000];
+const HEADER_TYPES = {
+  HF: { mark: 1650, space: 1850 }, // Estándar
+  LF: { mark: 150, space: 200 }    // Subwoofers (crossover <= 120Hz)
+};
 
-// Para cabecera LF (subsistemas de graves, crossover ≤ 120 Hz):
-// const MARK_HZ  = 150;
-// const SPACE_HZ = 200;
-
+// 1. Framing de caracteres (1 start + 7 data + 1 parity + 2 stop = 11 bits)
 function charToFSKBits(char) {
-  const code = char.charCodeAt(0) & 0x7F;  // 7 bits ASCII
-  const bits = [0];  // start bit (space)
+  const code = char.charCodeAt(0) & 0x7F;
+  const bits = [0]; // start bit (space)
   let parity = 0;
   for (let i = 0; i < 7; i++) {
     const b = (code >> i) & 1;
     bits.push(b);
     parity ^= b;
   }
-  bits.push(parity);  // even parity bit
-  bits.push(1);       // stop bit 1
-  bits.push(1);       // stop bit 2
-  return bits;        // 11 bits totales
+  bits.push(parity, 1, 1); // paridad par, stop bit 1, stop bit 2
+  return bits;
 }
 
-function sendFSKHeader(segmentCode, oscillator, startTime, markHz = MARK_HZ, spaceHz = SPACE_HZ) {
-  const bitDuration = 1 / BAUD;  // ~9.09 ms
-  let t = startTime;
-
-  // Preámbulo: 2 bits mark (1650 Hz) para sincronización del receptor
-  oscillator.frequency.setValueAtTime(markHz, t);
-  t += bitDuration * 2;
-
-  // Carácter del segmento
+// 2. Generación de cabecera de audio pura
+function generateFSKHeader(segmentCode, sampleRate, headerType) {
+  const { mark, space } = HEADER_TYPES[headerType];
+  const bitDuration = 1 / BAUD; // ~9.09 ms
+  let audioBuffer = [];
+  
+  // Preámbulo: 2 bits mark para sincronización del receptor
+  audioBuffer.push(...generateTone(mark, bitDuration * 2, sampleRate));
+  
+  // Bits de datos FSK
   const bits = charToFSKBits(segmentCode);
-  bits.forEach(bit => {
-    oscillator.frequency.setValueAtTime(bit === 1 ? markHz : spaceHz, t);
-    t += bitDuration;
-  });
-  return t;  // tiempo de fin del header (~200ms desde startTime)
-  // La señal de prueba del segmento comienza inmediatamente después
+  for (const bit of bits) {
+    const freq = bit === 1 ? mark : space;
+    audioBuffer.push(...generateTone(freq, bitDuration, sampleRate));
+  }
+  return audioBuffer;
+}
+
+// 3. Ensamblaje y exportación del segmento completo
+function buildSegmentFile(segmentCode, payloadFn, sampleRate, headerType) {
+  const header = generateFSKHeader(segmentCode, sampleRate, headerType);
+  const payload = payloadFn(sampleRate); // Ej: generateSineWave, generateMLS, etc.
+  
+  const fullSegment = [...header, ...payload];
+  
+  const filename = `Segmento_${segmentCode}_${headerType}_${sampleRate}Hz.flac`;
+  exportToFlac(fullSegment, filename, sampleRate, 24); // Exportar a 24-bit lossless
+}
+
+// 4. Matriz de generación
+for (const rate of SAMPLE_RATES) {
+  for (const type in HEADER_TYPES) {
+    // Generar archivo individual para Segmento A (Ej: Tono 1kHz @ -18dBFS por 10s)
+    buildSegmentFile('A', (sr) => generateSineWave(1000, -18, 10, sr), rate, type);
+    
+    // Generar archivo individual para Segmento F (Ej: Sweep Log 40Hz-20kHz por 15s)
+    buildSegmentFile('F', (sr) => generateLogSweep(40, 20000, 15, sr), rate, type);
+    
+    // Y así para todos los segmentos y secuencias compuestas (VAF, etc.)
+  }
 }
 ```
 
@@ -285,18 +308,32 @@ const baseLatency = audioContext.baseLatency + audioContext.outputLatency;
 const searchWindowMs = Math.max(50, baseLatency * 1000 + 30); // +30ms margen acústico
 ```
 
-### Rol correcto del SharedArrayBuffer
+### Modelo híbrido de análisis FSK (Real-Time vs Offline Buffer)
 
-`SharedArrayBuffer` tiene un rol válido pero limitado: **leer resultados** del analizador WASM de vuelta al orquestador JS después de que la medición se completa. No para sincronización — eso es trabajo del FSK.
+Para secuencias APST largas (ej. Sweep S de 20 segundos) o entornos de hardware limitados, el sistema implementa un modelo de procesamiento híbrido:
 
-```
-SharedArrayBuffer: resultados WASM → hilo JS orchestrator ✓
-FSK in-band:       sincronización generador → analizador   ✓
+1. **AudioWorklet como Trigger:** El detector Goertzel en el `AudioWorklet` se mantiene activo en tiempo real escuchando la cabecera FSK. Una vez decodificada, en lugar de procesar todo el bloque en tiempo real, el Worklet inicia la grabación del audio crudo directamente en el `SharedArrayBuffer`.
+2. **Procesamiento Offline en Web Worker:** Al finalizar la secuencia, un Web Worker toma la captura completa del `SharedArrayBuffer` y realiza el análisis matemático pesado sin restricciones de tiempo real, garantizando máxima precisión sin riesgo de *underruns* en el hilo de audio.
+
+El modo de análisis se define dinámicamente según la capacidad del dispositivo (Tier):
+- **Tier 0 / Tier 1 (Dispositivos móviles o limitados):** Offline por defecto.
+- **Tier 2 (Laptops modernas, Apple Silicon):** Real-Time por defecto.
+
+El operador puede forzar cualquiera de estos modos (Automático, Forzar Tiempo Real, Forzar Offline) desde la configuración del analizador.
+
+### Rol del SharedArrayBuffer
+
+En este ecosistema, el `SharedArrayBuffer` cumple roles específicos según el modo de operación, pero **nunca** se usa para sincronización de secuencias (ese es trabajo exclusivo del FSK in-band):
+
+```text
+Modo Real-Time: SharedArrayBuffer comunica resultados WASM → hilo JS orchestrator ✓
+Modo Offline:   SharedArrayBuffer almacena grabación cruda (AudioWorklet) → Web Worker procesa ✓
+FSK in-band:    Sincronización de eventos generador → analizador ✓
 ```
 
 ---
 
-## 6. FSK como instrumento de diagnóstico de la cadena de señal
+## 6. La cabecera FSK como instrumento de diagnóstico
 
 El FSK no es solo sincronización — es un **instrumento de diagnóstico en sí mismo**. Transporta tres propiedades simultáneamente por la cadena de señal:
 
@@ -1666,5 +1703,5 @@ Los siguientes segmentos del LA100 no tienen equivalente en el sistema APST porq
 ---
 
 *Documento generado como especificación técnica complementaria al DDS principal.*  
-*Versión: 2.0 | Proyecto: Plataforma PWA de Asistencia Proactiva para Calibración A/V*  
+*Versión: 2.0 | Proyecto: Asistente de audio y video para asambleas*  
 *Fuente de referencia: Lindos LA100 Manual 6th Edition, MS20 Manual 2nd Edition (via corpus RAG NotebookLM §7.1)*

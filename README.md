@@ -1,4 +1,4 @@
-# 🎙️ Asistente de Audio Proactivo
+# 🎙️ Asistente de audio y video para asambleas
 
 Copiloto acústico inteligente para operadores de sonido en asambleas. Analiza, diagnostica y guía en tiempo real — sin servidores, sin internet, sin enviar datos a ningún lado.
 

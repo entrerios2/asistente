@@ -1,4 +1,4 @@
-# Roadmap de Implementación — Asistente de Audio Proactivo
+# Roadmap de implementación — Asistente de audio y video para asambleas
 
 Cada fase produce un entregable funcional que se puede usar y testear independientemente. Las fases se construyen sobre las anteriores.
 
