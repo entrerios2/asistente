@@ -1,6 +1,6 @@
-# Protocolo APST para calibración A/V
+# Secuencia de Prueba FSK para Calibración A/V
 
-## Especificación técnica para el asistente para instalaciones de audio y video para asambleas
+## Especificación Técnica para la Plataforma PWA de Asistencia Proactiva
 
 ---
 

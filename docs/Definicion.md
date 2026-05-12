@@ -487,6 +487,8 @@ El sistema almacena un historial de calibraciones indexado por recinto. Cuando e
 
 ### 4.13. Módulo APST (Automated Progressive System Test)
 
+> **Especificación Completa:** Para detalles técnicos exhaustivos sobre la implementación, la arquitectura DSP y las secuencias del protocolo, referirse a la [Especificación APST](./Protocolo_APST.md).
+
 Protocolo de calibración asistida por secuencias de audio FSK. Reemplaza el flujo clásico de sweep/ruido rosa como método principal, manténiéndolo disponible en Modo Manual.
 
 **Biblioteca de Segmentos:**
