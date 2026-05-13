@@ -91,12 +91,12 @@ El proyecto adopta una filosofía de *Single Codebase, Multiple Targets* mediant
   - *Objetivo:* Rendimiento de Grado Profesional. Enfocado en los ingenieros de sistemas.
   - *Arquitectura:* Tauri empaqueta la UI web utilizando el motor nativo del OS (WebView2), pero inyecta un *backend en Rust* con acceso profundo al sistema operativo.
   - *Desbloqueos Críticos:*
-    1. **Audio ASIO (Latencia Cero):** El backend en Rust se salta el navegador web y se comunica directamente con los drivers ASIO/CoreAudio, permitiendo ruteo multicanal simultáneo y latencia casi nula para el análisis FFT.
+    1. **Audio Multi-Backend con Selección de Dispositivo:** El backend en Rust (vía `cpal`) soporta múltiples backends de audio del sistema operativo: WASAPI Shared (uso casual), WASAPI Exclusive (baja latencia sin ASIO), ASIO (latencia mínima con drivers profesionales) en Windows, y CoreAudio en macOS. El usuario selecciona explícitamente el dispositivo de entrada (ej. micrófono de medición en la entrada 3 de la interfaz) y el dispositivo de salida (ej. par de salidas 5/6) desde la interfaz de configuración. Esto permite ruteo multicanal simultáneo y latencia casi nula para el análisis FFT.
     2. **Archivos Nativos:** Lectura y escritura invisible de archivos pesados (modelos GLL, *Snapshots*, *Payloads* de la sala) directo en el disco, sin ventanas emergentes de "Descarga".
     3. **Hardware Libre:** El motor RAG y el LLM acceden a la VRAM y RAM sin las cuotas restrictivas que imponen navegadores como Chrome.
 
 **Patrón de Abstracción de Hardware (HAL)**  
-Para lograr el desarrollo en paralelo sin dividir el código, el sistema implementará una capa de abstracción. Cuando la lógica central demande escuchar el micrófono, no llamará a una API específica, sino al HAL. El HAL evaluará el entorno: si corre en la web, invocará al `Web Audio API`; si corre dentro de Tauri, solicitará el *buffer* crudo de audio al backend en Rust. El motor de análisis matemático DSP recibe la misma información sin importarle el origen.
+Para lograr el desarrollo en paralelo sin dividir el código, el sistema implementará una capa de abstracción. Cuando la lógica central demande escuchar el micrófono, no llamará a una API específica, sino al HAL. El HAL evaluará el entorno: si corre en la web, invocará al `Web Audio API`; si corre dentro de Tauri, solicitará el *buffer* crudo de audio al backend en Rust. El motor de análisis matemático DSP recibe la misma información sin importarle el origen. En la versión Tauri, el HAL expone adicionalmente métodos de enumeración y selección de dispositivos (`listDevices`, `selectDevice`) que permiten al operador elegir el hardware de entrada y salida específico y el backend de audio preferido.
 
 ### 2.5. Utilidad de generación de secuencias (APST Builder)
 
