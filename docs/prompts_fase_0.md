@@ -116,3 +116,117 @@ Por último, vamos a atar todo en la interfaz usando Svelte 5 (usa Runes: $state
 
 Muestra el código de ambos componentes. Recuerda usar la sintaxis moderna de Svelte 5.
 ```
+
+---
+
+### [PROMPT 7] Motor FFT Independiente y Analyzer DSP
+```text
+Actúa como un Desarrollador Svelte/TypeScript Senior. Estamos construyendo un analizador de audio. En fases anteriores creamos un HAL que nos da buffers de audio crudo (`Float32Array`). Ahora necesitamos procesarlos matemáticamente sin depender de APIs exclusivas del navegador.
+No podemos usar `AnalyserNode` de la Web Audio API. Necesitamos nuestro propio motor.
+
+1. Crea `src/lib/dsp/fft.ts`. Escribe una implementación pura en TypeScript de la Transformada Rápida de Fourier (FFT Radix-2 DIT). Debe exportar:
+   - `fft(input: Float32Array): { real: Float32Array, imag: Float32Array }`
+   - `magnitude(real: Float32Array, imag: Float32Array): Float32Array`
+   - `applyWindow(data: Float32Array, type: 'hanning' | 'blackman'): void` (modifica in-place)
+
+2. Crea `src/lib/dsp/Analyzer.ts`. Será una clase que consume los datos del HAL.
+   - Debe tener un método `processChunk(data: Float32Array)`.
+   - Acumula los datos entrantes en un buffer circular interno (ej. tamaño 2048 o 4096).
+   - Cuando el buffer se llena, extrae una copia, aplica la ventana de Hanning, ejecuta la FFT, calcula la magnitud en dBFS (`20 * Math.log10(mag)`), y expone los resultados espectrales actualizados en una propiedad pública o mediante callbacks para que la UI (Svelte) los lea.
+
+Proporciona el código TypeScript de ambos archivos. No uses librerías externas.
+```
+
+---
+
+### [PROMPT 8] Generador de Ruido Rosa y Refactor del RTA
+```text
+Necesitamos implementar el generador de ruido rosa en nuestro `WebAudioProvider` y conectar nuestro nuevo `Analyzer` a la UI para visualizar espectros reales.
+
+1. Abre `src/lib/hal/web/WebAudioProvider.ts`. Tenemos un método vacío `playPinkNoise(active: boolean)`. 
+   - Modifícalo para crear un `AudioWorkletNode` auxiliar o usar el API de `ScriptProcessorNode` (si buscas simplicidad rápida) que genere ruido rosa ininterrumpidamente.
+   - Para generarlo puramente en matemáticas, genera ruido blanco (`Math.random() * 2 - 1`) y pásalo por un filtro IIR de conformación (ej. el algoritmo Voss-McCartney que usa una cascada de delays o una aproximación de polos/ceros para lograr una pendiente espectral de ~-3dB/octava).
+   - Conéctalo al `audioContext.destination`.
+
+2. Abre `src/components/RTA.svelte` y actualiza la lógica visual.
+   - Modifica el componente para instanciar el nuevo `Analyzer` (de `src/lib/dsp/Analyzer.ts`).
+   - Cada vez que la prop `audioData` se actualice (recibe del HAL), pásala a `analyzer.processChunk(audioData)`.
+   - Cambia el `requestAnimationFrame` del Canvas: debe leer la magnitud espectral (no la forma de onda temporal), y dibujar el clásico gráfico de barras RTA, usando escala logarítmica para el eje X (frecuencias) y lineal/decibelios para el eje Y.
+
+Proporciona las modificaciones necesarias para estos archivos.
+```
+
+---
+
+### [PROMPT 9] Deploy Pipeline para PWA Estática
+```text
+Vamos a configurar el despliegue continuo de nuestra PWA SvelteKit a GitHub Pages. Nuestro proyecto usa Svelte 5.
+
+1. Explícame brevemente cómo configurar `svelte.config.js` y crear un `src/routes/+layout.ts` con `export const prerender = true` para usar `@sveltejs/adapter-static` correctamente. Nuestro base path ya es `/asistente/`.
+
+2. Crea el archivo `.github/workflows/deploy.yml`. 
+   - Configura una acción que se dispare en evento `push` a la rama `main`.
+   - Usa la imagen de Node 20+.
+   - Ejecuta los pasos: `npm ci`, y luego `npm run build`.
+   - Despliega el contenido de la carpeta de salida generada por el adapter-static (usualmente `build/`) a GitHub Pages usando la acción nativa de GitHub Actions (upload-pages-artifact y deploy-pages) o la de peaceiris. 
+
+Genera el YAML completo y los ajustes necesarios en SvelteKit.
+```
+
+---
+
+### [PROMPT 10] APST Builder: Generadores de Señal Matemáticos
+```text
+Para la versión de Escritorio y PWA, usaremos señales de audio pregrabadas de máxima fidelidad en lugar de sintetizarlas al vuelo. Crearemos una herramienta CLI interna en Node.js llamada "APST Builder". No usará APIs de navegador, todo es matemática pura de arrays (PCM).
+
+Crea la estructura base para el CLI en un nuevo directorio `tools/apst-builder/`:
+1. `package.json`: Configúralo como type module. Necesitamos una librería para exportar WAVs, añade `wavefile` a las dependencias.
+2. `src/generators/tone.ts`: Exporta una función `generateTone(frequency, durationSec, sampleRate)` que retorne un `Float32Array`. Genera una onda senoidal pura.
+3. `src/generators/noise.ts`: Exporta `generatePinkNoise(durationSec, sampleRate)` -> `Float32Array`. Usa un algoritmo de filtrado matemático.
+4. `src/generators/sweep.ts`: Exporta `generateLogSweep(startFreq, endFreq, durationSec, sampleRate)` -> `Float32Array`. Implementa la fórmula del chirp de barrido logarítmico (sine sweep).
+
+Entrega el código TypeScript para configurar el paquete y generar matemáticamente estas 3 señales en arrays flotantes (-1.0 a 1.0).
+```
+
+---
+
+### [PROMPT 11] APST Builder: Codificador FSK y Ensamblador de Archivos
+```text
+Siguiendo con la herramienta CLI `tools/apst-builder/`, necesitamos implementar la modulación FSK (Frequency-Shift Keying). El sistema emite cabeceras de datos por sonido antes de cada segmento acústico.
+
+1. Crea `src/generators/fsk.ts`. Exporta `encodeFSK(text: string, type: 'HF' | 'LF', sampleRate: number): Float32Array`.
+   - Implementa FSK a 110 baudios (bits por segundo).
+   - Frecuencias para HF: mark (bit 1) = 1650 Hz, space (bit 0) = 1850 Hz.
+   - Frecuencias para LF: mark = 150 Hz, space = 200 Hz.
+   - Protocolo de Framing: Por cada caracter ASCII del string `text`, emite: 1 bit de start (space), 7 bits de datos (LSB primero), 1 bit de paridad (even), y 2 bits de stop (mark). 
+   - Modula el array contiguo en base a la tasa de baudios y frecuencias.
+
+2. Crea `src/index.ts`. Será el ejecutable principal.
+   - Usa las funciones generadoras y `wavefile` para ensamblar un archivo de prueba.
+   - Construye una "Secuencia V": llama a `encodeFSK('V', 'HF', 48000)`, luego concatena un `generateTone(1000, 5, 48000)`.
+   - Codifica el array Float32 combinado en un archivo PCM de 24 o 32 bits a través de `wavefile` y guárdalo en disco local como `segmento_V_HF_48k.wav`.
+
+Entrega el código de modulación FSK y el script ensamblador principal.
+```
+
+---
+
+### [PROMPT 12] Tauri: Selección Multi-Backend de Dispositivos (ASIO/WASAPI)
+```text
+Vamos a implementar el acceso directo a los drivers de audio de hardware para la versión de Escritorio (Tauri), utilizando Rust.
+
+1. Abre `src-tauri/Cargo.toml` y `src-tauri/src/lib.rs`. Debemos usar el crate `cpal` (asegúrate de incluir el feature `asio` para Windows).
+   - Implementa un comando de Tauri (invokable) llamado `list_audio_devices()`.
+   - Usa `cpal::available_hosts()` para iterar sobre todos los backends (WASAPI, ASIO, CoreAudio).
+   - Por cada host, enumera los dispositivos de entrada y salida (`input_devices()`, `output_devices()`).
+   - Retorna a Svelte un `Vec` serializable con un struct de forma: `{ id, name, backend, direction }`.
+   - Implementa un segundo comando `select_audio_device(id, direction)` que por ahora solo guarde el id elegido en un `Mutex` en el state global de Tauri.
+
+2. En la UI (Svelte), crea `src/components/DeviceSelector.svelte`. 
+   - Al montar, si está corriendo bajo Tauri (`window.__TAURI_INTERNALS__` presente), invoca `list_audio_devices`.
+   - Dibuja dos listas `<select>` (una para Entradas, otra para Salidas).
+   - Agrupa visualmente usando `<optgroup label="ASIO">`, `<optgroup label="WASAPI">`, etc., mapeando los campos del backend.
+   - Al seleccionar una opción, llama a `select_audio_device`.
+
+Muestra el código en Rust (comando y structs) y el componente de Svelte.
+```
