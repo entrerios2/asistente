@@ -9,15 +9,10 @@ export class WebAudioProvider implements AudioProvider {
 	private sharedArray: Float32Array | null = null;
 	private animationFrameId: number | null = null;
 	
-	// Estado para el generador de ruido rosa
-	private pinkNoiseNode: ScriptProcessorNode | null = null;
-	private b0 = 0;
-	private b1 = 0;
-	private b2 = 0;
-	private b3 = 0;
-	private b4 = 0;
-	private b5 = 0;
-	private b6 = 0;
+	// Nodos del generador universal
+	private generatorNode: AudioNode | null = null;
+	private generatorGainNode: GainNode | null = null;
+	private pannerNode: StereoPannerNode | null = null;
 
 	async startCapture(listener: AudioListener): Promise<void> {
 		// 1. AudioContext con sample rate fijo a 48kHz
@@ -73,46 +68,76 @@ export class WebAudioProvider implements AudioProvider {
 		this.workletNode = null;
 	}
 
-	playPinkNoise(active: boolean): void {
-		if (active) {
-			if (this.pinkNoiseNode) return; // Ya está activo
-			
-			if (!this.audioContext) {
-				this.audioContext = new AudioContext({ sampleRate: 48000 });
-			}
+	playGenerator(type: 'pink' | 'white' | 'sweep', active: boolean, freq: number, level: number, routing: 'L' | 'R' | 'Stereo'): void {
+		if (!this.audioContext) {
+			this.audioContext = new AudioContext({ sampleRate: 48000 });
+		}
 
-			// Buffer de 4096 para eficiencia
-			this.pinkNoiseNode = this.audioContext.createScriptProcessor(4096, 1, 1);
-			
-			this.pinkNoiseNode.onaudioprocess = (e) => {
-				const output = e.outputBuffer.getChannelData(0);
-				for (let i = 0; i < output.length; i++) {
+		// Limpieza de nodos existentes si están activos
+		if (this.generatorNode) {
+			this.generatorNode.disconnect();
+			this.generatorNode = null;
+		}
+		if (this.generatorGainNode) {
+			this.generatorGainNode.disconnect();
+			this.generatorGainNode = null;
+		}
+		if (this.pannerNode) {
+			this.pannerNode.disconnect();
+			this.pannerNode = null;
+		}
+
+		if (!active) return;
+
+		this.generatorGainNode = this.audioContext.createGain();
+		this.generatorGainNode.gain.value = Math.pow(10, level / 20);
+
+		this.pannerNode = this.audioContext.createStereoPanner();
+		this.pannerNode.pan.value = routing === 'L' ? -1 : routing === 'R' ? 1 : 0;
+
+		if (type === 'sweep') {
+			const osc = this.audioContext.createOscillator();
+			osc.type = 'sine';
+			osc.frequency.setValueAtTime(freq, this.audioContext.currentTime);
+			osc.start();
+			this.generatorNode = osc;
+		} else if (type === 'white') {
+			const bufferSize = 2 * this.audioContext.sampleRate;
+			const noiseBuffer = this.audioContext.createBuffer(1, bufferSize, this.audioContext.sampleRate);
+			const output = noiseBuffer.getChannelData(0);
+			for (let i = 0; i < bufferSize; i++) {
+				output[i] = Math.random() * 2 - 1;
+			}
+			const whiteNoise = this.audioContext.createBufferSource();
+			whiteNoise.buffer = noiseBuffer;
+			whiteNoise.loop = true;
+			whiteNoise.start();
+			this.generatorNode = whiteNoise;
+		} else if (type === 'pink') {
+			const node = this.audioContext.createScriptProcessor(4096, 1, 1);
+			let b0=0, b1=0, b2=0, b3=0, b4=0, b5=0, b6=0;
+			node.onaudioprocess = (e) => {
+				const out = e.outputBuffer.getChannelData(0);
+				for (let i = 0; i < out.length; i++) {
 					const white = Math.random() * 2 - 1;
-					
-					// Algoritmo de Paul Kellet (Voss-McCartney)
-					this.b0 = 0.99886 * this.b0 + white * 0.0555179;
-					this.b1 = 0.99332 * this.b1 + white * 0.0750759;
-					this.b2 = 0.96900 * this.b2 + white * 0.1538520;
-					this.b3 = 0.86650 * this.b3 + white * 0.3104856;
-					this.b4 = 0.55000 * this.b4 + white * 0.5329522;
-					this.b5 = -0.7616 * this.b5 - white * 0.0168980;
-					
-					const pink = this.b0 + this.b1 + this.b2 + this.b3 + this.b4 + this.b5 + this.b6 + white * 0.5362;
-					this.b6 = white * 0.115926;
-					
-					// Compensación de ganancia (~-20dB)
-					output[i] = pink * 0.11;
+					b0 = 0.99886 * b0 + white * 0.0555179;
+					b1 = 0.99332 * b1 + white * 0.0750759;
+					b2 = 0.96900 * b2 + white * 0.1538520;
+					b3 = 0.86650 * b3 + white * 0.3104856;
+					b4 = 0.55000 * b4 + white * 0.5329522;
+					b5 = -0.7616 * b5 - white * 0.0168980;
+					const pink = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
+					b6 = white * 0.115926;
+					out[i] = pink * 0.11;
 				}
 			};
+			this.generatorNode = node;
+		}
 
-			this.pinkNoiseNode.connect(this.audioContext.destination);
-			console.info('Pink Noise: ON');
-		} else {
-			if (this.pinkNoiseNode) {
-				this.pinkNoiseNode.disconnect();
-				this.pinkNoiseNode = null;
-				console.info('Pink Noise: OFF');
-			}
+		if (this.generatorNode && this.generatorGainNode && this.pannerNode) {
+			this.generatorNode.connect(this.generatorGainNode);
+			this.generatorGainNode.connect(this.pannerNode);
+			this.pannerNode.connect(this.audioContext.destination);
 		}
 	}
 

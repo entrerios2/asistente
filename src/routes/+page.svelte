@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
+    import Header from '../components/medicion/Header.svelte';
     import Sidebar from '../components/medicion/Sidebar.svelte';
     import ViewGrid from '../components/medicion/ViewGrid.svelte';
     import SnapshotPanel from '../components/medicion/SnapshotPanel.svelte';
@@ -11,14 +12,19 @@
     onMount(() => {
         tier = detectTier();
 
-        // Hotkeys Globales
+        // Hotkeys globales
         const handleKey = (e: KeyboardEvent) => {
-            // Prevenir scroll con espacio
             if (e.code === 'Space') {
                 e.preventDefault();
-                // En una implementación real, buscaríamos el cuadrante activo
-                // Por ahora capturamos el snapshot del flujo principal
-                traceManager.captureSnapshot('live-1', 'HotKey Capture');
+                traceManager.captureSnapshot('live-1', 'Captura manual');
+            } else if (e.code === 'KeyD') {
+                console.log("Disparando Find Delay");
+            } else if (e.key >= '1' && e.key <= '9') {
+                const index = parseInt(e.key) - 1;
+                const snapshots = traceManager.snapshots;
+                if (snapshots[index]) {
+                    traceManager.toggleVisibility(snapshots[index].id);
+                }
             }
         };
 
@@ -27,14 +33,17 @@
     });
 </script>
 
-<div class="app-container">
-    <Sidebar />
-    
-    <main class="main-viewport">
-        <ViewGrid layout="2x2" />
-    </main>
+<div class="app-layout">
+    <Header />
+    <div class="app-container">
+        <Sidebar />
+        
+        <main class="main-viewport">
+            <ViewGrid layout="2x2" />
+        </main>
 
-    <SnapshotPanel />
+        <SnapshotPanel />
+    </div>
 </div>
 
 <style>
@@ -46,10 +55,17 @@
         font-family: 'Inter', -apple-system, sans-serif;
     }
 
-    .app-container {
+    .app-layout {
         display: flex;
+        flex-direction: column;
         width: 100vw;
         height: 100vh;
+        overflow: hidden;
+    }
+
+    .app-container {
+        display: flex;
+        flex: 1;
         overflow: hidden;
         background: #000;
     }
@@ -67,7 +83,7 @@
         }
 
         .main-viewport {
-            height: calc(100vh - 50px); /* Ajustado por el Bottom Sheet */
+            height: calc(100vh - 100px); /* Ajustado por Header y Bottom Sheet */
         }
     }
 </style>

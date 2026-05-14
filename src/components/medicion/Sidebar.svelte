@@ -11,15 +11,33 @@
     let activeTab = $state('secuencial'); // 'secuencial' | 'manual'
     let orchestratorEvent = $state<OrchestratorEvent>({ state: 'IDLE' });
     let isCollapsed = $state(true);
+    let selectedSequence = $state('Secuencia completa');
+    let errorToast = $state<string | null>(null);
+
+    // Estado del generador manual
+    let generatorType = $state<'pink' | 'white' | 'sweep'>('pink');
+    let genFreq = $state(1000);
+    let genLevel = $state(-20);
+    let genRouting = $state<'L' | 'R' | 'Stereo'>('Stereo');
+    let genActive = $state(false);
 
     orchestrator.subscribe((event) => {
         orchestratorEvent = event;
+        if (event.state === 'ABORTADO') {
+            errorToast = event.message || 'Error en la secuencia';
+        }
+    });
+
+    $effect(() => {
+        // Invocación reactiva del generador
+        provider.playGenerator(generatorType, genActive, genFreq, genLevel, genRouting);
     });
 
     const sequenceSteps = ['V', 'A', 'N', 'F', 'P', 'X'];
 
     async function startLocal() {
         try {
+            errorToast = null;
             await provider.startCapture({ onAudioData: () => {} });
             await orchestrator.runSequence("V A N F P X");
         } catch (e) {
@@ -28,15 +46,11 @@
     }
 
     function downloadWav() {
-        // Simulación de descarga de secuencia
         const link = document.createElement('a');
         link.href = '/signals/apst_full_sequence_48k.wav';
         link.download = 'apst_full_sequence_48k.wav';
         link.click();
     }
-
-    function playPink() { provider.playPinkNoise(true); }
-    function stopPink() { provider.playPinkNoise(false); }
 </script>
 
 <aside class="sidebar" class:collapsed={isCollapsed}>
@@ -52,6 +66,12 @@
     <div class="tab-content">
         {#if activeTab === 'secuencial'}
             <div class="secuencial-tab" in:fade>
+                <select class="sequence-selector" bind:value={selectedSequence}>
+                    <option>Secuencia completa</option>
+                    <option>Comprobación rápida</option>
+                    <option>Loopback</option>
+                </select>
+
                 <div class="status-card">
                     <span class="state-label">{orchestratorEvent.state}</span>
                     {#if orchestratorEvent.message}
@@ -62,36 +82,81 @@
                 <div class="steps-list">
                     {#each sequenceSteps as step}
                         <div class="step-item" class:active={orchestratorEvent.currentHeader === step}>
-                            <div class="step-icon">
-                                {orchestratorEvent.currentHeader === step ? '📡' : '○'}
+                            <div class="step-info">
+                                <span class="step-icon">
+                                    {orchestratorEvent.currentHeader === step ? '📡' : '○'}
+                                </span>
+                                <span class="step-name">Segmento {step}</span>
                             </div>
-                            <span class="step-name">Segmento {step}</span>
+                            <span class="numeric-result">
+                                {orchestratorEvent.currentHeader === step ? '+3.2 dB' : 'N/A'}
+                            </span>
                         </div>
                     {/each}
                 </div>
 
-                <div class="actions">
-                    <button class="btn-primary" onclick={startLocal}>Iniciar Secuencia</button>
-                    <button class="btn-secondary" onclick={downloadWav}>Descargar WAV</button>
+                <div class="split-button">
+                    <button class="btn-main" onclick={startLocal}>Iniciar</button>
+                    <button class="btn-sub" onclick={downloadWav} title="Descargar WAV">▼</button>
                 </div>
+
+                {#if errorToast}
+                    <div class="error-toast" transition:slide>
+                        <p>{errorToast}</p>
+                        <button onclick={() => errorToast = null}>×</button>
+                    </div>
+                {/if}
             </div>
         {:else}
             <div class="manual-tab" in:fade>
-                <h3>Generador Proactivo</h3>
-                <div class="manual-grid">
-                    <button class="manual-btn pink" onmousedown={playPink} onmouseup={stopPink}>
-                        Ruido Rosa
-                    </button>
-                    <button class="manual-btn white">
-                        Ruido Blanco
-                    </button>
-                    <button class="manual-btn sweep">
-                        Barrido (Sweep)
-                    </button>
-                    <button class="manual-btn impulse">
-                        Impulso
-                    </button>
+                <div class="control-group">
+                    <label>Tipo de señal</label>
+                    <select bind:value={generatorType}>
+                        <option value="pink">Ruido rosa</option>
+                        <option value="white">Ruido blanco</option>
+                        <option value="sweep">Barrido logarítmico</option>
+                    </select>
                 </div>
+
+                <div class="control-group">
+                    <label>Frecuencia</label>
+                    <div class="input-sync">
+                        <input type="range" min="20" max="20000" step="1" bind:value={genFreq} />
+                        <input type="number" min="20" max="20000" bind:value={genFreq} />
+                        <span>Hz</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Nivel</label>
+                    <div class="input-sync">
+                        <input type="range" min="-60" max="0" step="0.1" bind:value={genLevel} />
+                        <input type="number" min="-60" max="0" step="0.1" bind:value={genLevel} />
+                        <span>dBFS</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Ruteo</label>
+                    <div class="routing-radios">
+                        {#each ['L', 'R', 'Stereo'] as r}
+                            <label class="radio-label" class:selected={genRouting === r}>
+                                <input type="radio" name="routing" value={r} bind:group={genRouting} />
+                                {r}
+                            </label>
+                        {/each}
+                    </div>
+                </div>
+
+                <button 
+                    class="btn-generator" 
+                    class:active={genActive}
+                    onclick={() => genActive = !genActive}
+                >
+                    {genActive ? 'Detener generador' : 'Prender generador'}
+                </button>
+
+                <button class="btn-find-delay">Alinear retardo (Find delay)</button>
             </div>
         {/if}
     </div>
@@ -139,6 +204,19 @@
         flex: 1;
         padding: 1.5rem;
         overflow-y: auto;
+        position: relative;
+    }
+
+    .sequence-selector {
+        width: 100%;
+        background: #1a1a20;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #fff;
+        padding: 10px;
+        border-radius: 8px;
+        margin-bottom: 1.5rem;
+        outline: none;
+        font-size: 0.9rem;
     }
 
     .status-card {
@@ -172,6 +250,7 @@
     .step-item {
         display: flex;
         align-items: center;
+        justify-content: space-between;
         gap: 12px;
         color: #666;
         transition: color 0.2s;
@@ -181,52 +260,190 @@
         color: #00ff88;
     }
 
+    .step-info {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .numeric-result {
+        font-family: monospace;
+        font-size: 0.75rem;
+        opacity: 0.6;
+    }
+
     .step-icon {
         font-size: 1.2rem;
     }
 
-    .actions {
+    .split-button {
         display: flex;
-        flex-direction: column;
-        gap: 10px;
+        gap: 1px;
     }
 
-    .btn-primary, .btn-secondary, .manual-btn {
-        min-height: 44px; /* Área táctil mínima */
-        border-radius: 12px;
+    .btn-main {
+        flex: 1;
+        background: #3b82f6;
+        color: white;
+        border: none;
+        border-radius: 12px 0 0 12px;
+        min-height: 44px;
         font-weight: bold;
+        cursor: pointer;
+    }
+
+    .btn-sub {
+        width: 44px;
+        background: #2563eb;
+        color: white;
+        border: none;
+        border-radius: 0 12px 12px 0;
+        cursor: pointer;
+    }
+
+    .error-toast {
+        position: absolute;
+        bottom: 20px;
+        left: 20px;
+        right: 20px;
+        background: #ef4444;
+        color: white;
+        padding: 12px 16px;
+        border-radius: 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        box-shadow: 0 8px 16px rgba(0,0,0,0.4);
+        z-index: 50;
+    }
+
+    .error-toast p {
+        margin: 0;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+
+    .error-toast button {
+        background: none;
+        border: none;
+        color: white;
+        font-size: 1.2rem;
+        cursor: pointer;
+        padding: 0;
+    }
+
+    /* Manual Tab Styles */
+    .control-group {
+        margin-bottom: 1.5rem;
+    }
+
+    .control-group label {
+        display: block;
+        font-size: 0.7rem;
+        color: #888;
+        margin-bottom: 8px;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+    }
+
+    .control-group select {
+        width: 100%;
+        background: #1a1a20;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #fff;
+        padding: 8px;
+        border-radius: 8px;
+        outline: none;
+    }
+
+    .input-sync {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .input-sync input[type="range"] {
+        flex: 1;
+        accent-color: #3b82f6;
+    }
+
+    .input-sync input[type="number"] {
+        width: 65px;
+        background: #1a1a20;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #fff;
+        padding: 6px;
+        border-radius: 6px;
+        text-align: center;
+        font-family: monospace;
+    }
+
+    .input-sync span {
+        font-size: 0.75rem;
+        color: #666;
+        min-width: 35px;
+    }
+
+    .routing-radios {
+        display: flex;
+        background: #000;
+        padding: 4px;
+        border-radius: 10px;
+        gap: 4px;
+    }
+
+    .radio-label {
+        flex: 1;
+        text-align: center;
+        padding: 10px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #666;
+        transition: all 0.2s;
+    }
+
+    .radio-label.selected {
+        background: #3b82f6;
+        color: #fff;
+    }
+
+    .radio-label input {
+        display: none;
+    }
+
+    .btn-generator {
+        width: 100%;
+        min-height: 48px;
+        margin-top: 1.5rem;
+        background: transparent;
+        border: 1px solid #3b82f6;
+        color: #3b82f6;
+        border-radius: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
         cursor: pointer;
         transition: all 0.2s;
     }
 
-    .btn-primary {
-        background: #3b82f6;
-        color: white;
+    .btn-generator.active {
+        background: #ef4444;
+        border-color: #ef4444;
+        color: #fff;
+    }
+
+    .btn-find-delay {
+        width: 100%;
+        min-height: 48px;
+        margin-top: 12px;
+        background: #333;
+        color: #fff;
         border: none;
-    }
-
-    .btn-secondary {
-        background: rgba(255, 255, 255, 0.05);
-        color: white;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-    }
-
-    .manual-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 10px;
-    }
-
-    .manual-btn {
-        background: #1a1a20;
-        border: 1px solid rgba(255, 255, 255, 0.05);
-        color: #ccc;
-        font-size: 0.75rem;
-    }
-
-    .manual-btn:active {
-        background: #3b82f6;
-        color: white;
+        border-radius: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        cursor: pointer;
     }
 
     .mobile-toggle {

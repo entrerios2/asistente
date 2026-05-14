@@ -14,7 +14,7 @@ export interface AudioDevice {
 export interface AudioProvider {
 	startCapture(listener: AudioListener): Promise<void>;
 	stopCapture(): void;
-	playPinkNoise(active: boolean): void;
+	playGenerator(type: 'pink' | 'white' | 'sweep', active: boolean, freq: number, level: number, routing: 'L' | 'R' | 'Stereo'): void;
 	playSample?(url: string): Promise<void>;
 	onMessage?(callback: (message: any) => void): void;
     listDevices?(): Promise<AudioDevice[]>;
