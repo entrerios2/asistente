@@ -66,58 +66,62 @@ Este documento contiene los prompts de implementación estructurados para ser ej
 
 ## Prompt 6: Refactorización UX (Layout y Panel lateral)
 
-**Contexto:** Iniciamos la Fase 2A.1. Implementación estricta de la UI en español. Prohibido usar `backdrop-filter: blur`. Utiliza CSS puro, Grid/Flexbox y variables Svelte 5 `$state`.
+**Contexto:** Fase 2A.1. Limpieza radical de la UI en español. Prohibido usar `backdrop-filter: blur`. CSS puro, Grid/Flexbox y variables `$state`.
 
 **Instrucciones:**
-1. **Actualización del HAL (`src/lib/hal/types.ts` y `src/lib/hal/web/WebAudioProvider.ts`):**
-   - En `types.ts`, reemplaza `playPinkNoise` por un método universal: `playGenerator(type: 'pink' | 'white' | 'sweep', active: boolean, freq: number, level: number, routing: 'L' | 'R' | 'Stereo'): void`.
-   - Implementa `playGenerator` en `WebAudioProvider.ts`. Usa `StereoPannerNode` o `ChannelSplitterNode` para el ruteo. Para ruido blanco usa `ScriptProcessorNode` (o un buffer con ruido estático pre-generado). Para barrido, usa un `OscillatorNode`. Aplica el `level` (convertido de dBFS a gain lineal) mediante un `GainNode`.
-2. **Cabecera global (`src/components/medicion/Header.svelte`):**
-   - Crea un nuevo componente con una altura fija (ej. 50px) y fondo opaco oscuro (`#0a0a0c`).
-   - Izquierda: Selector `<select>` para la interfaz de hardware (HAL).
-   - Centro: Indicador de estado global y medidor SPL (`<span>102 dB SPL</span>`).
-   - Derecha: Botón estilo "Switch" para alternar tema (Sol/Oscuro) y un Reloj en tiempo real.
-3. **Layout principal (`src/routes/+page.svelte`):**
-   - Modifica el layout para inyectar `<Header />` en la parte superior. El contenedor central debe dividirse en `<Sidebar />` (izquierda, ancho 320px fijo) y `<ViewGrid />` (derecha, `flex: 1`).
-   - Reemplaza el `keydown` EventListener global:
-     - Tecla `Space`: Ejecuta `traceManager.captureSnapshot('live-1', 'Captura manual')`.
-     - Tecla `D`: Imprime en consola "Disparando Find Delay".
-     - Teclas `1` a `9`: `traceManager.toggleVisibility(traceManager.snapshots[key - 1].id)`.
-4. **Pestaña secuencial (`src/components/medicion/Sidebar.svelte`):**
-   - Agrega un `<select>` superior para elegir secuencias (opciones: "Secuencia completa", "Comprobación rápida", "Loopback").
-   - Transforma los botones de Iniciar/Descargar en un **Split Button** (un contenedor flex con un botón principal "Iniciar" y un botón menor pegado a su derecha con un ícono `▼` para "Descargar WAV").
-   - Modifica la iteración de `step-item` para mostrar un `<span class="numeric-result">` (ej. `+3.2 dB` o `N/A`) anidado a la derecha del nombre del paso.
-   - Crea un contenedor condicional de "Smart Toasts" (`#if errorToast`) en la parte inferior para mostrar notificaciones críticas con fondo rojo opaco absoluto (sin blur).
-5. **Pestaña manual (`Sidebar.svelte`):**
-   - Elimina los botones sueltos de generador. Crea en su lugar un `<select>` para "Tipo de señal" (Ruido rosa, Ruido blanco, Barrido logarítmico).
-   - Crea un `<input type="range">` sincronizado bidireccionalmente con un `<input type="number">` para la **Frecuencia (20Hz a 20000Hz)**.
-   - Crea un `<input type="range">` sincronizado con un `<input type="number">` para el **Nivel (-60 a 0 dBFS)**.
-   - Crea un bloque horizontal de botones tipo radio para **Ruteo**: `L`, `R`, `Stereo`.
-   - Crea un botón gigante inferior, con clase `min-h-[48px]`, etiquetado "Alinear retardo (Find delay)".
-   - Implementa la reactividad (`$effect` o en eventos de cambio) para invocar `provider.playGenerator(tipo, activo, frecuencia, nivel, ruteo)` cuando los controles se modifiquen mientras el generador esté prendido.
+1. **Actualización del HAL (`types.ts` y `WebAudioProvider.ts`):**
+   - Modifica `playGenerator(type: 'pink' | 'white' | 'sweep' | 'sine', active: boolean, freq: number, level: number, routing: 'L' | 'R' | 'Stereo')`.
+   - Implementalo en `WebAudioProvider.ts`: Usa `StereoPannerNode` o `ChannelSplitterNode`. 'sine' usa un `OscillatorNode` fijo. 'sweep' debe usar `osc.frequency.exponentialRampToValueAtTime(20000, audioContext.currentTime + 5)`. 
+2. **Cabecera global hiper-limpia (`Header.svelte`):**
+   - Elimina el selector HAL, el SPL falso, el reloj y la etiqueta "Conectado".
+   - Izquierda: Selector de micrófono (`navigator.mediaDevices.enumerateDevices`).
+   - Centro: Selector de Layout (`<select>` con opciones: 1x1, 2x1, 2x2, 3x2).
+   - Derecha: Botón Switch para tema (asegurando que haga `document.documentElement.classList.toggle('dark')`) y un botón para "Ocultar/Mostrar Instantáneas".
+3. **Pestaña secuencial (`Sidebar.svelte`):**
+   - Amplía el selector superior a secuencias reales: "Completa (VANFP)", "Verificación de ganancia (V)", "Respuesta (F)".
+   - Traduce el estado del orquestador (ej. si es "IDLE", muestra "Estado: En espera").
+   - En la lista de pasos, usa nombres explicativos: "V - Verificación", "A - Alineación", etc.
+   - El **Split Button** debe tener un sub-botón a la derecha con el texto explícito "Descargar pista de prueba" (no solo una flecha inentendible).
+4. **Pestaña manual (`Sidebar.svelte`):**
+   - `<select>` para "Tipo de señal": Ruido rosa, Ruido blanco, Seno continuo, Barrido logarítmico.
+   - El control de **Frecuencia** (slider + input numerico) DEBE ocultarse (con `#if`) si el tipo de señal es ruido rosa o blanco. Solo mostrar para seno o barrido.
+   - Crea un input numérico para "Retardo (ms)", que pueda ser editado a mano o autocompletado por el sistema.
+   - El botón gigante inferior debe decir "Calcular retardo".
 
 ---
 
 ## Prompt 7: Refactorización UX (Cuadrante e instantáneas)
 
-**Contexto:** Fase 2A.1. Lógica matemática de visualización en lienzo. Todo texto en estricto español (mayúscula inicial solo en la primera palabra). Sin uso de blur.
+**Contexto:** Fase 2A.1 (Continuación). Implementación interactiva del lienzo y ejes. Sin uso de blur.
 
 **Instrucciones:**
-1. **Lógica de Gestos y Transformación (`src/components/medicion/Quadrant.svelte`):**
-   - Añade variables `$state`: `scaleX = 1`, `scaleY = 1`, `offsetX = 0`, `offsetY = 0`, `isDragging = false`, `lastMouseX`, `lastMouseY`.
-   - Implementa `onwheel(e)` en el contenedor del `<canvas>`: Si presiona `Shift`, altera `scaleX`. Si presiona `Ctrl/Cmd`, altera `scaleY`. 
-   - Implementa `onmousedown`, `onmousemove`, `onmouseup` y `onmouseleave` para el paneo: Si `isDragging` es true durante `mousemove`, actualiza `offsetX` y `offsetY` sumando los deltas (`e.clientX - lastMouseX`), redibujando el canvas reactivamente.
-   - Modifica las funciones `freqToX` y `valToY` para que multipliquen el valor base por la escala y le sumen el offset antes de devolver la coordenada final a pintar en el contexto 2D.
-2. **Interfaz de Cuadrante (`Quadrant.svelte`):**
-   - Cambia el botón de texto de métrica por un botón con ícono de engranaje `⚙️` en la esquina superior izquierda.
-   - Al hacer clic, abre un modal interno (fondo 100% opaco, `#1a1a20`).
-   - Amplía la lista de métricas: `['Magnitud', 'Fase', 'RTA', 'Coherencia', 'Espectro', 'Nivel', 'Respuesta al impulso', 'Retardo de grupo']`.
-   - Agrega opciones de suavizado de octava: `1/3`, `1/6`, `1/12`, `1/24`, `1/48`.
-   - Añade un `<label><input type="checkbox"> Ocultamiento por coherencia</label>`.
-   - Si la métrica activa es "Fase", muestra un botón "Desenvolvimiento de fase".
-   - Si la métrica es "Respuesta al impulso" o "RTA", añade un botón "Ajustes profundos" que por ahora solo imprima "Modal FFT abierto" en la consola.
-3. **Gestor de instantáneas (`src/components/medicion/SnapshotPanel.svelte`):**
-   - Modifica el título principal de `<header>` para que diga "Instantáneas". Verifica que todo el panel tenga fondo sólido (`#101014`) y elimina `backdrop-filter`.
-   - Modifica `traceManager.svelte.ts` para que la interfaz `Trace` obligue a incluir `source: 'manual' | 'secuencial'`. Adapta la función `captureSnapshot` para recibir este parámetro.
-   - En la lista de instantáneas, muestra a la izquierda del nombre un ícono `🖱️` si es manual y `⚙️` si es secuencial.
-   - Agrega un bloque superior con dos pestañas o botones para el ordenamiento: "Por fecha" y "Por ubicación", implementando un `$derived` sort condicional sobre `traceManager.snapshots`.
+1. **Lógica de Gestos y Ejes (`Quadrant.svelte`):**
+   - Mantén las variables `scaleX`, `scaleY`, `offsetX`, `offsetY`.
+   - Modifica `draw()` para invocar `ctx.fillText` al dibujar la grilla: escribe las frecuencias (Hz) en el borde inferior del canvas, y los niveles (dB) o Grados (°) en el borde derecho, usando color `#888`.
+   - Implementa `onwheel` para pellizco/rueda (escalas) y `onmousemove` con `onmousedown` para paneo (offsets). Modifica las matemáticas de dibujo para que apliquen dichas escalas.
+2. **Interfaz de Cuadrante (Popover compacto):**
+   - El botón del engranaje `⚙️` debe abrir un panel flotante **compacto** posicionado absolutamente junto al botón (dropdown), NO un modal gigante en pantalla completa.
+   - Mantiene opciones de métricas, suavizado (`1/3` a `1/48`), toggle de "Ocultamiento por coherencia" y botón de desenvolvimiento de fase.
+3. **ViewGrid y Layout (`ViewGrid.svelte`):**
+   - Conecta el selector de Layout del `Header.svelte` al `ViewGrid` mediante un estado global (puedes meter el layout en `traceManager` o usar un store derivado) para que cambie la grilla de CSS.
+4. **Gestor de instantáneas (`SnapshotPanel.svelte`):**
+   - Modifica el contenedor principal para obedecer al botón "Ocultar/Mostrar Instantáneas" del Header, colapsándose hacia la derecha con una transición.
+   - Asegúrate de que el título diga "Instantáneas" y no haya ningún efecto `blur`. Añade un ícono `🖱️` o `⚙️` en la lista para diferenciar la fuente.
+
+---
+
+## Prompt 8: Conexión DSP y Motor de Medición (Wireup)
+
+**Contexto:** Fase 2A.2. La UI está lista pero necesita matemáticas acústicas reales para dejar de ser un cascarón vacío.
+
+**Instrucciones:**
+1. **RTA Nativo en HAL (`WebAudioProvider.ts`):**
+   - Instancia un `AnalyserNode` en `startCapture` conectado a la fuente del micrófono. `fftSize = 4096`, `smoothingTimeConstant = 0`.
+   - Modifica `AudioListener` para aceptar `onFrequencyData?(data: Float32Array): void;`.
+   - En el bucle de `requestAnimationFrame`, lee `analyser.getFloatFrequencyData` y envíalo al listener.
+2. **Inyección Reactiva (`traceManager.svelte.ts`):**
+   - Crea `updateLiveTrace(metric: string, data: Float32Array)`. Si existe el trazo `live-1`, muta o clona los datos del array para forzar el `$state` de Svelte 5 a repintar a 60fps.
+3. **Cableado del Sidebar (`Sidebar.svelte`):**
+   - Modifica `startLocal()` y la pestaña manual para que al invocar `startCapture`, le pasen el callback `onFrequencyData: (data) => traceManager.updateLiveTrace('Magnitud', data)`.
+   - Asegúrate de que, si el contexto de audio estaba `suspended`, invoque `audioContext.resume()` al encender cualquier generador.
+   - Matemáticas del retardo: El botón "Calcular retardo" debe (simulado por ahora si no hay loopback físico) ejecutar un log y poblar automáticamente el `<input>` de retardo manual creado en el Prompt 6.

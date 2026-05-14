@@ -103,28 +103,40 @@ El lienzo principal deja de ser un gráfico único para convertirse en una grill
 
 ## 5. Fase 2A.1: Refactorización UX/UI
 
-La implementación original requiere ajustes para alinearse estrictamente con `UX_Medicion.md`. Todos los títulos usarán formato de mayúsculas de español (ej. "Gestor de instantáneas"). Todos los textos de la interfaz deben estar estrictamente en español. Además, **no se deben utilizar fondos con blur (`backdrop-filter`)** en ningún componente para preservar los recursos del sistema.
+La implementación original requiere ajustes críticos para alinearse estrictamente con `UX_Medicion.md` y corregir los elementos sin funcionalidad. No se deben utilizar fondos con blur (`backdrop-filter`).
 
-### 5.1. Cabecera global
-- **[NEW] `src/components/medicion/Header.svelte`**
-  - Selector de interfaz (HAL), estado global, reloj/SPL y switch de tema.
-  - Integración en el layout de `+page.svelte`.
+### 5.1. Cabecera global (`Header.svelte`)
+- **Limpieza visual:** Eliminar elementos inútiles (selector HAL falso, etiqueta "Conectado", medidor SPL hardcodeado y reloj del sistema).
+- **Contenido:** Solo incluir un selector real de dispositivo de entrada (micrófono), un selector de Layout de grilla (1x1, 2x1, 2x2) y el botón de alternar tema (asegurando que inyecte la clase `.dark` en el `<html>`).
 
-### 5.2. Correcciones en panel lateral y HAL
-- **[MODIFY] `src/lib/hal/types.ts` y `WebAudioProvider.ts`:**
-  - Unificar y extender la generación de señales con un método maestro `playGenerator(type, active, freq, level, routing)`.
-  - Implementar generadores de ruido blanco y barrido (sweep).
-- **[MODIFY] `src/components/medicion/Sidebar.svelte`**
-  - **Pestaña secuencial:** Selector dropdown de secuencias, "Split Button" para Iniciar/Descargar, y resultados numéricos junto a los checks de progreso.
-  - **Pestaña manual:** Agregar controles de frecuencia, nivel, ruteo (L/R/Stereo) y botón `Find Delay`. Enlazar dichos controles en tiempo real al nuevo método del HAL.
+### 5.2. Panel lateral - Secuencial (`Sidebar.svelte`)
+- **Secuencias:** Ampliar el `<select>` para incluir secuencias reales (ej. "Completa (VANFP)", "Verificación (V)", "Respuesta (F)").
+- **Estado:** Traducir y hacer legible el estado del orquestador (ej. "En espera" en vez de "IDLE").
+- **Explicación de segmentos:** La lista de pasos debe mostrar nombres completos ("V - Verificación de ganancia", "F - Respuesta en frecuencia").
+- **Botón de descarga:** Clarificar el botón de "Descargar WAV" con texto explícito ("Descargar pista de prueba"), no un mero ícono desplegable.
 
-### 5.3. Interacción en cuadrante (gestos) y métricas
-- **[MODIFY] `src/components/medicion/Quadrant.svelte`**
-  - **Métricas:** Soporte para espectro, nivel, respuesta al impulso (IR) y retardo de grupo.
-  - **Gestos:** Implementar lógica de paneo (arrastre) y zoom (pellizco/rueda) transformando dinámicamente las escalas (`scaleX`, `scaleY`, `offsetX`, `offsetY`).
-  - **Interfaz:** Reemplazar textos por íconos de engranaje, incluir botón de desenvolvimiento de fase, opciones extra de suavizado (1/6, 1/24) y toggle de ocultamiento por coherencia. Eliminar cualquier estilo de `backdrop-filter: blur`.
+### 5.3. Panel lateral - Manual (`Sidebar.svelte`)
+- **Generadores:** Ampliar la lista a Ruido rosa, Ruido blanco, Seno continuo y Barrido logarítmico (Sweep).
+- **Visibilidad condicional:** Ocultar el control de "Frecuencia" cuando el generador sea Ruido Rosa o Blanco.
+- **Gestión de Retardo:** Incluir un input numérico para el "Retardo de medición (ms)" manual, el cual se autocompletará si se presiona el botón "Alinear retardo".
 
-### 5.4. Mejoras en gestor de instantáneas
-- **[MODIFY] `src/components/medicion/SnapshotPanel.svelte`**
-  - Diferenciar visualmente con íconos las capturas manuales de las secuenciales. Asegurarse de que el título UI sea "Instantáneas" y eliminar cualquier fondo con blur.
-  - Añadir selectores para ordenar la lista por fecha o ubicación.
+### 5.4. Cuadrantes y Grilla (`ViewGrid.svelte` y `Quadrant.svelte`)
+- **Selector de layout:** El `ViewGrid` debe reaccionar al selector del Header para cambiar sus columnas y filas CSS.
+- **Menú de configuración:** El modal/dropdown de la tuerca `⚙️` debe ser un popover flotante y **compacto** en versión desktop, no ocupando toda la pantalla ni siendo gigante.
+- **Referencias de ejes:** La función `draw` del canvas DEBE incluir llamadas a `fillText` para renderizar los valores en Hz en el eje X inferior y los dB/Grados en el eje Y.
+- **Gestos:** Implementar arrastre para offset y pellizco/rueda para escala (`scaleX/Y`).
+
+### 5.5. Panel de instantáneas (`SnapshotPanel.svelte`)
+- **Ocultamiento:** Agregar la capacidad de colapsar o cerrar por completo el panel lateral de instantáneas.
+- **Limpieza:** Eliminar cualquier efecto blur.
+
+---
+
+## 6. Fase 2A.2: Conexión DSP y Motor de Medición (Wireup)
+
+### 6.1. Motor HAL (`WebAudioProvider.ts`)
+- **RTA Real:** Instanciar un `AnalyserNode` en `startCapture` para obtener los datos de frecuencia en vivo.
+- **Barrido real:** Modificar la lógica de `playGenerator` en modo 'sweep' para usar `exponentialRampToValueAtTime`, generando un barrido auditivo real, no un tono estático.
+
+### 6.2. Inyección Reactiva (`traceManager`)
+- Crear `updateLiveTrace(metric, data)` para que el `traceManager` reciba iterativamente los datos crudos del `AnalyserNode`, forzando el redibujado de los cuadrantes en vivo.
