@@ -54,7 +54,10 @@
         // 2. Dibujar Trazo: Medición Cruda (Gris/Azul)
         drawCurve(ctx, calibrationStore.measuredCurve, 'rgba(100, 150, 200, 0.5)', 2);
 
-        // 3. Dibujar Trazo: Respuesta Prevista (Verde Brillante)
+        // 3. Dibujar Trazo: Filtro Inverso / EQ (Amarillo Translúcido)
+        drawCurve(ctx, calibrationStore.filterResponseCurve, 'rgba(255, 204, 0, 0.6)', 2);
+
+        // 4. Dibujar Trazo: Respuesta Prevista (Verde Brillante)
         drawCurve(ctx, calibrationStore.predictedCurve, '#00ff88', 3);
 
         requestAnimationFrame(draw);

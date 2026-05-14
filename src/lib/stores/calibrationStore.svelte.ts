@@ -19,9 +19,6 @@ export class CalibrationStore {
     agnosticMode = $state<boolean>(false);
     sampleRate = $state<number>(48000);
 
-    /**
-     * Curva predicha: Se deriva reactivamente sumando la medición y los filtros.
-     */
     predictedCurve = $derived.by(() => {
         const result = new Float32Array(this.measuredCurve.length);
         const bins = this.measuredCurve.length;
@@ -39,6 +36,28 @@ export class CalibrationStore {
             }
 
             result[i] = this.measuredCurve[i] + totalFilterGain;
+        }
+        return result;
+    });
+
+    /**
+     * Respuesta aislada de los filtros: Se deriva reactivamente sumando solo el impacto de los filtros.
+     */
+    filterResponseCurve = $derived.by(() => {
+        const result = new Float32Array(this.measuredCurve.length);
+        const bins = this.measuredCurve.length;
+
+        for (let i = 0; i < bins; i++) {
+            const freq = (i * (this.sampleRate / 2)) / bins;
+            
+            let totalFilterGain = 0;
+            for (const filter of this.suggestedFilters) {
+                if (filter.enabled) {
+                    totalFilterGain += this.calculateFilterGainAt(filter, freq);
+                }
+            }
+
+            result[i] = totalFilterGain;
         }
         return result;
     });
