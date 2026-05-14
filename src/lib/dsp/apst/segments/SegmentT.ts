@@ -1,4 +1,4 @@
-import { fft } from '../../fft';
+import { fft, ifft } from '../../fft';
 import { ComplexMath } from '../../math';
 
 /**
@@ -31,17 +31,8 @@ export class SegmentT {
             hImag[i] = numImag / magX2;
         }
 
-        // c) Calcular IFFT(H) para obtener la IR
-        // Truco: IFFT(H) = conj(FFT(conj(H))) / N
-        // conj(H) = hReal, -hImag
-        const hConjImag = hImag.map(v => -v);
-        const fftOfConj = fft(hReal, hConjImag);
-        
-        // IR = conj(fftOfConj) / N. Como el resultado debe ser real (IR física), tomamos la parte real.
-        const ir = new Float32Array(N);
-        for (let i = 0; i < N; i++) {
-            ir[i] = fftOfConj.real[i] / N;
-        }
+        // c) Calcular IFFT(H) para obtener la Respuesta al Impulso (IR)
+        const ir = ifft(hReal, hImag);
 
         // d) Buscar el índice del pico máximo absoluto en la primera mitad
         let peakIdx = 0;

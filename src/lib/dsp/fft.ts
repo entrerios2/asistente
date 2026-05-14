@@ -5,8 +5,6 @@
 
 /**
  * Aplica una ventana de suavizado in-place para reducir el "spectral leakage".
- * @param data Buffer de audio a modificar.
- * @param type Tipo de ventana ('hanning' o 'blackman').
  */
 export function applyWindow(data: Float32Array, type: 'hanning' | 'blackman'): void {
     const N = data.length;
@@ -44,34 +42,25 @@ function bitReverse(n: number, bits: number): number {
 }
 
 /**
- * FFT Radix-2 DIT Iterativa.
- * @param input Real part of input (Float32Array of power-of-2 size).
- * @param imagInput Optional imaginary part of input.
+ * Motor central de la FFT Radix-2 (Forward e Inverse).
  */
-export function fft(input: Float32Array, imagInput?: Float32Array): { real: Float32Array; imag: Float32Array } {
-    const N = input.length;
+function coreFFT(real: Float32Array, imag: Float32Array, inverse: boolean): void {
+    const N = real.length;
     const bits = Math.log2(N);
 
-    if (!Number.isInteger(bits)) {
-        throw new Error("FFT: El tamaño del buffer debe ser potencia de 2.");
-    }
-
-    const real = new Float32Array(N);
-    const imag = new Float32Array(N);
-
-    // Reordenamiento Bit-reversal e inicialización
+    // Reordenamiento Bit-reversal (In-place)
     for (let i = 0; i < N; i++) {
         const j = bitReverse(i, bits);
-        real[j] = input[i];
-        if (imagInput) {
-            imag[j] = imagInput[i];
+        if (j > i) {
+            [real[i], real[j]] = [real[j], real[i]];
+            [imag[i], imag[j]] = [imag[j], imag[i]];
         }
     }
 
     // Mariposas iterativas
     for (let step = 2; step <= N; step <<= 1) {
         const halfStep = step >> 1;
-        const angle = -(2 * Math.PI) / step;
+        const angle = (inverse ? 2 : -2) * Math.PI / step;
         const wStepReal = Math.cos(angle);
         const wStepImag = Math.sin(angle);
 
@@ -98,5 +87,33 @@ export function fft(input: Float32Array, imagInput?: Float32Array): { real: Floa
         }
     }
 
+    // Si es inversa, dividir por N
+    if (inverse) {
+        for (let i = 0; i < N; i++) {
+            real[i] /= N;
+            imag[i] /= N;
+        }
+    }
+}
+
+/**
+ * FFT Directa (Real to Complex).
+ */
+export function fft(input: Float32Array): { real: Float32Array; imag: Float32Array } {
+    const N = input.length;
+    const real = new Float32Array(input);
+    const imag = new Float32Array(N);
+    coreFFT(real, imag, false);
     return { real, imag };
+}
+
+/**
+ * FFT Inversa (Complex to Real).
+ * Retorna solo la parte real ya que se usa para señales físicas IR.
+ */
+export function ifft(realInput: Float32Array, imagInput: Float32Array): Float32Array {
+    const real = new Float32Array(realInput);
+    const imag = new Float32Array(imagInput);
+    coreFFT(real, imag, true);
+    return real;
 }

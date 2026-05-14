@@ -60,3 +60,22 @@ Actúa como un Arquitecto TypeScript. Necesitamos abstraer la selección de disp
 
 Genera el código TypeScript y Svelte para aplicar este refactor.
 ```
+
+---
+
+### [PROMPT 26] Fix Bug: Implementación de IFFT y corrección en Segment T
+```text
+Actúa como un Ingeniero DSP. Durante la revisión del `SegmentT.ts` detectamos un bug en la línea `const fftOfConj = fft(hReal, hConjImag);`. Nuestra función actual `fft()` en `src/lib/dsp/fft.ts` solo acepta una entrada real (un único `Float32Array`) y asume entrada imaginaria cero, por lo que ignora el segundo argumento. Para calcular correctamente la IFFT de la función de transferencia compleja, necesitamos soporte para entradas complejas o una función `ifft` dedicada.
+
+1. Modifica `src/lib/dsp/fft.ts`:
+   - Refactoriza el algoritmo interno para soportar entradas complejas. Puedes crear una función interna `coreFFT(real: Float32Array, imag: Float32Array, inverse: boolean)` que contenga la lógica iterativa Radix-2. Si `inverse` es true, el ángulo de rotación cambia de signo (o conjugas antes y después) y al final divides los resultados por N.
+   - Mantén la firma actual de `export function fft(input: Float32Array)` pero haz que llame al core internamente pasando un array de ceros para la parte imaginaria.
+   - Agrega y exporta una nueva función `export function ifft(real: Float32Array, imag: Float32Array): Float32Array`. Esta función llama al core con `inverse = true` y devuelve solo la parte real del resultado (ya que la IR física es puramente real).
+
+2. Modifica `src/lib/dsp/apst/segments/SegmentT.ts`:
+   - Cambia la importación para incluir `ifft`.
+   - Reemplaza todo el bloque "c) Calcular IFFT(H)" usando directamente la nueva función: `const ir = ifft(hReal, hImag);`.
+   - Elimina la lógica sucia del conjugado manual y la división manual por N (ya que `ifft` se encargará de ello).
+
+Genera el código TypeScript para `fft.ts` y la versión limpia de `SegmentT.ts`.
+```
