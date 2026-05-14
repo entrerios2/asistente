@@ -45,9 +45,10 @@ function bitReverse(n: number, bits: number): number {
 
 /**
  * FFT Radix-2 DIT Iterativa.
- * @param input Float32Array de tamaño potencia de 2.
+ * @param input Real part of input (Float32Array of power-of-2 size).
+ * @param imagInput Optional imaginary part of input.
  */
-export function fft(input: Float32Array): { real: Float32Array; imag: Float32Array } {
+export function fft(input: Float32Array, imagInput?: Float32Array): { real: Float32Array; imag: Float32Array } {
     const N = input.length;
     const bits = Math.log2(N);
 
@@ -58,10 +59,13 @@ export function fft(input: Float32Array): { real: Float32Array; imag: Float32Arr
     const real = new Float32Array(N);
     const imag = new Float32Array(N);
 
-    // Reordenamiento Bit-reversal
+    // Reordenamiento Bit-reversal e inicialización
     for (let i = 0; i < N; i++) {
         const j = bitReverse(i, bits);
         real[j] = input[i];
+        if (imagInput) {
+            imag[j] = imagInput[i];
+        }
     }
 
     // Mariposas iterativas
