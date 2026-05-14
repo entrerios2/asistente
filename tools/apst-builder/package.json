@@ -1,0 +1,16 @@
+{
+  "name": "apst-builder",
+  "version": "1.0.0",
+  "description": "Herramienta interna de generación de señales de audio de referencia",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "wavefile": "^11.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
