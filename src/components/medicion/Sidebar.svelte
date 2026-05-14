@@ -11,15 +11,16 @@
     let activeTab = $state('secuencial'); // 'secuencial' | 'manual'
     let orchestratorEvent = $state<OrchestratorEvent>({ state: 'IDLE' });
     let isCollapsed = $state(true);
-    let selectedSequence = $state('Secuencia completa');
+    let selectedSequence = $state('Completa (VANFP)');
     let errorToast = $state<string | null>(null);
 
     // Estado del generador manual
-    let generatorType = $state<'pink' | 'white' | 'sweep'>('pink');
+    let generatorType = $state<'pink' | 'white' | 'sweep' | 'sine'>('pink');
     let genFreq = $state(1000);
     let genLevel = $state(-20);
     let genRouting = $state<'L' | 'R' | 'Stereo'>('Stereo');
     let genActive = $state(false);
+    let delayMs = $state(0);
 
     orchestrator.subscribe((event) => {
         orchestratorEvent = event;
@@ -34,6 +35,24 @@
     });
 
     const sequenceSteps = ['V', 'A', 'N', 'F', 'P', 'X'];
+    const stepNames: Record<string, string> = {
+        'V': 'Verificación de ganancia',
+        'A': 'Alineación temporal',
+        'N': 'Nivel de referencia',
+        'F': 'Respuesta en frecuencia',
+        'P': 'Polaridad',
+        'X': 'Diafonía (Crosstalk)'
+    };
+
+    function translateState(state: string) {
+        switch (state) {
+            case 'IDLE': return 'Estado: En espera';
+            case 'RUNNING': return 'Estado: Ejecutando';
+            case 'RECORDING': return 'Estado: Grabando';
+            case 'ABORTADO': return 'Estado: Error';
+            default: return `Estado: ${state}`;
+        }
+    }
 
     async function startLocal() {
         try {
@@ -67,13 +86,13 @@
         {#if activeTab === 'secuencial'}
             <div class="secuencial-tab" in:fade>
                 <select class="sequence-selector" bind:value={selectedSequence}>
-                    <option>Secuencia completa</option>
-                    <option>Comprobación rápida</option>
-                    <option>Loopback</option>
+                    <option>Completa (VANFP)</option>
+                    <option>Verificación de ganancia (V)</option>
+                    <option>Respuesta (F)</option>
                 </select>
 
                 <div class="status-card">
-                    <span class="state-label">{orchestratorEvent.state}</span>
+                    <span class="state-label">{translateState(orchestratorEvent.state)}</span>
                     {#if orchestratorEvent.message}
                         <p class="state-msg">{orchestratorEvent.message}</p>
                     {/if}
@@ -86,7 +105,7 @@
                                 <span class="step-icon">
                                     {orchestratorEvent.currentHeader === step ? '📡' : '○'}
                                 </span>
-                                <span class="step-name">Segmento {step}</span>
+                                <span class="step-name">{step} - {stepNames[step]}</span>
                             </div>
                             <span class="numeric-result">
                                 {orchestratorEvent.currentHeader === step ? '+3.2 dB' : 'N/A'}
@@ -97,7 +116,7 @@
 
                 <div class="split-button">
                     <button class="btn-main" onclick={startLocal}>Iniciar</button>
-                    <button class="btn-sub" onclick={downloadWav} title="Descargar WAV">▼</button>
+                    <button class="btn-sub text-sub" onclick={downloadWav}>Descargar pista de prueba</button>
                 </div>
 
                 {#if errorToast}
@@ -114,18 +133,21 @@
                     <select bind:value={generatorType}>
                         <option value="pink">Ruido rosa</option>
                         <option value="white">Ruido blanco</option>
+                        <option value="sine">Seno continuo</option>
                         <option value="sweep">Barrido logarítmico</option>
                     </select>
                 </div>
 
-                <div class="control-group">
-                    <label>Frecuencia</label>
-                    <div class="input-sync">
-                        <input type="range" min="20" max="20000" step="1" bind:value={genFreq} />
-                        <input type="number" min="20" max="20000" bind:value={genFreq} />
-                        <span>Hz</span>
+                {#if generatorType === 'sine' || generatorType === 'sweep'}
+                    <div class="control-group" transition:slide>
+                        <label>Frecuencia</label>
+                        <div class="input-sync">
+                            <input type="range" min="20" max="20000" step="1" bind:value={genFreq} />
+                            <input type="number" min="20" max="20000" bind:value={genFreq} />
+                            <span>Hz</span>
+                        </div>
                     </div>
-                </div>
+                {/if}
 
                 <div class="control-group">
                     <label>Nivel</label>
@@ -133,6 +155,13 @@
                         <input type="range" min="-60" max="0" step="0.1" bind:value={genLevel} />
                         <input type="number" min="-60" max="0" step="0.1" bind:value={genLevel} />
                         <span>dBFS</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Retardo (ms)</label>
+                    <div class="input-sync">
+                        <input type="number" min="0" max="2000" step="0.01" bind:value={delayMs} style="width: 100%" />
                     </div>
                 </div>
 
@@ -156,7 +185,7 @@
                     {genActive ? 'Detener generador' : 'Prender generador'}
                 </button>
 
-                <button class="btn-find-delay">Alinear retardo (Find delay)</button>
+                <button class="btn-find-delay">Calcular retardo</button>
             </div>
         {/if}
     </div>
@@ -293,12 +322,15 @@
     }
 
     .btn-sub {
-        width: 44px;
         background: #2563eb;
         color: white;
         border: none;
         border-radius: 0 12px 12px 0;
         cursor: pointer;
+        padding: 0 16px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        white-space: nowrap;
     }
 
     .error-toast {

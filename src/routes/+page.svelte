@@ -5,6 +5,7 @@
     import ViewGrid from '../components/medicion/ViewGrid.svelte';
     import SnapshotPanel from '../components/medicion/SnapshotPanel.svelte';
     import { traceManager } from '$lib/stores/traceManager.svelte';
+    import { uiStore } from '$lib/stores/ui.svelte';
     import { detectTier } from '$lib/utils/tierDetector';
 
     let tier = $state<string | null>(null);
@@ -39,7 +40,7 @@
         <Sidebar />
         
         <main class="main-viewport">
-            <ViewGrid layout="2x2" />
+            <ViewGrid />
         </main>
 
         <SnapshotPanel />

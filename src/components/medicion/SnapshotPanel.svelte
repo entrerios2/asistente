@@ -1,5 +1,6 @@
 <script lang="ts">
     import { traceManager } from '$lib/stores/traceManager.svelte';
+    import { uiStore } from '$lib/stores/ui.svelte';
     import { flip } from 'svelte/animate';
     import { fade, slide } from 'svelte/transition';
 
@@ -27,7 +28,7 @@
     }
 </script>
 
-<aside class="snapshot-panel" transition:slide={{ axis: 'x' }}>
+<aside class="snapshot-panel" class:collapsed={!uiStore.showSnapshots}>
     <header class="panel-header">
         <h2>Instantáneas</h2>
         <span class="count">{sortedSnapshots.length}</span>
@@ -114,6 +115,13 @@
         flex-direction: column;
         color: #e0e0e0;
         font-family: 'Inter', system-ui, sans-serif;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        flex-shrink: 0;
+    }
+
+    .snapshot-panel.collapsed {
+        transform: translateX(100%);
+        margin-right: -300px;
     }
 
     .panel-header {

@@ -68,7 +68,7 @@ export class WebAudioProvider implements AudioProvider {
 		this.workletNode = null;
 	}
 
-	playGenerator(type: 'pink' | 'white' | 'sweep', active: boolean, freq: number, level: number, routing: 'L' | 'R' | 'Stereo'): void {
+	playGenerator(type: 'pink' | 'white' | 'sweep' | 'sine', active: boolean, freq: number, level: number, routing: 'L' | 'R' | 'Stereo'): void {
 		if (!this.audioContext) {
 			this.audioContext = new AudioContext({ sampleRate: 48000 });
 		}
@@ -96,6 +96,13 @@ export class WebAudioProvider implements AudioProvider {
 		this.pannerNode.pan.value = routing === 'L' ? -1 : routing === 'R' ? 1 : 0;
 
 		if (type === 'sweep') {
+			const osc = this.audioContext.createOscillator();
+			osc.type = 'sine';
+			osc.frequency.setValueAtTime(freq, this.audioContext.currentTime);
+			osc.frequency.exponentialRampToValueAtTime(20000, this.audioContext.currentTime + 5);
+			osc.start();
+			this.generatorNode = osc;
+		} else if (type === 'sine') {
 			const osc = this.audioContext.createOscillator();
 			osc.type = 'sine';
 			osc.frequency.setValueAtTime(freq, this.audioContext.currentTime);

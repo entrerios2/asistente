@@ -1,20 +1,15 @@
 <script lang="ts">
     import Quadrant from './Quadrant.svelte';
-
-    interface Props {
-        layout?: '1x1' | '2x1' | '2x2' | '3x2';
-    }
-
-    let { layout = '2x2' }: Props = $props();
+    import { uiStore } from '$lib/stores/ui.svelte';
 
     const quadrants = $derived(
-        layout === '1x1' ? 1 :
-        layout === '2x1' ? 2 :
-        layout === '2x2' ? 4 : 6
+        uiStore.layout === '1x1' ? 1 :
+        uiStore.layout === '2x1' ? 2 :
+        uiStore.layout === '2x2' ? 4 : 6
     );
 </script>
 
-<div class="view-grid layout-{layout}">
+<div class="view-grid layout-{uiStore.layout}">
     {#each Array(quadrants) as _, i}
         <Quadrant id="q{i+1}" />
     {/each}

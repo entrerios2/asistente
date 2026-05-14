@@ -129,18 +129,34 @@
 
     function drawGrid(ctx: CanvasRenderingContext2D, width: number, height: number) {
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+        ctx.fillStyle = '#888';
+        ctx.font = '10px Inter';
         ctx.lineWidth = 1;
-        // Frecuencias
+
+        // Frecuencias (Eje X)
         [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000].forEach(f => {
             const x = freqToX(f, width);
             ctx.beginPath();
             ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
+            
+            // Etiqueta Hz (en el borde inferior)
+            const label = f >= 1000 ? `${f/1000}k` : `${f}`;
+            ctx.fillText(label, x + 2, height - 5);
         });
-        // Niveles
-        for (let db = dbMin; db <= dbMax; db += 10) {
-            const y = valToY(db, height);
+
+        // Niveles (Eje Y)
+        let min = dbMin, max = dbMax;
+        let unit = 'dB';
+        if (metric === 'Fase') { min = -180; max = 180; unit = '°'; }
+        else if (metric === 'Coherencia') { min = 0; max = 1; unit = ''; }
+
+        for (let val = min; val <= max; val += (max - min) / 6) {
+            const y = valToY(val, height);
             ctx.beginPath();
             ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
+            
+            // Etiqueta nivel (en el borde derecho)
+            ctx.fillText(`${val.toFixed(0)}${unit}`, width - 35, y - 2);
         }
     }
 
@@ -155,11 +171,17 @@
         let first = true;
         for (let i = 0; i < data.length; i++) {
             const freq = (i * sr / 2) / data.length;
-            if (freq < freqMin) continue;
-            if (freq > freqMax) break;
+            if (freq < freqMin / 2) continue; // Un poco de margen por el zoom
+            if (freq > freqMax * 2) break;
 
             const x = freqToX(freq, width);
             const y = valToY(data[i] + trace.offsetY, height);
+
+            // Solo dibujar si está dentro o cerca del viewport
+            if (x < -100 || x > width + 100) {
+                if (!first) ctx.moveTo(x, y);
+                continue;
+            }
 
             if (first) {
                 ctx.moveTo(x, y);
@@ -185,7 +207,8 @@
         
         ctx.fillStyle = '#fff';
         ctx.font = '10px monospace';
-        ctx.fillText(`${Math.round(freq)} Hz / ${val.toFixed(1)} ${metric === 'Fase' ? '°' : 'dB'}`, mouseX + 5, mouseY - 5);
+        const unit = metric === 'Fase' ? '°' : 'dB';
+        ctx.fillText(`${Math.round(freq)} Hz / ${val.toFixed(1)} ${unit}`, mouseX + 5, mouseY - 5);
     }
 
     function handleWheel(e: WheelEvent) {
@@ -193,6 +216,7 @@
         const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
         if (e.shiftKey) {
             scaleX *= zoomFactor;
+            // Ajustar offsetX para zoom centrado en mouse (opcional, por ahora simple)
         } else if (e.ctrlKey || e.metaKey) {
             scaleY *= zoomFactor;
         }
@@ -250,67 +274,58 @@
     <canvas bind:this={canvas}></canvas>
     
     <div class="quadrant-header">
-        <button class="settings-btn" onclick={() => showSelector = !showSelector} aria-label="Ajustes">
-            ⚙️
-        </button>
+        <div class="settings-wrapper">
+            <button class="settings-btn" onclick={() => showSelector = !showSelector} aria-label="Ajustes">
+                ⚙️
+            </button>
+            
+            {#if showSelector}
+                <div class="selector-popover" transition:fade={{ duration: 100 }}>
+                    <label>Métrica</label>
+                    <div class="metrics-grid">
+                        {#each ['Magnitud', 'Fase', 'RTA', 'Coherencia', 'Espectro', 'Nivel', 'Respuesta al impulso', 'Retardo de grupo'] as m}
+                            <button 
+                                class:active={metric === m} 
+                                onclick={() => metric = m}
+                            >
+                                {m}
+                            </button>
+                        {/each}
+                    </div>
+
+                    <div class="divider"></div>
+                    
+                    <label>Suavizado</label>
+                    <div class="smoothing-options">
+                        {#each [0, 1/3, 1/6, 1/12, 1/24, 1/48] as s}
+                            <button 
+                                class:active={smoothing === s} 
+                                onclick={() => smoothing = s}
+                            >
+                                {s === 0 ? 'Off' : `1/${Math.round(1/s)}`}
+                            </button>
+                        {/each}
+                    </div>
+
+                    <div class="divider"></div>
+
+                    <label class="checkbox-label">
+                        <input type="checkbox" bind:checked={coherenceMasking} />
+                        Coherencia
+                    </label>
+
+                    {#if metric === 'Fase'}
+                        <button class="action-btn">Desenvolvimiento</button>
+                    {/if}
+
+                    <button class="reset-btn" onclick={() => { scaleX=1; scaleY=1; offsetX=0; offsetY=0; }}>
+                        Reset
+                    </button>
+                </div>
+            {/if}
+        </div>
         <span class="id-badge">{id} - {metric}</span>
     </div>
-
-    {#if showSelector}
-        <div class="selector-modal">
-            <header>
-                <span>Configuración de cuadrante</span>
-                <button onclick={() => showSelector = false}>×</button>
-            </header>
-
-            <label>Métrica</label>
-            <div class="metrics-grid">
-                {#each ['Magnitud', 'Fase', 'RTA', 'Coherencia', 'Espectro', 'Nivel', 'Respuesta al impulso', 'Retardo de grupo'] as m}
-                    <button 
-                        class:active={metric === m} 
-                        onclick={() => metric = m}
-                    >
-                        {m}
-                    </button>
-                {/each}
-            </div>
-
-            <div class="divider"></div>
-            
-            <label>Suavizado de octava</label>
-            <div class="smoothing-options">
-                {#each [0, 1/3, 1/6, 1/12, 1/24, 1/48] as s}
-                    <button 
-                        class:active={smoothing === s} 
-                        onclick={() => smoothing = s}
-                    >
-                        {s === 0 ? 'Desactivado' : `1/${Math.round(1/s)}`}
-                    </button>
-                {/each}
-            </div>
-
-            <div class="divider"></div>
-
-            <label class="checkbox-label">
-                <input type="checkbox" bind:checked={coherenceMasking} />
-                Ocultamiento por coherencia
-            </label>
-
-            {#if metric === 'Fase'}
-                <button class="action-btn">Desenvolvimiento de fase</button>
-            {/if}
-
-            {#if metric === 'Respuesta al impulso' || metric === 'RTA'}
-                <button class="action-btn" onclick={() => console.log('Modal FFT abierto')}>
-                    Ajustes profundos
-                </button>
-            {/if}
-
-            <button class="reset-btn" onclick={() => { scaleX=1; scaleY=1; offsetX=0; offsetY=0; }}>
-                Restablecer vista
-            </button>
-        </div>
-    {/if}
 </div>
 
 <style>
@@ -336,10 +351,15 @@
         display: flex;
         justify-content: space-between;
         pointer-events: none;
+        z-index: 200;
+    }
+
+    .settings-wrapper {
+        position: relative;
+        pointer-events: auto;
     }
 
     .settings-btn {
-        pointer-events: auto;
         background: rgba(0, 0, 0, 0.8);
         border: 1px solid rgba(255, 255, 255, 0.1);
         color: #fff;
@@ -360,50 +380,27 @@
         border-radius: 6px;
         font-size: 0.75rem;
         font-weight: 600;
-        backdrop-filter: none;
     }
 
-    .selector-modal {
+    .selector-popover {
         position: absolute;
-        top: 0;
+        top: 40px;
         left: 0;
-        width: 100%;
-        height: 100%;
+        width: 220px;
         background: #1a1a20;
-        padding: 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 1rem;
         display: flex;
         flex-direction: column;
-        gap: 1rem;
-        z-index: 100;
-        box-sizing: border-box;
-        overflow-y: auto;
+        gap: 0.75rem;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        z-index: 300;
     }
 
-    .selector-modal header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 1rem;
-    }
-
-    .selector-modal header span {
-        font-weight: 700;
-        text-transform: uppercase;
-        font-size: 0.9rem;
-        color: #3b82f6;
-    }
-
-    .selector-modal header button {
-        background: none;
-        border: none;
-        color: #fff;
-        font-size: 1.5rem;
-        cursor: pointer;
-    }
-
-    .selector-modal label {
-        font-size: 0.7rem;
-        color: #888;
+    .selector-popover label {
+        font-size: 0.65rem;
+        color: #666;
         text-transform: uppercase;
         font-weight: 800;
         letter-spacing: 0.5px;
@@ -412,21 +409,21 @@
     .metrics-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 8px;
+        gap: 4px;
     }
 
-    .selector-modal button:not(.reset-btn):not(.action-btn) {
+    .selector-popover button:not(.reset-btn):not(.action-btn) {
         background: rgba(255, 255, 255, 0.03);
         border: 1px solid rgba(255, 255, 255, 0.05);
         color: #aaa;
-        padding: 10px;
-        border-radius: 8px;
+        padding: 6px;
+        border-radius: 6px;
         cursor: pointer;
-        font-size: 0.8rem;
+        font-size: 0.75rem;
         text-align: left;
     }
 
-    .selector-modal button.active {
+    .selector-popover button.active {
         background: #3b82f6;
         color: #fff;
         border-color: #3b82f6;
@@ -435,7 +432,7 @@
     .smoothing-options {
         display: flex;
         flex-wrap: wrap;
-        gap: 8px;
+        gap: 4px;
     }
 
     .divider {
@@ -446,31 +443,33 @@
     .checkbox-label {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 8px;
         cursor: pointer;
         color: #ccc !important;
         text-transform: none !important;
+        font-size: 0.8rem !important;
     }
 
     .action-btn {
         background: #333;
         color: #fff;
         border: none;
-        padding: 12px;
-        border-radius: 8px;
+        padding: 8px;
+        border-radius: 6px;
         font-weight: bold;
         cursor: pointer;
+        font-size: 0.8rem;
     }
 
     .reset-btn {
-        margin-top: auto;
         background: #ef4444;
         color: #fff;
         border: none;
-        padding: 12px;
-        border-radius: 8px;
+        padding: 8px;
+        border-radius: 6px;
         font-weight: bold;
         cursor: pointer;
+        font-size: 0.8rem;
     }
 </style>
 
