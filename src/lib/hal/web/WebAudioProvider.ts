@@ -115,4 +115,31 @@ export class WebAudioProvider implements AudioProvider {
 			}
 		}
 	}
+
+	async playSample(url: string): Promise<void> {
+		if (!this.audioContext) {
+			this.audioContext = new AudioContext({ sampleRate: 48000 });
+		}
+
+		if (this.audioContext.state === 'suspended') {
+			await this.audioContext.resume();
+		}
+
+		const response = await fetch(url);
+		const arrayBuffer = await response.arrayBuffer();
+		const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+
+		return new Promise((resolve) => {
+			const source = this.audioContext!.createBufferSource();
+			source.buffer = audioBuffer;
+			source.connect(this.audioContext!.destination);
+			
+			source.onended = () => {
+				source.disconnect();
+				resolve();
+			};
+
+			source.start(0);
+		});
+	}
 }

@@ -8,4 +8,5 @@ export interface AudioProvider {
 	startCapture(listener: AudioListener): Promise<void>;
 	stopCapture(): void;
 	playPinkNoise(active: boolean): void;
+	playSample?(url: string): Promise<void>;
 }
