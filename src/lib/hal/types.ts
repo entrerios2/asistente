@@ -9,4 +9,5 @@ export interface AudioProvider {
 	stopCapture(): void;
 	playPinkNoise(active: boolean): void;
 	playSample?(url: string): Promise<void>;
+	onMessage?(callback: (message: any) => void): void;
 }

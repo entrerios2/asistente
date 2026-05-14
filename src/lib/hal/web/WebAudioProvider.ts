@@ -142,4 +142,14 @@ export class WebAudioProvider implements AudioProvider {
 			source.start(0);
 		});
 	}
+
+	onMessage(callback: (message: any) => void): void {
+		if (this.workletNode) {
+			this.workletNode.port.onmessage = (event) => {
+				callback(event.data);
+			};
+		} else {
+			console.warn('WebAudioProvider: No se puede registrar el callback porque el workletNode no ha sido inicializado.');
+		}
+	}
 }
