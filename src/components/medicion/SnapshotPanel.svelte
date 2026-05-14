@@ -3,8 +3,15 @@
     import { flip } from 'svelte/animate';
     import { fade, slide } from 'svelte/transition';
 
-    // Usamos el getter reactivo de snapshots
-    const snapshots = $derived(traceManager.snapshots);
+    let sortBy = $state('date'); // 'date' | 'location'
+
+    // Usamos el getter reactivo de snapshots y aplicamos el ordenamiento
+    const sortedSnapshots = $derived(
+        [...traceManager.snapshots].sort((a, b) => {
+            if (sortBy === 'date') return b.timestamp - a.timestamp;
+            return a.source.localeCompare(b.source);
+        })
+    );
 
     function handleToggle(id: string) {
         traceManager.toggleVisibility(id);
@@ -22,19 +29,24 @@
 
 <aside class="snapshot-panel" transition:slide={{ axis: 'x' }}>
     <header class="panel-header">
-        <h2>Snapshots</h2>
-        <span class="count">{snapshots.length}</span>
+        <h2>Instantáneas</h2>
+        <span class="count">{sortedSnapshots.length}</span>
     </header>
 
+    <div class="sort-tabs">
+        <button class:active={sortBy === 'date'} onclick={() => sortBy = 'date'}>Por fecha</button>
+        <button class:active={sortBy === 'location'} onclick={() => sortBy = 'location'}>Por ubicación</button>
+    </div>
+
     <div class="snapshot-list">
-        {#if snapshots.length === 0}
+        {#if sortedSnapshots.length === 0}
             <div class="empty-state" in:fade>
                 <p>No hay capturas guardadas</p>
-                <span>Captura un trazo Live para empezar</span>
+                <span>Captura un trazo en vivo para empezar</span>
             </div>
         {/if}
 
-        {#each snapshots as snap (snap.id)}
+        {#each sortedSnapshots as snap (snap.id)}
             <div 
                 class="snapshot-item" 
                 animate:flip={{ duration: 300 }}
@@ -42,7 +54,9 @@
                 class:hidden={!snap.visible}
             >
                 <div class="item-main">
-                    <div class="color-indicator" style="background-color: {snap.color}"></div>
+                    <div class="source-icon" title={snap.source}>
+                        {snap.source === 'manual' ? '🖱️' : '⚙️'}
+                    </div>
                     <div class="info">
                         <span class="name">{snap.name}</span>
                         <span class="timestamp">{new Date(snap.timestamp).toLocaleTimeString()}</span>
@@ -71,7 +85,7 @@
                 </div>
 
                 <div class="item-controls">
-                    <label for="offset-{snap.id}">Offset Y</label>
+                    <label for="offset-{snap.id}">Desplazamiento Y</label>
                     <div class="slider-group">
                         <input 
                             id="offset-{snap.id}"
@@ -94,8 +108,7 @@
     .snapshot-panel {
         width: 300px;
         height: 100%;
-        background: rgba(20, 20, 25, 0.9);
-        backdrop-filter: blur(12px);
+        background: #101014;
         border-left: 1px solid rgba(255, 255, 255, 0.1);
         display: flex;
         flex-direction: column;
@@ -113,9 +126,10 @@
 
     .panel-header h2 {
         margin: 0;
-        font-size: 1.1rem;
-        font-weight: 600;
-        letter-spacing: 0.5px;
+        font-size: 1rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 1px;
         color: #fff;
     }
 
@@ -128,6 +142,31 @@
         font-weight: bold;
     }
 
+    .sort-tabs {
+        display: flex;
+        padding: 8px;
+        gap: 4px;
+        background: #000;
+    }
+
+    .sort-tabs button {
+        flex: 1;
+        background: transparent;
+        border: none;
+        color: #666;
+        padding: 8px;
+        border-radius: 6px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .sort-tabs button.active {
+        background: rgba(255, 255, 255, 0.05);
+        color: #fff;
+    }
+
     .snapshot-list {
         flex: 1;
         overflow-y: auto;
@@ -135,31 +174,6 @@
         display: flex;
         flex-direction: column;
         gap: 1rem;
-    }
-
-    .snapshot-list::-webkit-scrollbar {
-        width: 4px;
-    }
-
-    .snapshot-list::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.1);
-        border-radius: 2px;
-    }
-
-    .empty-state {
-        text-align: center;
-        padding: 2rem;
-        color: #666;
-    }
-
-    .empty-state p {
-        margin: 0;
-        font-size: 0.9rem;
-    }
-
-    .empty-state span {
-        font-size: 0.75rem;
-        opacity: 0.7;
     }
 
     .snapshot-item {
@@ -170,16 +184,6 @@
         transition: all 0.2s ease;
     }
 
-    .snapshot-item:hover {
-        background: rgba(255, 255, 255, 0.06);
-        border-color: rgba(255, 255, 255, 0.1);
-    }
-
-    .snapshot-item.hidden {
-        opacity: 0.5;
-        filter: grayscale(0.5);
-    }
-
     .item-main {
         display: flex;
         align-items: center;
@@ -187,11 +191,15 @@
         margin-bottom: 0.75rem;
     }
 
-    .color-indicator {
-        width: 4px;
+    .source-icon {
+        font-size: 1.2rem;
+        width: 32px;
         height: 32px;
-        border-radius: 2px;
-        box-shadow: 0 0 8px currentColor;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
     }
 
     .info {
@@ -202,8 +210,8 @@
     }
 
     .name {
-        font-size: 0.9rem;
-        font-weight: 500;
+        font-size: 0.85rem;
+        font-weight: 600;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -212,7 +220,7 @@
 
     .timestamp {
         font-size: 0.7rem;
-        color: #888;
+        color: #666;
     }
 
     .actions {
@@ -227,21 +235,9 @@
         padding: 6px;
         border-radius: 8px;
         cursor: pointer;
-        transition: all 0.15s;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 1rem;
-    }
-
-    .action-btn:hover {
-        background: rgba(255, 255, 255, 0.1);
-        color: #fff;
-    }
-
-    .delete-btn:hover {
-        background: rgba(239, 68, 68, 0.2);
-        color: #ef4444;
     }
 
     .item-controls {
@@ -251,11 +247,11 @@
 
     .item-controls label {
         display: block;
-        font-size: 0.7rem;
-        color: #888;
+        font-size: 0.65rem;
+        color: #666;
         margin-bottom: 0.5rem;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        font-weight: 800;
     }
 
     .slider-group {
@@ -266,25 +262,7 @@
 
     input[type="range"] {
         flex: 1;
-        height: 4px;
-        background: rgba(255, 255, 255, 0.1);
-        border-radius: 2px;
-        appearance: none;
-        outline: none;
-    }
-
-    input[type="range"]::-webkit-slider-thumb {
-        appearance: none;
-        width: 12px;
-        height: 12px;
-        background: #3b82f6;
-        border-radius: 50%;
-        cursor: pointer;
-        transition: transform 0.1s;
-    }
-
-    input[type="range"]::-webkit-slider-thumb:hover {
-        transform: scale(1.2);
+        accent-color: #3b82f6;
     }
 
     .offset-value {

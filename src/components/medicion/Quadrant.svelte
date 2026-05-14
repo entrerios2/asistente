@@ -11,10 +11,20 @@
     let canvas: HTMLCanvasElement;
     let container: HTMLDivElement;
     
-    let metric = $state('Magnitude'); // 'Magnitude', 'Phase', 'RTA', 'Coherence'
-    let smoothing = $state(1/48); // 1/3, 1/12, 1/48
+    let metric = $state('Magnitud'); 
+    let smoothing = $state(1/48); 
     let coherenceThreshold = $state(0.5);
+    let coherenceMasking = $state(false);
     let showSelector = $state(false);
+
+    // Zoom & Pan state
+    let scaleX = $state(1);
+    let scaleY = $state(1);
+    let offsetX = $state(0);
+    let offsetY = $state(0);
+    let isDragging = $state(false);
+    let lastMouseX = 0;
+    let lastMouseY = 0;
 
     // Crosshair state
     let mouseX = $state(0);
@@ -28,37 +38,41 @@
     const dbMax = 30;
 
     function freqToX(freq: number, width: number): number {
-        if (freq < freqMin) return 0;
+        if (freq < freqMin) return offsetX;
         const logMin = Math.log10(freqMin);
         const logMax = Math.log10(freqMax);
         const logFreq = Math.log10(freq);
-        return ((logFreq - logMin) / (logMax - logMin)) * width;
+        const base = ((logFreq - logMin) / (logMax - logMin)) * width;
+        return base * scaleX + offsetX;
     }
 
     function xToFreq(x: number, width: number): number {
+        const adjustedX = (x - offsetX) / scaleX;
         const logMin = Math.log10(freqMin);
         const logMax = Math.log10(freqMax);
-        const logFreq = (x / width) * (logMax - logMin) + logMin;
+        const logFreq = (adjustedX / width) * (logMax - logMin) + logMin;
         return Math.pow(10, logFreq);
     }
 
     function valToY(val: number, height: number): number {
         let min = dbMin, max = dbMax;
-        if (metric === 'Phase') { min = -180; max = 180; }
-        else if (metric === 'Coherence') { min = 0; max = 1; }
+        if (metric === 'Fase') { min = -180; max = 180; }
+        else if (metric === 'Coherencia') { min = 0; max = 1; }
         
         const range = max - min;
         const normalized = (val - min) / range;
-        return height - normalized * height;
+        const base = height - normalized * height;
+        return base * scaleY + offsetY;
     }
 
     function yToVal(y: number, height: number): number {
+        const adjustedY = (y - offsetY) / scaleY;
         let min = dbMin, max = dbMax;
-        if (metric === 'Phase') { min = -180; max = 180; }
-        else if (metric === 'Coherence') { min = 0; max = 1; }
+        if (metric === 'Fase') { min = -180; max = 180; }
+        else if (metric === 'Coherencia') { min = 0; max = 1; }
         
         const range = max - min;
-        return min + (1 - y / height) * range;
+        return min + (1 - adjustedY / height) * range;
     }
 
     /**
@@ -98,7 +112,7 @@
         drawGrid(ctx, width, height);
 
         // 2. Filtrar y dibujar trazos del manager
-        const relevantTraces = traceManager.traces.filter(t => t.visible && (t.metric === metric || metric === 'Magnitude'));
+        const relevantTraces = traceManager.traces.filter(t => t.visible && (t.metric === metric || metric === 'Magnitud'));
         
         relevantTraces.forEach(trace => {
             const data = smoothData(trace.data, smoothing);
@@ -138,6 +152,7 @@
 
         ctx.beginPath();
         const sr = 48000;
+        let first = true;
         for (let i = 0; i < data.length; i++) {
             const freq = (i * sr / 2) / data.length;
             if (freq < freqMin) continue;
@@ -146,11 +161,12 @@
             const x = freqToX(freq, width);
             const y = valToY(data[i] + trace.offsetY, height);
 
-            // Coherence Blanking (Simulado si no hay array de coherencia)
-            // En una impl real, chequearíamos el array de coherencia del traceManager
-            
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
+            if (first) {
+                ctx.moveTo(x, y);
+                first = false;
+            } else {
+                ctx.lineTo(x, y);
+            }
         }
         ctx.stroke();
     }
@@ -169,7 +185,23 @@
         
         ctx.fillStyle = '#fff';
         ctx.font = '10px monospace';
-        ctx.fillText(`${Math.round(freq)} Hz / ${val.toFixed(1)} ${metric === 'Phase' ? '°' : 'dB'}`, mouseX + 5, mouseY - 5);
+        ctx.fillText(`${Math.round(freq)} Hz / ${val.toFixed(1)} ${metric === 'Fase' ? '°' : 'dB'}`, mouseX + 5, mouseY - 5);
+    }
+
+    function handleWheel(e: WheelEvent) {
+        e.preventDefault();
+        const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+        if (e.shiftKey) {
+            scaleX *= zoomFactor;
+        } else if (e.ctrlKey || e.metaKey) {
+            scaleY *= zoomFactor;
+        }
+    }
+
+    function handleMouseDown(e: MouseEvent) {
+        isDragging = true;
+        lastMouseX = e.clientX;
+        lastMouseY = e.clientY;
     }
 
     function handleMouseMove(e: MouseEvent) {
@@ -177,6 +209,19 @@
         mouseX = e.clientX - rect.left;
         mouseY = e.clientY - rect.top;
         showCrosshair = true;
+
+        if (isDragging) {
+            const dx = e.clientX - lastMouseX;
+            const dy = e.clientY - lastMouseY;
+            offsetX += dx;
+            offsetY += dy;
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+        }
+    }
+
+    function handleMouseUp() {
+        isDragging = false;
     }
 
     onMount(() => {
@@ -193,38 +238,77 @@
     });
 </script>
 
-<div class="quadrant-container" bind:this={container} onmousemove={handleMouseMove} onmouseleave={() => showCrosshair = false}>
+<div 
+    class="quadrant-container" 
+    bind:this={container} 
+    onmousemove={handleMouseMove} 
+    onmousedown={handleMouseDown}
+    onmouseup={handleMouseUp}
+    onmouseleave={() => { showCrosshair = false; handleMouseUp(); }}
+    onwheel={handleWheel}
+>
     <canvas bind:this={canvas}></canvas>
     
     <div class="quadrant-header">
-        <button class="metric-selector" onclick={() => showSelector = !showSelector}>
-            {metric} ▾
+        <button class="settings-btn" onclick={() => showSelector = !showSelector} aria-label="Ajustes">
+            ⚙️
         </button>
-        <span class="id-badge">{id}</span>
+        <span class="id-badge">{id} - {metric}</span>
     </div>
 
     {#if showSelector}
         <div class="selector-modal">
-            {#each ['Magnitude', 'Phase', 'RTA', 'Coherence'] as m}
-                <button 
-                    class:active={metric === m} 
-                    onclick={() => { metric = m; showSelector = false; }}
-                >
-                    {m}
-                </button>
-            {/each}
+            <header>
+                <span>Configuración de cuadrante</span>
+                <button onclick={() => showSelector = false}>×</button>
+            </header>
+
+            <label>Métrica</label>
+            <div class="metrics-grid">
+                {#each ['Magnitud', 'Fase', 'RTA', 'Coherencia', 'Espectro', 'Nivel', 'Respuesta al impulso', 'Retardo de grupo'] as m}
+                    <button 
+                        class:active={metric === m} 
+                        onclick={() => metric = m}
+                    >
+                        {m}
+                    </button>
+                {/each}
+            </div>
+
             <div class="divider"></div>
-            <label>Smoothing</label>
+            
+            <label>Suavizado de octava</label>
             <div class="smoothing-options">
-                {#each [0, 1/3, 1/12, 1/48] as s}
+                {#each [0, 1/3, 1/6, 1/12, 1/24, 1/48] as s}
                     <button 
                         class:active={smoothing === s} 
                         onclick={() => smoothing = s}
                     >
-                        {s === 0 ? 'Off' : `1/${Math.round(1/s)}`}
+                        {s === 0 ? 'Desactivado' : `1/${Math.round(1/s)}`}
                     </button>
                 {/each}
             </div>
+
+            <div class="divider"></div>
+
+            <label class="checkbox-label">
+                <input type="checkbox" bind:checked={coherenceMasking} />
+                Ocultamiento por coherencia
+            </label>
+
+            {#if metric === 'Fase'}
+                <button class="action-btn">Desenvolvimiento de fase</button>
+            {/if}
+
+            {#if metric === 'Respuesta al impulso' || metric === 'RTA'}
+                <button class="action-btn" onclick={() => console.log('Modal FFT abierto')}>
+                    Ajustes profundos
+                </button>
+            {/if}
+
+            <button class="reset-btn" onclick={() => { scaleX=1; scaleY=1; offsetX=0; offsetY=0; }}>
+                Restablecer vista
+            </button>
         </div>
     {/if}
 </div>
@@ -254,83 +338,139 @@
         pointer-events: none;
     }
 
-    .metric-selector {
+    .settings-btn {
         pointer-events: auto;
-        background: rgba(0, 0, 0, 0.6);
+        background: rgba(0, 0, 0, 0.8);
         border: 1px solid rgba(255, 255, 255, 0.1);
         color: #fff;
-        padding: 4px 12px;
-        border-radius: 6px;
-        font-size: 0.75rem;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
         cursor: pointer;
-        backdrop-filter: blur(4px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
     }
 
     .id-badge {
-        background: rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.4);
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-size: 0.65rem;
-        font-weight: bold;
+        background: rgba(0, 0, 0, 0.6);
+        color: rgba(255, 255, 255, 0.6);
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        backdrop-filter: none;
     }
 
     .selector-modal {
         position: absolute;
-        top: 40px;
-        left: 8px;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
         background: #1a1a20;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 8px;
-        padding: 8px;
+        padding: 1.5rem;
         display: flex;
         flex-direction: column;
-        gap: 4px;
-        z-index: 10;
-        box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+        gap: 1rem;
+        z-index: 100;
+        box-sizing: border-box;
+        overflow-y: auto;
     }
 
-    .selector-modal button {
-        background: transparent;
+    .selector-modal header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+
+    .selector-modal header span {
+        font-weight: 700;
+        text-transform: uppercase;
+        font-size: 0.9rem;
+        color: #3b82f6;
+    }
+
+    .selector-modal header button {
+        background: none;
         border: none;
+        color: #fff;
+        font-size: 1.5rem;
+        cursor: pointer;
+    }
+
+    .selector-modal label {
+        font-size: 0.7rem;
+        color: #888;
+        text-transform: uppercase;
+        font-weight: 800;
+        letter-spacing: 0.5px;
+    }
+
+    .metrics-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+
+    .selector-modal button:not(.reset-btn):not(.action-btn) {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.05);
         color: #aaa;
-        padding: 6px 16px;
-        text-align: left;
-        border-radius: 4px;
+        padding: 10px;
+        border-radius: 8px;
         cursor: pointer;
         font-size: 0.8rem;
-    }
-
-    .selector-modal button:hover {
-        background: rgba(255, 255, 255, 0.05);
-        color: #fff;
+        text-align: left;
     }
 
     .selector-modal button.active {
         background: #3b82f6;
         color: #fff;
+        border-color: #3b82f6;
+    }
+
+    .smoothing-options {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
     }
 
     .divider {
         height: 1px;
         background: rgba(255, 255, 255, 0.1);
-        margin: 4px 0;
     }
 
-    .selector-modal label {
-        font-size: 0.65rem;
-        color: #666;
-        text-transform: uppercase;
-        margin: 4px 8px;
-    }
-
-    .smoothing-options {
+    .checkbox-label {
         display: flex;
-        gap: 2px;
+        align-items: center;
+        gap: 10px;
+        cursor: pointer;
+        color: #ccc !important;
+        text-transform: none !important;
     }
 
-    .smoothing-options button {
-        padding: 4px 8px;
-        font-size: 0.7rem;
+    .action-btn {
+        background: #333;
+        color: #fff;
+        border: none;
+        padding: 12px;
+        border-radius: 8px;
+        font-weight: bold;
+        cursor: pointer;
+    }
+
+    .reset-btn {
+        margin-top: auto;
+        background: #ef4444;
+        color: #fff;
+        border: none;
+        padding: 12px;
+        border-radius: 8px;
+        font-weight: bold;
+        cursor: pointer;
     }
 </style>
+

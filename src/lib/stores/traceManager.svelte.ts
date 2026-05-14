@@ -14,6 +14,7 @@ export interface Trace {
     visible: boolean;
     offsetY: number;
     timestamp: number;
+    source: 'manual' | 'secuencial';
 }
 
 class TraceManager {
@@ -57,7 +58,7 @@ class TraceManager {
     /**
      * Captura el estado actual de un trazo live y lo guarda como snapshot.
      */
-    captureSnapshot(liveTraceId: string, name?: string) {
+    captureSnapshot(liveTraceId: string, name?: string, source: 'manual' | 'secuencial' = 'manual') {
         const live = this.traces.find(t => t.id === liveTraceId);
         if (!live) return;
 
@@ -74,7 +75,8 @@ class TraceManager {
             style: live.style,
             visible: true,
             offsetY: live.offsetY,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            source
         };
 
         this.addTrace(snapshot);

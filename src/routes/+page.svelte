@@ -16,7 +16,7 @@
         const handleKey = (e: KeyboardEvent) => {
             if (e.code === 'Space') {
                 e.preventDefault();
-                traceManager.captureSnapshot('live-1', 'Captura manual');
+                traceManager.captureSnapshot('live-1', 'Captura manual', 'manual');
             } else if (e.code === 'KeyD') {
                 console.log("Disparando Find Delay");
             } else if (e.key >= '1' && e.key <= '9') {
