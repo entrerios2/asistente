@@ -37,6 +37,8 @@ asistente/
 | **Instalación y puesta a punto** | Armado, Herramientas, Calibración | Fase 1A + 1B + Fase 3 (parcial) |
 | **Operación** | Referencia, Copiloto | Fase 2 + Fase 3 + Fase 5 |
 
+> **Nota UX de Medición:** La arquitectura visual de la sección Calibración (panel de control dual Secuencial/Manual, motor de vistas multi-cuadrante, gestor de snapshots compartidos y estrategia responsiva) está especificada en [`docs/UX_Medicion.md`](./UX_Medicion.md). Las fases 1A y 1B deben respetar y materializar esas definiciones.
+
 ---
 
 ## Fase 0 — Fundación, Scaffolding y HAL ✅ (Parcial)
@@ -97,15 +99,15 @@ asistente/
 
 ---
 
-## Fase 1A — Infraestructura de Medición y APST Core
+## Fase 1A — Infraestructura de Medición y APST Core ✅
 **Objetivo:** El sistema reproduce secuencias FSK, detecta cabeceras Goertzel y ejecuta segmentos de medición.
-**Depende de:** Pre-Fase
+**Estado:** Completada.
 
 ### Componentes
 
 | Tarea | Sección DDS | Complejidad |
 |:------|:----------:|:-----------:|
-| Motor de Playback FSK (reproducción FLAC, selección automática por sample rate) | 4.13 | 🟡 |
+| Motor de Playback FSK (reproducción WAV/FLAC, selección automática por sample rate) | 4.13 | 🟡 |
 | Detector Goertzel en AudioWorklet (bancos HF 1650/1850 Hz y LF 150/200 Hz) | 4.13, 2.2 | 🟡 |
 | Orquestador de secuencias (parser de cadenas `V A F P`, máquina de estados) | 4.13 | 🟡 |
 | Segmentos `V`, `A`, `N`, `F`, `P`, `T` | 4.13 | 🟡 |
@@ -114,18 +116,11 @@ asistente/
 | Integración Meyda.js para descriptores acústicos | 2.3 | 🟢 |
 | Testeador de Cables (modo Loopback: `V P` sin altavoces) | 4.13 | 🟢 |
 
-### Criterios de Aceptación
-- [ ] La PWA reproduce una secuencia FLAC y el Goertzel detecta la cabecera FSK
-- [ ] El orquestador ejecuta `V A N F P` de principio a fin
-- [ ] El segmento `P` detecta correctamente una inversión de polaridad simulada
-- [ ] La Función de Transferencia calcula magnitud, fase y coherencia
-- [ ] El modo Loopback verifica continuidad de un cable en circuito cerrado
-
 ---
 
-## Fase 1B — Calibración Interactiva y AutoEq
+## Fase 1B — Calibración Interactiva y AutoEq ✅
 **Objetivo:** El operador ve su medición, la compara con la curva objetivo y recibe sugerencias de EQ.
-**Depende de:** Fase 1A
+**Estado:** Completada. Quedan deudas técnicas documentadas en `informe_post_fase_1.md`.
 
 ### Componentes
 
@@ -141,72 +136,76 @@ asistente/
 | Perfiles Genéricos de Seguridad (Agnóstico A/B/Desconocido) | 4.1 | 🟡 |
 | Generador de Log Sweep manual (modo no-FSK) | 4.3.2 | 🟡 |
 
-### Criterios de Aceptación
-- [ ] El Trace Math muestra 3 capas superpuestas con respuesta predicha
-- [ ] AutoEq sugiere filtros que nunca exceden los límites de seguridad
-- [ ] El Semáforo de Coherencia bloquea sugerencias donde coherencia < 50%
-- [ ] En modo Agnóstico B (mic vocal), tolerancia ±6 dB y boosts prohibidos
-
 ---
 
-## Fase 2 — Motor Semántico (Copiloto IA)
-**Objetivo:** El copiloto entiende lenguaje natural, explica sus sugerencias y educa al operador novato.
+## Fase 2A — Consolidación Post-Fase 1 y UI de Medición Avanzada
+**Objetivo:** Cerrar el backlog del informe post-fase-1 y materializar la especificación de interfaz de medición profesional (`docs/UX_Medicion.md`): panel dual Secuencial/Manual, motor de vistas multi-cuadrante, gestor de snapshots, funciones analíticas avanzadas y responsividad móvil.
 **Depende de:** Fase 1B
 
-### Componentes
+### Componentes — Backlog Post-Fase 1
 
-| Tarea | Sección DDS | Complejidad |
-|:------|:----------:|:-----------:|
-| RAG: vectorización del corpus + búsqueda por similitud | 4.5 | 🟡 |
-| Corpus RAG: fragmentación de fuentes primarias | 4.5.1 | 🟡 |
-| LLM local: Transformers.js + WebGPU (Tier 2) | 2.0 | 🔴 |
-| LLM CPU: ONNX Runtime Web (Tier 1) | 2.0 | 🟡 |
-| Ecualización Semántica ("suena encajonado" → PEQ) | 4.4 | 🟡 |
-| UX Adaptativa: niveles Básico/Intermedio/Avanzado | 4.9 | 🟡 |
-| Tiered Prompts (mensajes adaptativos por nivel de usuario) | 4.9 | 🟢 |
-| Glosario Contextual vinculado al RAG | 4.9 | 🟢 |
-| Tutorial Introductorio de Sonido en Vivo | 4.9 | 🟡 |
-| Plantillas estáticas pre-compiladas para Tier 0 | 2.1 | 🟢 |
+| Tarea | Ref | Complejidad |
+|:------|:---:|:-----------:|
+| **Procesamiento Dual Híbrido (Fast-Path / Slow-Path):** Fast-Path con detección de Showstoppers y RTA en vivo; Slow-Path con FFT masiva offline | DDS 2.2 | 🟡 |
+| **Degradación Automática (Modo Ciego):** abortar Fast-Path si CPU insuficiente, garantizando grabación limpia | DDS 2.2 | 🟢 |
+| **APST Builder — Formato WAV:** generación principal en `.wav` PCM sin compresión para máxima compat. con consolas USB | DDS 2.5 | 🟢 |
+| **Modo Escucha Offline:** escucha pasiva esperando trigger FSK + descarga de archivos WAV de la secuencia activa | DDS 2.5, 4.13 | 🟡 |
+| **Segmento `X` (Crosstalk):** evaluación de diafonía, opcional en la UI para cables mono | DDS 4.13 | 🟡 |
+| **Testeador de Cables extendido** (`V P N X`): bucles de masa, blindaje, **Cable Score** exportable | DDS 4.13 | 🟡 |
+| Coherencia real cableada en UI (reemplazar hardcode 0.85) | Informe 3.4 | 🟢 |
+| Perfiles Agnósticos formales (curvas de compensación reales) | Informe 3.3 | 🟡 |
+| APST Builder — matriz completa de ~57 archivos en CI/CD | Informe 3.5 | 🟢 |
+
+### Componentes — UI de Medición (según `docs/UX_Medicion.md`)
+
+| Tarea | Ref UX | Complejidad |
+|:------|:------:|:-----------:|
+| Layout 100vw/100vh sin scroll; estructura Sidebar + Main View + Header | §1 | 🟢 |
+| Sidebar tabulado: Pestaña Secuencial (progreso en vivo + resultados numéricos + disparo offline/local) | §2A | 🟡 |
+| Pestaña Manual: Generador de señales (R. Rosa/Blanco/Rojo, Seno, Sweep) + selección de canal de salida | §2B | 🟡 |
+| Motor de Vistas Multi-cuadrante: grillas 1×1 hasta 3×2, selector de métrica por cuadrante con modal de configuración | §3 | 🔴 |
+| Mediciones disponibles por cuadrante: RTA, TF Magnitud, Fase, Coherencia, Espectro, Nivel, Numérico, IR, Delay de Grupo | §3 | 🟡 |
+| Trace Engine: superposición con presets de compatibilidad, estilos (sólido/dashed/fill), colores distintos | §3 | 🟡 |
+| Grilla con ejes y referencias en los bordes; cursor crosshair con valores dinámicos; controles de escala (scroll/pinch) | §3 | 🟡 |
+| Smoothing por octava (1/3 – 1/48); Coherence Blanking configurable; Phase Unwrap | §3 (Avanzado) | 🟡 |
+| Gestor de Snapshots compartido: auto-save post-secuencia, manual-save, Y-Offset, íconos distintivos, ordenar por ubicación/fecha | §4 | 🟡 |
+| Responsividad móvil: Bottom Sheet/Drawer, grilla ≤2×1 con swipe, modales fullscreen, hit targets ≥44px | §1 | 🟡 |
+| Temas de contraste Sol/Oscuro (switch en Header) | §1 | 🟢 |
+| Hotkeys: Espacio=Snapshot, D=Find Delay, 1–9=toggle visibilidad | §5 | 🟢 |
 
 ### Criterios de Aceptación
-- [ ] "¿Por qué suena nasal?" genera una respuesta coherente con sugerencia de EQ
-- [ ] El RAG recupera fragmentos relevantes del corpus técnico
-- [ ] En Tier 0 (sin IA), las plantillas estáticas cubren los diagnósticos comunes
+- [ ] El layout se ancla a 100vw/100vh sin generar scroll en ningún viewport
+- [ ] En escritorio, sidebar fijo y hasta 6 cuadrantes configurables independientemente
+- [ ] En móvil portrait, sidebar colapsa en Bottom Sheet y máx. 2 cuadrantes (swipe para más)
+- [ ] El Gestor de Snapshots es accesible desde ambas pestañas con íconos distintivos (Secuencial vs Manual)
+- [ ] Coherence Blanking enmascara trazos donde γ² < umbral definible
+- [ ] El Modo Ciego se activa automáticamente en Tier 0 sin interrumpir la grabación
+- [ ] El Testeador de Cables calcula y muestra el Cable Score; el Segmento X es opcional
+- [ ] El botón dividido de "Escucha Offline" descarga los WAV correctos para la secuencia seleccionada
 
 ---
 
-## Fase 3 — Diagnóstico en Vivo (Fast-Rail + AFE)
-**Objetivo:** Dashboard de operación con alertas inteligentes en tiempo real.
-**Depende de:** Fase 1A + Fase 2
+## Fase 2B — Shell de Navegación Principal
+**Objetivo:** Implementar la estructura global de la aplicación (`docs/Organizacion_interfaz.md`) e integrar la herramienta de medición standalone como un módulo funcional dentro del flujo.
+**Depende de:** Fase 2A
 
 ### Componentes
 
-| Tarea | Sección DDS | Complejidad |
+| Tarea | Sección UX | Complejidad |
 |:------|:----------:|:-----------:|
-| Algoritmo AFE: detección de feedback (crecimiento + tonalidad) | 4.6.1 | 🟡 |
-| Fast-Rail: 5 heurísticas (feedback, clipping, proximidad, sibilancia, caja) | 4.7.1 | 🟡 |
-| Smart Toasts con Indicador de Confianza (🟢/🟡/🔴) | 4.7.1 | 🟡 |
-| Health Score (1-10) en el dashboard | 4.7.1 | 🟢 |
-| Carril Semántico para diagnósticos complejos | 4.7.1 | 🟡 |
-| Waterfall Plot (2D Tier 0, 3D Tier 2) | 4.7.1 | 🟡 |
-| Monitoreo SPL opcional | 4.7.1 | 🟢 |
-| Botón de Pánico | 4.8.2 | 🟢 |
-| Macro-Perfiles de Orador (One-Tap) | 4.10 | 🟢 |
-| Detector de Técnica de Micrófono | 4.10 | 🟡 |
-| Segmento `R` (Ring-Out con mic vocal real) | 4.13 | 🟡 |
-| Modo Ensayo / Rehearsal Mode + Cheat Sheet | 4.3.2b | 🟢 |
-| Promediado Espacial Multi-punto (medición guiada) | 4.3.2a | 🟡 |
+| **Enrutamiento Principal:** 3 bloques mayores (Planificación, Instalación, Operación) | Organizacion_interfaz | 🟢 |
+| **Integración de Calibración:** Montar la UI de medición de la Fase 2A dentro de Instalación → Calibración | Organizacion_interfaz | 🟢 |
+| Scaffolding de vistas vacías para Inventario, Locales, Eventos, Herramientas, etc. | Organizacion_interfaz | 🟢 |
 
 ### Criterios de Aceptación
-- [ ] Un acople simulado dispara un Smart Toast en < 200ms
-- [ ] El Health Score refleja el estado real del sistema
-- [ ] El Botón de Pánico funciona (pantalla completa sin OSC)
+- [ ] La aplicación arranca con el menú principal definido en el documento de organización.
+- [ ] Es posible navegar a "Instalación > Calibración" y operar la UI de medición de Fase 2A.
 
 ---
 
-## Fase 4 — Planificación Espacial, Persistencia y Modelo de Datos
+## Fase 3 — Planificación Espacial, Persistencia y Modelo de Datos
 **Objetivo:** Stage Plot MVP + entidades Inventario/Local/Evento + Venue Memory.
-**Depende de:** Fase 1B
+**Depende de:** Fase 2B
 
 ### Componentes
 
@@ -237,34 +236,62 @@ asistente/
 
 ---
 
-## Fase 5 — Telemetría y Control de Consola
-**Objetivo:** Integración bidireccional con consolas + Guía A/V + backend GAS opcional.
+## Fase 4 — Asistente IA para Medición (Copiloto IA)
+**Objetivo:** El copiloto entiende lenguaje natural, explica sus sugerencias y educa al operador novato, asistiendo específicamente en los procesos de medición y diseño ya implementados.
 **Depende de:** Fase 3
 
 ### Componentes
 
 | Tarea | Sección DDS | Complejidad |
 |:------|:----------:|:-----------:|
+| RAG: vectorización del corpus + búsqueda por similitud | 4.5 | 🟡 |
+| Corpus RAG: fragmentación de fuentes primarias | 4.5.1 | 🟡 |
+| LLM local: Transformers.js + WebGPU (Tier 2) | 2.0 | 🔴 |
+| LLM CPU: ONNX Runtime Web (Tier 1) | 2.0 | 🟡 |
+| Ecualización Semántica ("suena encajonado" → PEQ) | 4.4 | 🟡 |
+| UX Adaptativa: niveles Básico/Intermedio/Avanzado | 4.9 | 🟡 |
+| Tiered Prompts (mensajes adaptativos por nivel de usuario) | 4.9 | 🟢 |
+| Glosario Contextual vinculado al RAG | 4.9 | 🟢 |
+| Tutorial Introductorio de Sonido en Vivo | 4.9 | 🟡 |
+| Plantillas estáticas pre-compiladas para Tier 0 | 2.1 | 🟢 |
+
+### Criterios de Aceptación
+- [ ] "¿Por qué suena nasal?" genera una respuesta coherente con sugerencia de EQ
+- [ ] El RAG recupera fragmentos relevantes del corpus técnico
+- [ ] En Tier 0 (sin IA), las plantillas estáticas cubren los diagnósticos comunes
+
+---
+
+## Fase 5 — Copiloto en Vivo (Fast-Rail, AFE, Telemetría, OSC)
+**Objetivo:** Dashboard de operación en tiempo real con integración bidireccional a consolas, telemetría y detección heurística de problemas (Fast-Rail).
+**Depende de:** Fase 4
+
+### Componentes
+
+| Tarea | Sección DDS | Complejidad |
+|:------|:----------:|:-----------:|
+| Algoritmo AFE: detección de feedback (crecimiento + tonalidad) | 4.6.1 | 🟡 |
+| Fast-Rail: 5 heurísticas (feedback, clipping, proximidad, sibilancia, caja) | 4.7.1 | 🟡 |
+| Smart Toasts con Indicador de Confianza (🟢/🟡/🔴) | 4.7.1 | 🟡 |
+| Health Score (1-10) en el dashboard | 4.7.1 | 🟢 |
+| Carril Semántico para diagnósticos complejos | 4.7.1 | 🟡 |
+| Waterfall Plot (2D Tier 0, 3D Tier 2) | 4.7.1 | 🟡 |
 | Cliente OSC bidireccional (enviar/recibir) | 4.2 | 🟡 |
 | Web MIDI API para consolas USB | 4.2 | 🟡 |
-| HAL: interfaz de telemetría | 2.4 | 🟡 |
 | Gemelo Digital: lectura de estado (mutes, faders, EQ, meters) | 4.2 | 🟡 |
-| Niveles de Autorización (Estricto / Semiautomático) | 4.2 | 🟢 |
 | Undo/Rollback OSC (Snapshot de Canal) | 4.2 | 🟡 |
-| Auto-descubrimiento mDNS (Tauri) | 4.2 | 🟡 |
 | Modo Centinela: monitoreo pasivo + triage dirigido via Solo | 4.6.2 | 🔴 |
-| Gain Staging Wizard (con y sin telemetría) | 4.7.2 | 🟡 |
-| Hardware Wizard: checklist pre-vuelo + loopback | 4.7.2 | 🟡 |
 | Guía de A/V: ingesta JSON + timeline + alertas mute/unmute | 4.11 | 🟡 |
-| Suspensión AFE en secciones de video | 4.11 | 🟢 |
 | Integración GAS opcional (Nivel 3 de persistencia) | 2.6 | 🟡 |
 | Telemetría Distribuida: mapa de calor SPL/STI | 4.14 | 🟡 |
 | Calibración Distribuida (Listen-Only Mode) | 4.13 | 🟡 |
+| Botón de Pánico | 4.8.2 | 🟢 |
 
 ### Criterios de Aceptación
+- [ ] Un acople simulado dispara un Smart Toast en < 200ms
+- [ ] El Health Score refleja el estado real del sistema
 - [ ] La app lee los meters de una X32 en tiempo real
 - [ ] Un comando OSC enviado se puede deshacer
-- [ ] La Guía de A/V alerta si un mic está muteado cuando debería estar activo
 - [ ] El mapa de calor muestra datos de nodos calibrados distribuidos
 
 ---
@@ -290,24 +317,24 @@ asistente/
 ```mermaid
 graph TD
     F0["Fase 0 ✅<br/>(Scaffolding + HAL)"]
-    PF["Pre-Fase<br/>(Deudas F0 + APST Builder)"]
-    F1A["Fase 1A<br/>APST Core + DSP<br/>(FSK + Goertzel + TF)"]
-    F1B["Fase 1B<br/>Calibración Interactiva<br/>(AutoEq + Trace Math)"]
-    F2["Fase 2<br/>Copiloto IA<br/>(RAG + LLM + UX)"]
-    F3["Fase 3<br/>Diagnóstico en Vivo<br/>(Fast-Rail + AFE)"]
-    F4["Fase 4<br/>Planificación + Persistencia<br/>(Stage Plot + Inv/Local/Evento)"]
-    F5["Fase 5<br/>Telemetría + Consola<br/>(OSC + GAS + Guía A/V)"]
-    F6["Fase 6<br/>Simulación Avanzada<br/>(ISM + GLL + SPA)"]
+    PF["Pre-Fase ✅<br/>(Deudas F0 + APST Builder)"]
+    F1A["Fase 1A ✅<br/>APST Core + DSP<br/>(FSK + Goertzel + TF)"]
+    F1B["Fase 1B ✅<br/>Calibración Interactiva<br/>(AutoEq + Trace Math)"]
+    F2A["Fase 2A<br/>UI Medición Avanzada<br/>(Standalone Mode)"]
+    F2B["Fase 2B<br/>Shell de Navegación<br/>(Integración SPA)"]
+    F3["Fase 3<br/>Planificación Espacial<br/>(Stage Plot + Inv/Local/Evento)"]
+    F4["Fase 4<br/>Asistente IA<br/>(RAG + LLM aplicado a Datos)"]
+    F5["Fase 5<br/>Copiloto en Vivo<br/>(Telemetría OSC + Fast-Rail + AFE)"]
+    F6["Fase 6<br/>Simulación Avanzada<br/>(ISM + GLL)"]
 
     F0 --> PF
     PF --> F1A
     F1A --> F1B
-    F1B --> F2
-    F2 --> F3
-    F1A --> F3
-    F1B --> F4
-    F3 --> F5
-    F4 --> F6
+    F1B --> F2A
+    F2A --> F2B
+    F2B --> F3
+    F3 --> F4
+    F4 --> F5
     F5 --> F6
 ```
 
@@ -315,14 +342,15 @@ graph TD
 
 ## Resumen Ejecutivo
 
-| Fase | Entregable | Módulos DDS | Bloque UX | Principio |
+| Fase | Entregable | Módulos DDS / UX | Bloque UX | Principio |
 |:----:|:-----------|:------------|:----------|:----------|
 | **0** ✅ | Scaffolding + HAL + RTA básico | 2.0, 2.1, 2.4 | — | Que suene |
-| **Pre** | Motor FFT propio + Ruido Rosa + APST Builder CLI | 2.2, 2.5 | — | Que suene (cierre) |
-| **1A** | Orquestador APST funcional + TF dual-canal | 2.2, 2.3, 4.13 | Calibración | Que mida (FSK) |
-| **1B** | AutoEq + Trace Math + STI-Est | 4.3, 4.7.1 | Calibración | Que mida (interactivo) |
-| **2** | Copiloto conversacional con IA | 4.4, 4.5, 4.9 | Referencia | Que explique |
-| **3** | Dashboard con alertas en tiempo real | 4.6, 4.7, 4.10 | Copiloto | Que alerte |
-| **4** | Stage Plot + Inventario/Local/Evento + Persistencia | 4.1, 4.1.3, 4.8, 4.12 | Planificación | Que recuerde |
-| **5** | Control de consola + GAS + Telemetría | 4.2, 4.11, 4.14, 2.6 | Operación | Que controle |
-| **6** | Simulación predictiva avanzada + integración SPA | 4.1 (full), 9 | Planificación+ | Que prediga |
+| **Pre** ✅ | Motor FFT propio + Ruido Rosa + APST Builder CLI | 2.2, 2.5 | — | Que suene (cierre) |
+| **1A** ✅ | Orquestador APST funcional + TF dual-canal | 2.2, 2.3, 4.13 | Calibración | Que mida (FSK) |
+| **1B** ✅ | AutoEq + Trace Math + STI-Est | 4.3, 4.7.1 | Calibración | Que mida (interactivo) |
+| **2A** | UI Medición multi-cuadrante + Backlog post-F1 | DDS 2.2/2.5/4.13, UX_Medicion | Calibración | Que mida (profesional) |
+| **2B** | Shell de Navegación + SPA Routing | Organizacion_interfaz | Todos | Que navegue |
+| **3** | Stage Plot + Inventario/Local/Evento + Persistencia | 4.1, 4.1.3, 4.8, 4.12 | Planificación | Que recuerde |
+| **4** | Asistente IA para Medición y Diseño (RAG + LLM) | 4.4, 4.5, 4.9 | Referencia | Que explique |
+| **5** | Copiloto en Vivo: Fast-Rail, AFE, Telemetría, OSC, GAS | 4.2, 4.6, 4.7, 4.11, 4.14 | Operación | Que alerte y controle |
+| **6** | Simulación predictiva avanzada | 4.1 (full), 9 | Planificación+ | Que prediga |

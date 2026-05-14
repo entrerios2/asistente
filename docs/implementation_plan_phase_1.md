@@ -1,6 +1,8 @@
-# Implementación Fase 1: APST Core + Calibración Interactiva
+# Implementación Fase 1: APST Core + Calibración Interactiva ✅ COMPLETADA
 
-Este documento cubre las dos sub-fases de medición: **Fase 1A** (infraestructura APST y DSP core) y **Fase 1B** (calibración interactiva con AutoEq).
+> **Estado:** Fase 1A y 1B completadas. Los ítems de backlog y la nueva interfaz de medición avanzada (UX_Medicion.md) se implementarán en la **Fase 2A**. Ver `roadmap.md` para el detalle actualizado.
+
+Este documento cubre las dos sub-fases de medición implementadas: **Fase 1A** (infraestructura APST y DSP core) y **Fase 1B** (calibración interactiva con AutoEq).
 
 ---
 
