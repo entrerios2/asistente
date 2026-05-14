@@ -17,7 +17,7 @@
 <div class="view-grid layout-{layout}">
     {#each Array(quadrants) as _, i}
         <Quadrant id="q{i+1}" />
-    {each}
+    {/each}
 </div>
 
 <style>
