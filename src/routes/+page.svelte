@@ -4,6 +4,8 @@
 	import { getAudioProvider } from '$lib/hal';
 	import type { AudioBufferChunk } from '$lib/hal/types';
 	import RTA from '../components/RTA.svelte';
+	import TraceMath from '../components/TraceMath.svelte';
+	import FilterList from '../components/FilterList.svelte';
 
 	let tier = $state<string | null>(null);
 	let isCapturing = $state(false);
@@ -45,8 +47,13 @@
 		</div>
 	</header>
 
-	<section class="w-full max-w-5xl space-y-6">
+	<section class="w-full max-w-5xl space-y-12">
 		<RTA {audioData} />
+		
+		<div class="grid grid-cols-1 gap-8">
+			<TraceMath />
+			<FilterList />
+		</div>
 	</section>
 
 	<footer class="flex flex-col items-center gap-4">
