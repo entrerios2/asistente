@@ -88,12 +88,12 @@ asistente/
 > **APST Builder:** Utilidad de línea de comandos en Node.js/TypeScript que pre-renderiza las secuencias acústicas y cabeceras FSK como archivos `.flac` lossless. La lógica de síntesis (tonos, sweeps, FSK encoding) es reutilizable en el browser para generación en tiempo real futura (Tier 2). Ver especificación completa en [Protocolo APST §2.5](./Protocolo_APST.md).
 
 ### Criterios de Aceptación
-- [ ] El RTA funciona con el motor FFT propio (sin `AnalyserNode`)
-- [ ] El código DSP no importa Web Audio API directamente (solo HAL)
-- [ ] El Ruido Rosa suena limpio por los altavoces
-- [ ] La PWA se despliega y es instalable desde `entrerios2.github.io/asistente`
-- [ ] El APST Builder genera los 12 segmentos atómicos + 7 secuencias compuestas en FLAC
-- [ ] En Tauri, el selector de dispositivos enumera todas las interfaces de audio disponibles (WASAPI, ASIO si hay drivers) y permite seleccionar entrada/salida independientemente
+- [x] El RTA funciona con el motor FFT propio (sin `AnalyserNode`)
+- [x] El código DSP no importa Web Audio API directamente (solo HAL)
+- [x] El Ruido Rosa suena limpio por los altavoces
+- [x] La PWA se despliega y es instalable desde `entrerios2.github.io/asistente`
+- [x] El APST Builder genera los 12 segmentos atómicos + 7 secuencias compuestas en FLAC
+- [x] En Tauri, el selector de dispositivos enumera todas las interfaces de audio disponibles (WASAPI, ASIO si hay drivers) y permite seleccionar entrada/salida independientemente
 
 ---
 
