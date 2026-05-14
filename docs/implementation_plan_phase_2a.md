@@ -98,3 +98,33 @@ El lienzo principal deja de ser un gráfico único para convertirse en una grill
 - **Hit Targets:** Auditar todos los botones del nuevo layout (tuerquitas, play, tabs) para asegurar que tengan clases como `min-w-[44px] min-h-[44px]`.
 - **Modales a Pantalla Completa:** En dispositivos móviles, la tuerca de configuración y el panel de Snapshots usarán modales *fullscreen* absolutos.
 - **Hotkeys:** Instalar `window.addEventListener('keydown')` para atajar la tecla `Espacio` (guardar snapshot del cuadrante en foco) y `D` (Find Delay automático).
+
+---
+
+## 5. Fase 2A.1: Refactorización UX/UI
+
+La implementación original requiere ajustes para alinearse estrictamente con `UX_Medicion.md`. Todos los títulos usarán formato de mayúsculas de español (ej. "Gestor de instantáneas"). Todos los textos de la interfaz deben estar estrictamente en español. Además, **no se deben utilizar fondos con blur (`backdrop-filter`)** en ningún componente para preservar los recursos del sistema.
+
+### 5.1. Cabecera global
+- **[NEW] `src/components/medicion/Header.svelte`**
+  - Selector de interfaz (HAL), estado global, reloj/SPL y switch de tema.
+  - Integración en el layout de `+page.svelte`.
+
+### 5.2. Correcciones en panel lateral y HAL
+- **[MODIFY] `src/lib/hal/types.ts` y `WebAudioProvider.ts`:**
+  - Unificar y extender la generación de señales con un método maestro `playGenerator(type, active, freq, level, routing)`.
+  - Implementar generadores de ruido blanco y barrido (sweep).
+- **[MODIFY] `src/components/medicion/Sidebar.svelte`**
+  - **Pestaña secuencial:** Selector dropdown de secuencias, "Split Button" para Iniciar/Descargar, y resultados numéricos junto a los checks de progreso.
+  - **Pestaña manual:** Agregar controles de frecuencia, nivel, ruteo (L/R/Stereo) y botón `Find Delay`. Enlazar dichos controles en tiempo real al nuevo método del HAL.
+
+### 5.3. Interacción en cuadrante (gestos) y métricas
+- **[MODIFY] `src/components/medicion/Quadrant.svelte`**
+  - **Métricas:** Soporte para espectro, nivel, respuesta al impulso (IR) y retardo de grupo.
+  - **Gestos:** Implementar lógica de paneo (arrastre) y zoom (pellizco/rueda) transformando dinámicamente las escalas (`scaleX`, `scaleY`, `offsetX`, `offsetY`).
+  - **Interfaz:** Reemplazar textos por íconos de engranaje, incluir botón de desenvolvimiento de fase, opciones extra de suavizado (1/6, 1/24) y toggle de ocultamiento por coherencia. Eliminar cualquier estilo de `backdrop-filter: blur`.
+
+### 5.4. Mejoras en gestor de instantáneas
+- **[MODIFY] `src/components/medicion/SnapshotPanel.svelte`**
+  - Diferenciar visualmente con íconos las capturas manuales de las secuenciales. Asegurarse de que el título UI sea "Instantáneas" y eliminar cualquier fondo con blur.
+  - Añadir selectores para ordenar la lista por fecha o ubicación.
