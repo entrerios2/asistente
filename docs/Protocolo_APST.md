@@ -308,18 +308,18 @@ const baseLatency = audioContext.baseLatency + audioContext.outputLatency;
 const searchWindowMs = Math.max(50, baseLatency * 1000 + 30); // +30ms margen acústico
 ```
 
-### Modelo híbrido de análisis FSK (Real-Time vs Offline Buffer)
+### Procesamiento Dual Híbrido (Fast-Path / Slow-Path)
 
-Para secuencias APST largas (ej. Sweep S de 20 segundos) o entornos de hardware limitados, el sistema implementa un modelo de procesamiento híbrido:
+Para secuencias APST largas (ej. Sweep S de 20 segundos) o entornos de hardware limitados, el sistema implementa un modelo de procesamiento dual concurrente:
 
-1. **AudioWorklet como Trigger:** El detector Goertzel en el `AudioWorklet` se mantiene activo en tiempo real escuchando la cabecera FSK. Una vez decodificada, en lugar de procesar todo el bloque en tiempo real, el Worklet inicia la grabación del audio crudo directamente en el `SharedArrayBuffer`.
-2. **Procesamiento Offline en Web Worker:** Al finalizar la secuencia, un Web Worker toma la captura completa del `SharedArrayBuffer` y realiza el análisis matemático pesado sin restricciones de tiempo real, garantizando máxima precisión sin riesgo de *underruns* en el hilo de audio.
+1. **AudioWorklet como Trigger y Grabador:** El detector Goertzel se mantiene activo en tiempo real escuchando la cabecera FSK. Una vez decodificada, inicia la grabación del audio crudo directamente en el `SharedArrayBuffer`.
+2. **Fast-Path (Tiempo Real):** Un worker secundario muy ligero lee el buffer en tiempo real y corre FFTs de baja resolución. Su misión es proveer el RTA en vivo y abortar la medición inmediatamente si detecta un *Showstopper* (clipping masivo, caída a silencio).
+3. **Slow-Path (Offline):** Al finalizar la secuencia, un Web Worker toma la captura completa del `SharedArrayBuffer` y realiza el análisis matemático pesado sin restricciones de tiempo real, garantizando máxima precisión estadística para derivar la Función de Transferencia fina.
 
-El modo de análisis se define dinámicamente según la capacidad del dispositivo (Tier):
-- **Tier 0 / Tier 1 (Dispositivos móviles o limitados):** Offline por defecto.
-- **Tier 2 (Laptops modernas, Apple Silicon):** Real-Time por defecto.
-
-El operador puede forzar cualquiera de estos modos (Automático, Forzar Tiempo Real, Forzar Offline) desde la configuración del analizador.
+**Degradación Automática (Modo Ciego):**
+El modo de análisis se define dinámicamente según la capacidad del dispositivo (Tier) y su carga en tiempo real:
+- Si el CPU está al límite (Event Loop lento o FPS caídos), el orquestador aborta automáticamente el *Fast-Path*.
+- En este estado ("Modo Ciego"), la UI solo muestra un estado de "Grabando..." y no hay detección de showstoppers en tiempo real. Esto garantiza que todos los recursos se dediquen a grabar el audio limpio en el `SharedArrayBuffer` para el *Slow-Path*, evitando *underruns* a costa del feedback visual.
 
 ### Rol del SharedArrayBuffer
 
@@ -1390,6 +1390,7 @@ Las secuencias se escriben como strings de códigos. El catálogo canónico del 
 | `V A M N F P T D R`     | Wizard Base       | ~3 min          | Setup estándar de evento — wizard guiado   |
 | `V A M N S P`           | AutoEq Master     | ~3 min          | AutoEq de alta resolución para derivar FIR |
 | `V H`                   | Headroom Audit    | ~15s            | Auditoría de linealidad / compresión       |
+| `V P N X`               | Cable Tester      | ~45s            | Diagnóstico de cables en modo loopback     |
 | `V A M N F P T D X R`   | Full Commission   | ~4 min          | Comisionamiento de nueva instalación       |
 | `V A M N F P T D X R I` | Full + IR Capture | ~5 min          | Documentación completa con captura de IR   |
 | `T R`                   | Between-Set Check | ~20s            | Verificación entre presentadores           |

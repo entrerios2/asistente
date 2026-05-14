@@ -70,7 +70,10 @@ El sistema adopta **AudioWorklet** como arquitectura definitiva de captura. La i
 - **Captura (AudioWorklet):** El audio crudo se procesa en bloques secuenciales garantizados dentro del contexto isócrono del AudioWorklet, alimentando un binario WASM local para el cálculo de FFT.
 - **Transferencia (SharedArrayBuffer):** Los resultados del análisis se transfieren al hilo principal mediante `SharedArrayBuffer`, eliminando la sobrecarga de copias de datos entre hilos.
 - **Visualización (Main Thread):** El hilo principal se limita exclusivamente al renderizado visual (Canvas, UI Svelte) y a la lógica de negocio (Smart Toasts, RAG, LLM).
-- **Modelo Híbrido de Análisis FSK (Real-Time vs Offline Buffer):** Para secuencias APST largas (ej. Sweep S de 20s), el `AudioWorklet` actúa únicamente como *trigger* liviano: el detector Goertzel identifica la cabecera FSK (1650/1850 Hz estándar, o 150/200 Hz para subsistemas de baja frecuencia detectados automáticamente por el inventario) e inicia la grabación del audio crudo en el `SharedArrayBuffer`. Al finalizar la secuencia, un **Web Worker** procesa el buffer completo sin restricciones de tiempo, garantizando precisión matemática máxima. El modo se selecciona automáticamente por Tier (Tier 0/1 → Offline por defecto; Tier 2 → Real-Time por defecto) y puede sobreescribirse desde la configuración del analizador: **"Automático (Por Tier)"**, **"Forzar Tiempo Real"** o **"Forzar Offline (Máxima Precisión)"**.
+- **Procesamiento Dual Híbrido (Fast-Path / Slow-Path):** Para secuencias APST largas, el sistema emplea una arquitectura concurrente en dos vías sobre el `SharedArrayBuffer` (iniciado por el detector FSK Goertzel en el `AudioWorklet`):
+  - **Fast-Path (Tiempo Real / Baja Resolución):** Un worker ligero monitorea continuamente el audio entrante. Su propósito es proveer feedback visual fluido en vivo en el `TraceMath` y detectar *Showstoppers* (acoples, caídas a silencio, clipping masivo), abortando la secuencia instantáneamente para proteger los equipos sin obligar al operador a esperar el final de la secuencia.
+    - *Degradación Automática (Modo Ciego):* Si el sistema detecta que el CPU no da abasto (Event Loop Lag excesivo o FPS < 15 en Tier 0), el orquestador aborta dinámicamente el *Fast-Path*. La UI muestra un estado de "Grabando..." y se pierde la detección de *showstoppers*, pero se garantiza el 100% de los recursos para ingestar el audio crudo sin *underruns*.
+  - **Slow-Path (Offline / Alta Resolución):** Si la secuencia finaliza sin errores fatales, un **Web Worker** pesado procesa el buffer completo. Aplica FFTs masivas (ej. 65536 bins) sin restricciones isócronas de tiempo real, garantizando máxima precisión matemática para derivar la Función de Transferencia fina, la Coherencia estadística y la Respuesta al Impulso (Segmento T).
 
 > *Nota: Esta arquitectura requiere que el servidor envíe las cabeceras HTTP `Cross-Origin-Opener-Policy: same-origin` y `Cross-Origin-Embedder-Policy: require-corp` para habilitar `SharedArrayBuffer`. Ver Matriz de Compatibilidad en Sección 6.*
 
@@ -102,13 +105,14 @@ Para lograr el desarrollo en paralelo sin dividir el código, el sistema impleme
 
 Para garantizar la pureza matemática de las señales de prueba y optimizar el rendimiento en dispositivos móviles (Tier 0/1), el sistema se apoya en una utilidad externa de línea de comandos (APST Builder). Este será uno de los primeros módulos a desarrollar en el *roadmap*.
 
-Esta utilidad pre-renderiza las secuencias acústicas completas y sus cabeceras de sincronización, produciendo archivos `.flac` (lossless) que la PWA descargará y reproducirá según sea necesario, evitando la síntesis de audio computacionalmente pesada en tiempo real.
+Esta utilidad pre-renderiza las secuencias acústicas completas y sus cabeceras de sincronización, produciendo archivos de audio que la PWA descargará y reproducirá según sea necesario, evitando la síntesis de audio computacionalmente pesada en tiempo real.
 
 **Características de la matriz de generación:**
 - **Granularidad:** Genera tanto los segmentos atómicos individuales (ej. `Segmento_F`) como las secuencias compuestas pre-ensambladas (ej. `Secuencia_VAF`).
 - **Cabeceras Dinámicas pre-horneadas:** Cada archivo se genera en dos versiones: con cabecera estándar (HF: 1650/1850 Hz) y con cabecera para subwoofers (LF: 150/200 Hz).
 - **Frecuencias de Muestreo (Sample Rates):** Los archivos se renderizan nativamente en las frecuencias de salida más habituales de las interfaces de audio (44.1 kHz, 48 kHz y 96 kHz). La PWA detectará el *sample rate* de su `AudioContext` y descargará la versión exacta para evitar que el navegador aplique algoritmos de *resampling* al vuelo, asegurando precisión *bit-perfect* y cálculos de fase inalterados.
-- **Uso Externo (Playback USB):** Al ser archivos `.flac` pre-generados, pueden exportarse a un pendrive USB para que el operador reproduzca las secuencias directamente desde la consola digital, utilizando la tablet o teléfono exclusivamente como analizador inalámbrico.
+- **Uso Externo (Playback USB) y Compatibilidad de Formatos:** Los archivos se generan nativamente en formato **`.wav` (PCM sin compresión)** para garantizar máxima compatibilidad con el reproductor USB de cualquier consola digital. Opcionalmente se generan en `.flac` para ahorrar espacio en la caché de la PWA.
+  - *Advertencia Crítica sobre MP3/Lossy:* El sistema prohíbe el uso de formatos con pérdida (MP3, AAC, OGG) para la reproducción de secuencias APST. La compresión psicoacústica destruye irreversiblemente la información de fase (invalidando el Segmento P) e introduce *pre-ringing* y recortes en alta frecuencia que invalidan los cálculos de Impulso (Segmento T) y Respuesta (Segmento F).
 
 ### 2.6. Modelo de persistencia escalonado y extensión backend opcional (GAS)
 
@@ -550,7 +554,7 @@ Protocolo de calibración asistida por secuencias de audio FSK. Reemplaza el flu
 
 1. **Wizard Asistido:** El orquestador guía la secuencia paso a paso. El usuario puede saltarse pasos opcionales (*Escape Hatch*).
 2. **Manual a Voluntad:** El operador compone libremente cualquier cadena válida de segmentos.
-3. **Testeador de Cables (Loopback):** Prueba de continuidad, polaridad y diafonía de cables sin necesidad de altavoces encendidos.
+3. **Testeador de Cables (Loopback):** Prueba de continuidad (`V`), polaridad (`P`), bucles de masa/ruido de blindaje (`N`) y diafonía opcional (`X`) sin altavoces encendidos. A partir de estas métricas, el sistema calcula un **Puntaje de Salud (Cable Score)** basado en la atenuación y la SNR. Al integrarse con el módulo logístico, este puntaje se almacena en la base de datos asociado al ID único del cable, permitiendo registrar su degradación histórica y predecir fallas antes del evento.
 
 **Calibración Distribuida (Listen-Only Mode):** Dispositivos en la audiencia, previamente incorporados al evento, pueden escuchar los Segmentos `A` y `F` para autocalibrar su cápsula MEMS y convertirse en nodos de medición SPL/STI (ver §4.14).
 
