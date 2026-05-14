@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import { calibrationStore } from '$lib/stores/calibrationStore';
+    import { calibrationStore } from '$lib/stores/calibrationStore.svelte';
 
     let canvas: HTMLCanvasElement;
     let container: HTMLDivElement;

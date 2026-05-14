@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { calibrationStore } from '$lib/stores/calibrationStore';
+    import { calibrationStore } from '$lib/stores/calibrationStore.svelte';
 
     const filters = calibrationStore.suggestedFilters;
 

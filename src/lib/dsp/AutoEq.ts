@@ -1,4 +1,4 @@
-import type { EQFilter } from '../stores/calibrationStore';
+import type { EQFilter } from '../stores/calibrationStore.svelte';
 
 /**
  * AutoEq: Motor de derivación automática de filtros paramétricos.
