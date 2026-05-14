@@ -3,6 +3,7 @@
     import { Orchestrator, type OrchestratorEvent } from '$lib/dsp/apst/Orchestrator';
     import { Player } from '$lib/dsp/apst/Player';
     import { fade, slide } from 'svelte/transition';
+    import { traceManager } from '$lib/stores/traceManager.svelte';
 
     const provider = getAudioProvider();
     const player = new Player(provider);
@@ -57,7 +58,10 @@
     async function startLocal() {
         try {
             errorToast = null;
-            await provider.startCapture({ onAudioData: () => {} });
+            await provider.startCapture({ 
+                onAudioData: () => {},
+                onFrequencyData: (data) => traceManager.updateLiveTrace('live-1', data)
+            });
             await orchestrator.runSequence("V A N F P X");
         } catch (e) {
             console.error(e);
@@ -69,6 +73,25 @@
         link.href = '/signals/apst_full_sequence_48k.wav';
         link.download = 'apst_full_sequence_48k.wav';
         link.click();
+    }
+
+    function calculateDelay() {
+        console.log("Iniciando cálculo de retardo (Simulación)...");
+        // Simulamos un retardo aleatorio entre 10 y 100ms
+        const simulatedDelay = (Math.random() * 90 + 10).toFixed(2);
+        delayMs = parseFloat(simulatedDelay);
+        console.log(`Retardo detectado: ${delayMs} ms`);
+    }
+
+    async function toggleGenerator() {
+        genActive = !genActive;
+        // Al encender manualmente, nos aseguramos de que el motor esté listo
+        if (genActive) {
+            await provider.startCapture({
+                onAudioData: () => {},
+                onFrequencyData: (data) => traceManager.updateLiveTrace('live-1', data)
+            });
+        }
     }
 </script>
 
@@ -180,12 +203,12 @@
                 <button 
                     class="btn-generator" 
                     class:active={genActive}
-                    onclick={() => genActive = !genActive}
+                    onclick={toggleGenerator}
                 >
                     {genActive ? 'Detener generador' : 'Prender generador'}
                 </button>
 
-                <button class="btn-find-delay">Calcular retardo</button>
+                <button class="btn-find-delay" onclick={calculateDelay}>Calcular retardo</button>
             </div>
         {/if}
     </div>

@@ -56,6 +56,18 @@ class TraceManager {
     }
 
     /**
+     * Actualiza los datos de un trazo Live en tiempo real.
+     */
+    updateLiveTrace(id: string, data: Float32Array) {
+        const trace = this.traces.find(t => t.id === id);
+        if (trace) {
+            // Muta los datos y fuerza la reactividad reemplazando la referencia del array
+            // Svelte 5 $state detecta la reasignación de la propiedad 'data'
+            trace.data = new Float32Array(data);
+        }
+    }
+
+    /**
      * Captura el estado actual de un trazo live y lo guarda como snapshot.
      */
     captureSnapshot(liveTraceId: string, name?: string, source: 'manual' | 'secuencial' = 'manual') {

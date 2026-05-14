@@ -7,16 +7,18 @@ export class WebAudioProvider implements AudioProvider {
 	private workletNode: AudioWorkletNode | null = null;
 	private sab: SharedArrayBuffer | null = null;
 	private sharedArray: Float32Array | null = null;
-	private animationFrameId: number | null = null;
-	
-	// Nodos del generador universal
-	private generatorNode: AudioNode | null = null;
-	private generatorGainNode: GainNode | null = null;
-	private pannerNode: StereoPannerNode | null = null;
+	private analyserNode: AnalyserNode | null = null;
+	private freqDataArray: Float32Array | null = null;
 
 	async startCapture(listener: AudioListener): Promise<void> {
 		// 1. AudioContext con sample rate fijo a 48kHz
-		this.audioContext = new AudioContext({ sampleRate: 48000 });
+		if (!this.audioContext) {
+			this.audioContext = new AudioContext({ sampleRate: 48000 });
+		}
+
+		if (this.audioContext.state === 'suspended') {
+			await this.audioContext.resume();
+		}
 
 		// 2. Pedir permisos con procesamiento desactivado
 		this.stream = await navigator.mediaDevices.getUserMedia({
@@ -32,7 +34,14 @@ export class WebAudioProvider implements AudioProvider {
 
 		const source = this.audioContext.createMediaStreamSource(this.stream);
 
-		// 4. Configurar SharedArrayBuffer (1 segundo a 48kHz)
+		// 4. Configurar Analyser para RTA
+		this.analyserNode = this.audioContext.createAnalyser();
+		this.analyserNode.fftSize = 4096;
+		this.analyserNode.smoothingTimeConstant = 0;
+		this.freqDataArray = new Float32Array(this.analyserNode.frequencyBinCount);
+		source.connect(this.analyserNode);
+
+		// 5. Configurar SharedArrayBuffer (1 segundo a 48kHz)
 		const bufferSize = 48000;
 		this.sab = new SharedArrayBuffer(bufferSize * Float32Array.BYTES_PER_ELEMENT);
 		this.sharedArray = new Float32Array(this.sab);
@@ -44,13 +53,17 @@ export class WebAudioProvider implements AudioProvider {
 
 		source.connect(this.workletNode);
 
-		// 5. Lectura proactiva mediante requestAnimationFrame
+		// 6. Lectura proactiva mediante requestAnimationFrame
 		const readData = () => {
 			if (this.sharedArray) {
-				// Pasamos el buffer completo al listener.
-				// El consumidor deberá manejar la lógica de Ring Buffer mediante índices.
 				listener.onAudioData(this.sharedArray);
 			}
+
+			if (this.analyserNode && this.freqDataArray && listener.onFrequencyData) {
+				this.analyserNode.getFloatFrequencyData(this.freqDataArray);
+				listener.onFrequencyData(this.freqDataArray);
+			}
+
 			this.animationFrameId = requestAnimationFrame(readData);
 		};
 
@@ -60,12 +73,15 @@ export class WebAudioProvider implements AudioProvider {
 	stopCapture(): void {
 		if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
 		if (this.workletNode) this.workletNode.disconnect();
+		if (this.analyserNode) this.analyserNode.disconnect();
 		if (this.stream) this.stream.getTracks().forEach(track => track.stop());
 		if (this.audioContext) this.audioContext.close();
 		
 		this.audioContext = null;
 		this.stream = null;
 		this.workletNode = null;
+		this.analyserNode = null;
+		this.freqDataArray = null;
 	}
 
 	playGenerator(type: 'pink' | 'white' | 'sweep' | 'sine', active: boolean, freq: number, level: number, routing: 'L' | 'R' | 'Stereo'): void {
