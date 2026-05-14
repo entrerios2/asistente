@@ -1,24 +1,19 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { invoke } from '@tauri-apps/api/core';
-
-	interface AudioDevice {
-		id: string;
-		name: string;
-		backend: string;
-		direction: 'input' | 'output';
-	}
+	import { getAudioProvider } from '$lib/hal';
+    import type { AudioDevice } from '$lib/hal/types';
 
 	let devices = $state<AudioDevice[]>([]);
 	let selectedInput = $state('');
 	let selectedOutput = $state('');
 
-	const isTauri = typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__;
+    const hal = getAudioProvider();
+    const canListDevices = !!hal.listDevices;
 
 	onMount(async () => {
-		if (isTauri) {
+		if (hal.listDevices) {
 			try {
-				devices = await invoke('list_audio_devices');
+				devices = await hal.listDevices();
 			} catch (err) {
 				console.error('Fallo al obtener dispositivos de audio:', err);
 			}
@@ -28,13 +23,17 @@
 	async function updateInput(e: Event) {
 		const id = (e.target as HTMLSelectElement).value;
 		selectedInput = id;
-		if (isTauri) await invoke('select_audio_device', { id, direction: 'input' });
+		if (hal.selectDevice) {
+            await hal.selectDevice(id, 'input');
+        }
 	}
 
 	async function updateOutput(e: Event) {
 		const id = (e.target as HTMLSelectElement).value;
 		selectedOutput = id;
-		if (isTauri) await invoke('select_audio_device', { id, direction: 'output' });
+		if (hal.selectDevice) {
+            await hal.selectDevice(id, 'output');
+        }
 	}
 
 	// Agrupación de dispositivos por Backend (ASIO, WASAPI, etc)
@@ -87,7 +86,7 @@
 	</div>
 </div>
 
-{#if !isTauri}
+{#if !canListDevices}
 	<p class="text-xs text-slate-400 mt-2 italic">
 		* Los drivers ASIO/Nativos solo están disponibles en la versión de escritorio.
 	</p>

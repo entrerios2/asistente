@@ -1,4 +1,5 @@
-import type { AudioProvider, AudioListener, AudioBufferChunk } from '../types';
+import { invoke } from '@tauri-apps/api/core';
+import type { AudioProvider, AudioListener, AudioBufferChunk, AudioDevice } from '../types';
 
 export class TauriAudioProvider implements AudioProvider {
 	private intervalId: any = null;
@@ -23,4 +24,12 @@ export class TauriAudioProvider implements AudioProvider {
 	playPinkNoise(active: boolean): void {
 		console.info(`Tauri Pink Noise: ${active ? 'ON (Simulated)' : 'OFF'}`);
 	}
+
+    async listDevices(): Promise<AudioDevice[]> {
+        return await invoke<AudioDevice[]>('list_audio_devices');
+    }
+
+    async selectDevice(id: string, direction: 'input' | 'output'): Promise<void> {
+        await invoke('select_audio_device', { id, direction });
+    }
 }
