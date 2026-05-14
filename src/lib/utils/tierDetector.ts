@@ -17,3 +17,33 @@ export function detectTier(): Tier {
 
 	return 'TIER_0';
 }
+
+/**
+ * Evalúa el lag del Event Loop durante un periodo corto.
+ * @param durationMs Duración de la ventana de evaluación.
+ * @returns Promedio de lag en ms.
+ */
+export async function measureEventLoopLag(durationMs: number = 500): Promise<number> {
+    return new Promise((resolve) => {
+        const start = performance.now();
+        let lastTick = start;
+        let totalLag = 0;
+        let ticks = 0;
+
+        const check = () => {
+            const now = performance.now();
+            const lag = now - lastTick - (1000 / 60); // Asumiendo 60fps (~16.6ms por tick)
+            if (lag > 0) totalLag += lag;
+            ticks++;
+            lastTick = now;
+
+            if (now - start < durationMs) {
+                requestAnimationFrame(check);
+            } else {
+                resolve(totalLag / ticks);
+            }
+        };
+
+        requestAnimationFrame(check);
+    });
+}

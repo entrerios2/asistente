@@ -152,4 +152,8 @@ export class WebAudioProvider implements AudioProvider {
 			console.warn('WebAudioProvider: No se puede registrar el callback porque el workletNode no ha sido inicializado.');
 		}
 	}
+
+	getSharedBuffer(): SharedArrayBuffer | null {
+		return this.sab;
+	}
 }
