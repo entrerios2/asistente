@@ -4,14 +4,15 @@
 
     const quadrants = $derived(
         uiStore.layout === '1x1' ? 1 :
-        uiStore.layout === '2x1' ? 2 :
+        (uiStore.layout === '2x1' || uiStore.layout === '1x2') ? 2 :
+        (uiStore.layout === '1x3' || uiStore.layout === '3x1') ? 3 : // Agregamos por si acaso
         uiStore.layout === '2x2' ? 4 : 6
     );
 </script>
 
 <div class="view-grid layout-{uiStore.layout}">
     {#each Array(quadrants) as _, i}
-        <Quadrant id="q{i+1}" />
+        <Quadrant />
     {/each}
 </div>
 
@@ -19,7 +20,7 @@
     .view-grid {
         display: grid;
         gap: 4px;
-        background: #0a0a0c;
+        background: #050507;
         width: 100%;
         height: 100%;
         padding: 4px;
@@ -28,9 +29,11 @@
     }
 
     .layout-1x1 { grid-template-columns: 1fr; grid-template-rows: 1fr; }
-    .layout-2x1 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr; }
+    .layout-1x2 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr; }
+    .layout-1x3 { grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr; }
+    .layout-2x1 { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
     .layout-2x2 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
-    .layout-3x2 { grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr; }
+    .layout-2x3 { grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr; }
 
     @media (max-width: 768px) {
         .view-grid {

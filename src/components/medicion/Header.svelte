@@ -1,62 +1,41 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
-    import { uiStore } from '$lib/stores/ui.svelte';
+    import { meterStore } from '$lib/stores/meterStore.svelte';
 
-    let devices = $state<MediaDeviceInfo[]>([]);
-    let selectedDevice = $state('');
-
-    onMount(async () => {
-        try {
-            // Pedir permiso primero para obtener etiquetas reales
-            await navigator.mediaDevices.getUserMedia({ audio: true });
-            const allDevices = await navigator.mediaDevices.enumerateDevices();
-            devices = allDevices.filter(d => d.kind === 'audioinput');
-            if (devices.length > 0) selectedDevice = devices[0].deviceId;
-        } catch (e) {
-            console.error('Error enumerando dispositivos:', e);
-        }
-    });
+    function getVuWidth(db: number) {
+        // Normalización: -60 a 0 dB -> 0 a 100%
+        return Math.max(0, Math.min(100, (db + 60) * (100 / 60)));
+    }
 </script>
 
 <header class="global-header">
     <div class="header-left">
-        <div class="selector-group">
-            <span class="label">Micrófono</span>
-            <select bind:value={selectedDevice} class="header-select">
-                {#each devices as device}
-                    <option value={device.deviceId}>{device.label || 'Micrófono desconocido'}</option>
-                {/each}
-            </select>
-        </div>
-    </div>
-
-    <div class="header-center">
-        <div class="selector-group">
-            <span class="label">Cuadrícula</span>
-            <select 
-                value={uiStore.layout} 
-                onchange={(e) => uiStore.setLayout((e.target as HTMLSelectElement).value)}
-                class="header-select"
-            >
-                <option value="1x1">1x1 - Individual</option>
-                <option value="2x1">2x1 - Doble</option>
-                <option value="2x2">2x2 - Cuádruple</option>
-                <option value="3x2">3x2 - Estudio</option>
-            </select>
-        </div>
+        <h1 class="header-title">Herramienta para mediciones de audio</h1>
     </div>
 
     <div class="header-right">
-        <button class="icon-btn" onclick={() => uiStore.toggleTheme()} title="Cambiar tema">
-            {uiStore.isDarkMode ? '🌙' : '☀️'}
-        </button>
-        <button 
-            class="text-btn" 
-            class:active={uiStore.showSnapshots}
-            onclick={() => uiStore.toggleSnapshots()}
-        >
-            {uiStore.showSnapshots ? 'Ocultar instantáneas' : 'Mostrar instantáneas'}
-        </button>
+        <div class="vu-container">
+            <div class="vu-group">
+                <span class="vu-label">IN</span>
+                <div class="vu-bars">
+                    {#each meterStore.inLevels as level}
+                        <div class="vu-track">
+                            <div class="vu-fill in" style="width: {getVuWidth(level)}%"></div>
+                        </div>
+                    {/each}
+                </div>
+            </div>
+
+            <div class="vu-group">
+                <span class="vu-label">OUT</span>
+                <div class="vu-bars">
+                    {#each meterStore.outLevels as level}
+                        <div class="vu-track">
+                            <div class="vu-fill out" style="width: {getVuWidth(level)}%"></div>
+                        </div>
+                    {/each}
+                </div>
+            </div>
+        </div>
     </div>
 </header>
 
@@ -68,73 +47,62 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 0 1rem;
-        color: #e0e0e0;
-        font-family: 'Inter', sans-serif;
-        box-sizing: border-box;
+        padding: 0 20px;
+        color: #fff;
         flex-shrink: 0;
+        z-index: 1000;
     }
 
-    .header-left, .header-center, .header-right {
+    .header-title {
+        font-size: 0.9rem;
+        font-weight: 500;
+        color: #888;
+        margin: 0;
+    }
+
+    .vu-container {
+        display: flex;
+        gap: 30px;
+    }
+
+    .vu-group {
         display: flex;
         align-items: center;
-        gap: 1.5rem;
+        gap: 8px;
     }
 
-    .selector-group {
+    .vu-label {
+        font-size: 0.6rem;
+        font-weight: 900;
+        color: #444;
+        width: 25px;
+    }
+
+    .vu-bars {
         display: flex;
-        align-items: center;
-        gap: 10px;
+        flex-direction: column;
+        gap: 3px;
     }
 
-    .label {
-        font-size: 0.65rem;
-        color: #666;
-        text-transform: uppercase;
-        font-weight: 800;
-        letter-spacing: 0.5px;
-    }
-
-    .header-select {
+    .vu-track {
+        width: 140px;
+        height: 4px;
         background: #1a1a20;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        color: #fff;
-        padding: 4px 10px;
-        border-radius: 6px;
-        font-size: 0.8rem;
-        outline: none;
-        cursor: pointer;
+        border-radius: 2px;
+        overflow: hidden;
     }
 
-    .icon-btn {
-        background: none;
-        border: none;
-        color: #fff;
-        font-size: 1.2rem;
-        cursor: pointer;
-        padding: 4px;
-        border-radius: 6px;
-        transition: background 0.2s;
+    .vu-fill {
+        height: 100%;
+        transition: width 0.05s linear;
+        border-radius: 2px;
     }
 
-    .icon-btn:hover {
-        background: rgba(255, 255, 255, 0.05);
+    .vu-fill.in {
+        background: linear-gradient(90deg, #00ff88, #3b82f6);
     }
 
-    .text-btn {
-        background: transparent;
-        border: 1px solid #3b82f6;
-        color: #3b82f6;
-        padding: 6px 12px;
-        border-radius: 8px;
-        font-size: 0.75rem;
-        font-weight: bold;
-        cursor: pointer;
-        transition: all 0.2s;
-    }
-
-    .text-btn.active {
-        background: #3b82f6;
-        color: #fff;
+    .vu-fill.out {
+        background: linear-gradient(90deg, #facc15, #ef4444);
     }
 </style>

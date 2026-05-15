@@ -10,12 +10,12 @@
 
     let canvas: HTMLCanvasElement;
     let container: HTMLDivElement;
+    let settingsBtn: HTMLButtonElement;
     
     let metric = $state('Magnitud'); 
     let smoothing = $state(1/48); 
-    let coherenceThreshold = $state(0.5);
-    let coherenceMasking = $state(false);
     let showSelector = $state(false);
+    let popoverPos = $state({ top: 0, left: 0 });
 
     // Zoom & Pan state
     let scaleX = $state(1);
@@ -76,21 +76,35 @@
     }
 
     /**
-     * Aplica suavizado fraccional de octava.
+     * Calcula la respuesta en frecuencia de las bandas de EQ.
      */
+    function getEQResponse(f: number): number {
+        let totalGain = 0;
+        traceManager.eqBands.forEach(band => {
+            const fo = band.freq;
+            const G = band.gain;
+            const Q = band.q;
+            
+            // Aproximación de campana (Peaking Filter)
+            const bw = fo / Q;
+            const dist = Math.abs(Math.log2(f / fo));
+            const octBw = bw / fo; 
+            const weight = Math.exp(-Math.pow(dist / (octBw * 1.2), 2));
+            totalGain += G * weight;
+        });
+        return totalGain;
+    }
+
     function smoothData(data: Float32Array, octaveFraction: number): Float32Array {
         if (octaveFraction === 0) return data;
         const smoothed = new Float32Array(data.length);
-        const sr = 48000; // Asumido
-        
+        const sr = 48000;
         for (let i = 0; i < data.length; i++) {
             const freq = (i * sr / 2) / data.length;
             const bandwidth = freq * (Math.pow(2, octaveFraction / 2) - Math.pow(2, -octaveFraction / 2));
             const binWidth = (sr / 2) / data.length;
             const windowSize = Math.max(1, Math.round(bandwidth / binWidth));
-            
-            let sum = 0;
-            let count = 0;
+            let sum = 0, count = 0;
             for (let j = Math.max(0, i - windowSize); j <= Math.min(data.length - 1, i + windowSize); j++) {
                 sum += data[j];
                 count++;
@@ -105,127 +119,120 @@
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        const { width, height } = canvas;
+        const dpr = window.devicePixelRatio || 1;
+        const width = canvas.width / dpr;
+        const height = canvas.height / dpr;
+
         ctx.clearRect(0, 0, width, height);
 
-        // 1. Dibujar Grilla
+        // 1. Grilla
         drawGrid(ctx, width, height);
 
-        // 2. Filtrar y dibujar trazos del manager
-        const relevantTraces = traceManager.traces.filter(t => t.visible && (t.metric === metric || metric === 'Magnitud'));
-        
-        relevantTraces.forEach(trace => {
-            const data = smoothData(trace.data, smoothing);
-            drawTrace(ctx, data, trace, width, height);
+        // 2. Trazo en Vivo (Rojo)
+        const liveTrace = traceManager.traces.find(t => t.id === 'live-1' && t.visible);
+        if (liveTrace) {
+            const data = smoothData(liveTrace.data, smoothing);
+            drawPath(ctx, data, width, height, '#ff4444', 2);
+
+            // 3. Trazo Predictivo (Cian punteado) = Live + EQ
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            const sr = 48000;
+            for (let i = 0; i < data.length; i++) {
+                const freq = (i * sr / 2) / data.length;
+                if (freq < freqMin) continue;
+                const x = freqToX(freq, width);
+                const eqGain = getEQResponse(freq);
+                const y = valToY(data[i] + eqGain, height);
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            }
+            ctx.strokeStyle = '#00ffff';
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        // 4. Trazo EQ (Verde)
+        ctx.beginPath();
+        for (let f = freqMin; f <= freqMax; f *= 1.05) {
+            const x = freqToX(f, width);
+            const y = valToY(getEQResponse(f), height);
+            if (f === freqMin) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = '#00ff88';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // 5. Otros trazos (Snapshots)
+        traceManager.traces.filter(t => t.type === 'snapshot' && t.visible).forEach(t => {
+            drawPath(ctx, t.data, width, height, t.color, 1.5, t.style === 'dashed');
         });
 
-        // 3. Dibujar Crosshair
-        if (showCrosshair) {
-            drawCrosshair(ctx, width, height);
-        }
+        if (showCrosshair) drawCrosshair(ctx, width, height);
 
         requestAnimationFrame(draw);
     }
 
-    function drawGrid(ctx: CanvasRenderingContext2D, width: number, height: number) {
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-        ctx.fillStyle = '#888';
-        ctx.font = '10px Inter';
-        ctx.lineWidth = 1;
-
-        // Frecuencias (Eje X)
-        [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000].forEach(f => {
-            const x = freqToX(f, width);
-            ctx.beginPath();
-            ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
-            
-            // Etiqueta Hz (en el borde inferior)
-            const label = f >= 1000 ? `${f/1000}k` : `${f}`;
-            ctx.fillText(label, x + 2, height - 5);
-        });
-
-        // Niveles (Eje Y)
-        let min = dbMin, max = dbMax;
-        let unit = 'dB';
-        if (metric === 'Fase') { min = -180; max = 180; unit = '°'; }
-        else if (metric === 'Coherencia') { min = 0; max = 1; unit = ''; }
-
-        for (let val = min; val <= max; val += (max - min) / 6) {
-            const y = valToY(val, height);
-            ctx.beginPath();
-            ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
-            
-            // Etiqueta nivel (en el borde derecho)
-            ctx.fillText(`${val.toFixed(0)}${unit}`, width - 35, y - 2);
-        }
-    }
-
-    function drawTrace(ctx: CanvasRenderingContext2D, data: Float32Array, trace: Trace, width: number, height: number) {
-        ctx.strokeStyle = trace.color;
-        ctx.lineWidth = 2;
-        if (trace.style === 'dashed') ctx.setLineDash([5, 5]);
-        else ctx.setLineDash([]);
-
+    function drawPath(ctx: CanvasRenderingContext2D, data: Float32Array, width: number, height: number, color: string, lw: number, dashed = false) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = lw;
+        if (dashed) ctx.setLineDash([5, 5]); else ctx.setLineDash([]);
         ctx.beginPath();
         const sr = 48000;
         let first = true;
         for (let i = 0; i < data.length; i++) {
             const freq = (i * sr / 2) / data.length;
-            if (freq < freqMin / 2) continue; // Un poco de margen por el zoom
-            if (freq > freqMax * 2) break;
-
+            if (freq < freqMin) continue;
             const x = freqToX(freq, width);
-            const y = valToY(data[i] + trace.offsetY, height);
-
-            // Solo dibujar si está dentro o cerca del viewport
-            if (x < -100 || x > width + 100) {
-                if (!first) ctx.moveTo(x, y);
-                continue;
-            }
-
-            if (first) {
-                ctx.moveTo(x, y);
-                first = false;
-            } else {
-                ctx.lineTo(x, y);
-            }
+            const y = valToY(data[i], height);
+            if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y);
         }
         ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
+    function drawGrid(ctx: CanvasRenderingContext2D, width: number, height: number) {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+        ctx.fillStyle = '#666';
+        ctx.font = '10px Inter';
+        [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000].forEach(f => {
+            const x = freqToX(f, width);
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
+            ctx.fillText(f >= 1000 ? `${f/1000}k` : `${f}`, x + 2, height - 5);
+        });
+        for (let val = dbMin; val <= dbMax; val += 10) {
+            const y = valToY(val, height);
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
+            ctx.fillText(`${val}dB`, width - 30, y - 2);
+        }
     }
 
     function drawCrosshair(ctx: CanvasRenderingContext2D, width: number, height: number) {
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
         ctx.setLineDash([2, 2]);
-        
         ctx.beginPath();
         ctx.moveTo(mouseX, 0); ctx.lineTo(mouseX, height);
         ctx.moveTo(0, mouseY); ctx.lineTo(width, mouseY);
         ctx.stroke();
-        
+        ctx.setLineDash([]);
         const freq = xToFreq(mouseX, width);
         const val = yToVal(mouseY, height);
-        
         ctx.fillStyle = '#fff';
-        ctx.font = '10px monospace';
-        const unit = metric === 'Fase' ? '°' : 'dB';
-        ctx.fillText(`${Math.round(freq)} Hz / ${val.toFixed(1)} ${unit}`, mouseX + 5, mouseY - 5);
+        ctx.fillText(`${Math.round(freq)} Hz / ${val.toFixed(1)} dB`, mouseX + 5, mouseY - 5);
+    }
+
+    function toggleSelector() {
+        showSelector = !showSelector;
+        if (showSelector && settingsBtn) {
+            const rect = settingsBtn.getBoundingClientRect();
+            popoverPos = { top: rect.bottom + 5, left: rect.left };
+        }
     }
 
     function handleWheel(e: WheelEvent) {
         e.preventDefault();
-        const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-        if (e.shiftKey) {
-            scaleX *= zoomFactor;
-            // Ajustar offsetX para zoom centrado en mouse (opcional, por ahora simple)
-        } else if (e.ctrlKey || e.metaKey) {
-            scaleY *= zoomFactor;
-        }
-    }
-
-    function handleMouseDown(e: MouseEvent) {
-        isDragging = true;
-        lastMouseX = e.clientX;
-        lastMouseY = e.clientY;
+        const factor = e.deltaY > 0 ? 0.9 : 1.1;
+        if (e.shiftKey) scaleX *= factor;
+        else if (e.ctrlKey || e.metaKey) scaleY *= factor;
     }
 
     function handleMouseMove(e: MouseEvent) {
@@ -233,27 +240,25 @@
         mouseX = e.clientX - rect.left;
         mouseY = e.clientY - rect.top;
         showCrosshair = true;
-
         if (isDragging) {
-            const dx = e.clientX - lastMouseX;
-            const dy = e.clientY - lastMouseY;
-            offsetX += dx;
-            offsetY += dy;
+            offsetX += e.clientX - lastMouseX;
+            offsetY += e.clientY - lastMouseY;
             lastMouseX = e.clientX;
             lastMouseY = e.clientY;
         }
     }
 
-    function handleMouseUp() {
-        isDragging = false;
-    }
-
     onMount(() => {
+        const ctx = canvas.getContext('2d');
         const resize = () => {
-            if (container) {
-                canvas.width = container.clientWidth;
-                canvas.height = container.clientHeight;
-            }
+            const dpr = window.devicePixelRatio || 1;
+            const w = container.clientWidth;
+            const h = container.clientHeight;
+            canvas.width = w * dpr;
+            canvas.height = h * dpr;
+            canvas.style.width = `${w}px`;
+            canvas.style.height = `${h}px`;
+            ctx?.scale(dpr, dpr);
         };
         window.addEventListener('resize', resize);
         resize();
@@ -266,67 +271,40 @@
     class="quadrant-container" 
     bind:this={container} 
     onmousemove={handleMouseMove} 
-    onmousedown={handleMouseDown}
-    onmouseup={handleMouseUp}
-    onmouseleave={() => { showCrosshair = false; handleMouseUp(); }}
+    onmousedown={(e) => { isDragging = true; lastMouseX = e.clientX; lastMouseY = e.clientY; }}
+    onmouseup={() => isDragging = false}
+    onmouseleave={() => { showCrosshair = false; isDragging = false; }}
     onwheel={handleWheel}
 >
     <canvas bind:this={canvas}></canvas>
     
-    <div class="quadrant-header">
-        <div class="settings-wrapper">
-            <button class="settings-btn" onclick={() => showSelector = !showSelector} aria-label="Ajustes">
-                ⚙️
-            </button>
-            
-            {#if showSelector}
-                <div class="selector-popover" transition:fade={{ duration: 100 }}>
-                    <label>Métrica</label>
-                    <div class="metrics-grid">
-                        {#each ['Magnitud', 'Fase', 'RTA', 'Coherencia', 'Espectro', 'Nivel', 'Respuesta al impulso', 'Retardo de grupo'] as m}
-                            <button 
-                                class:active={metric === m} 
-                                onclick={() => metric = m}
-                            >
-                                {m}
-                            </button>
-                        {/each}
-                    </div>
-
-                    <div class="divider"></div>
-                    
-                    <label>Suavizado</label>
-                    <div class="smoothing-options">
-                        {#each [0, 1/3, 1/6, 1/12, 1/24, 1/48] as s}
-                            <button 
-                                class:active={smoothing === s} 
-                                onclick={() => smoothing = s}
-                            >
-                                {s === 0 ? 'Off' : `1/${Math.round(1/s)}`}
-                            </button>
-                        {/each}
-                    </div>
-
-                    <div class="divider"></div>
-
-                    <label class="checkbox-label">
-                        <input type="checkbox" bind:checked={coherenceMasking} />
-                        Coherencia
-                    </label>
-
-                    {#if metric === 'Fase'}
-                        <button class="action-btn">Desenvolvimiento</button>
-                    {/if}
-
-                    <button class="reset-btn" onclick={() => { scaleX=1; scaleY=1; offsetX=0; offsetY=0; }}>
-                        Reset
-                    </button>
-                </div>
-            {/if}
-        </div>
-        <span class="id-badge">{id} - {metric}</span>
-    </div>
+    <button bind:this={settingsBtn} class="settings-btn" onclick={toggleSelector}>
+        <span class="material-symbols-outlined">settings</span>
+    </button>
 </div>
+
+{#if showSelector}
+    <div class="selector-popover" style="top: {popoverPos.top}px; left: {popoverPos.left}px;">
+        <label>Métrica</label>
+        <div class="metrics-grid">
+            {#each ['Magnitud', 'Fase', 'RTA', 'Coherencia'] as m}
+                <button class:active={metric === m} onclick={() => metric = m}>{m}</button>
+            {/each}
+        </div>
+        <div class="divider"></div>
+        <label>Suavizado</label>
+        <div class="smoothing-options">
+            {#each [0, 1/3, 1/12, 1/48] as s}
+                <button class:active={smoothing === s} onclick={() => smoothing = s}>
+                    {s === 0 ? 'Off' : `1/${Math.round(1/s)}`}
+                </button>
+            {/each}
+        </div>
+        <button class="reset-btn" onclick={() => { scaleX=1; scaleY=1; offsetX=0; offsetY=0; }}>
+            Reiniciar Vista
+        </button>
+    </div>
+{/if}
 
 <style>
     .quadrant-container {
@@ -343,43 +321,25 @@
         height: 100%;
     }
 
-    .quadrant-header {
+    .settings-wrapper {
         position: absolute;
         top: 8px;
         left: 8px;
-        right: 8px;
-        display: flex;
-        justify-content: space-between;
-        pointer-events: none;
         z-index: 200;
-    }
-
-    .settings-wrapper {
-        position: relative;
         pointer-events: auto;
     }
 
     .settings-btn {
-        background: rgba(0, 0, 0, 0.8);
+        background: rgba(10, 10, 12, 0.9);
         border: 1px solid rgba(255, 255, 255, 0.1);
         color: #fff;
-        width: 32px;
-        height: 32px;
+        width: 36px;
+        height: 36px;
         border-radius: 8px;
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 1.2rem;
-    }
-
-    .id-badge {
-        background: rgba(0, 0, 0, 0.6);
-        color: rgba(255, 255, 255, 0.6);
-        padding: 4px 10px;
-        border-radius: 6px;
-        font-size: 0.75rem;
-        font-weight: 600;
     }
 
     .selector-popover {

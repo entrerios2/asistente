@@ -1,5 +1,6 @@
 import { base } from '$app/paths';
 import type { AudioProvider, AudioListener } from '../types';
+import { meterStore } from '../../stores/meterStore.svelte';
 
 export class WebAudioProvider implements AudioProvider {
 	private audioContext: AudioContext | null = null;
@@ -9,9 +10,14 @@ export class WebAudioProvider implements AudioProvider {
 	private sharedArray: Float32Array | null = null;
 	private analyserNode: AnalyserNode | null = null;
 	private freqDataArray: Float32Array | null = null;
+	private animationFrameId: number | null = null;
+
+	// Nodos del generador
+	private generatorNode: AudioNode | null = null;
+	private generatorGainNode: GainNode | null = null;
+	private pannerNode: StereoPannerNode | null = null;
 
 	async startCapture(listener: AudioListener): Promise<void> {
-		// 1. AudioContext con sample rate fijo a 48kHz
 		if (!this.audioContext) {
 			this.audioContext = new AudioContext({ sampleRate: 48000 });
 		}
@@ -20,43 +26,47 @@ export class WebAudioProvider implements AudioProvider {
 			await this.audioContext.resume();
 		}
 
-		// 2. Pedir permisos con procesamiento desactivado
 		this.stream = await navigator.mediaDevices.getUserMedia({
 			audio: {
 				echoCancellation: false,
 				noiseSuppression: false,
-				autoGainControl: false
+				autoGainControl: false,
+				channelCount: 2
 			}
 		});
 
-		// 3. Cargar el módulo del worklet usando la ruta dinámica
 		await this.audioContext.audioWorklet.addModule(`${base}/worklets/audio-capture-processor.js`);
 
 		const source = this.audioContext.createMediaStreamSource(this.stream);
 
-		// 4. Configurar Analyser para RTA
+		// Analyser para RTA (Fast-Path)
 		this.analyserNode = this.audioContext.createAnalyser();
-		this.analyserNode.fftSize = 4096;
-		this.analyserNode.smoothingTimeConstant = 0;
+		this.analyserNode.fftSize = 8192; // Mayor resolución para RTA
+		this.analyserNode.smoothingTimeConstant = 0.2;
 		this.freqDataArray = new Float32Array(this.analyserNode.frequencyBinCount);
 		source.connect(this.analyserNode);
 
-		// 5. Configurar SharedArrayBuffer (1 segundo a 48kHz)
 		const bufferSize = 48000;
 		this.sab = new SharedArrayBuffer(bufferSize * Float32Array.BYTES_PER_ELEMENT);
 		this.sharedArray = new Float32Array(this.sab);
 
 		this.workletNode = new AudioWorkletNode(this.audioContext, 'audio-capture-processor');
-		
-		// Enviamos el SAB al Worklet
 		this.workletNode.port.postMessage({ sab: this.sab });
 
 		source.connect(this.workletNode);
 
-		// 6. Lectura proactiva mediante requestAnimationFrame
 		const readData = () => {
 			if (this.sharedArray) {
 				listener.onAudioData(this.sharedArray);
+				
+				// Cálculo de niveles para Vúmetros IN
+				let maxIn = 0;
+				for (let i = 0; i < 128; i++) { // Revisamos solo el bloque actual aprox
+					const val = Math.abs(this.sharedArray[i]);
+					if (val > maxIn) maxIn = val;
+				}
+				const dbIn = 20 * Math.log10(maxIn || 1e-6);
+				meterStore.updateIn([dbIn, dbIn]); // Simulación stereo desde mono
 			}
 
 			if (this.analyserNode && this.freqDataArray && listener.onFrequencyData) {
@@ -75,21 +85,18 @@ export class WebAudioProvider implements AudioProvider {
 		if (this.workletNode) this.workletNode.disconnect();
 		if (this.analyserNode) this.analyserNode.disconnect();
 		if (this.stream) this.stream.getTracks().forEach(track => track.stop());
-		if (this.audioContext) this.audioContext.close();
 		
-		this.audioContext = null;
 		this.stream = null;
 		this.workletNode = null;
 		this.analyserNode = null;
 		this.freqDataArray = null;
 	}
 
-	playGenerator(type: 'pink' | 'white' | 'sweep' | 'sine', active: boolean, freq: number, level: number, routing: 'L' | 'R' | 'Stereo'): void {
+	playGenerator(type: string, active: boolean, freq: number, level: number, routing: 'L' | 'R' | 'Stereo'): void {
 		if (!this.audioContext) {
 			this.audioContext = new AudioContext({ sampleRate: 48000 });
 		}
 
-		// Limpieza de nodos existentes si están activos
 		if (this.generatorNode) {
 			this.generatorNode.disconnect();
 			this.generatorNode = null;
@@ -98,44 +105,63 @@ export class WebAudioProvider implements AudioProvider {
 			this.generatorGainNode.disconnect();
 			this.generatorGainNode = null;
 		}
-		if (this.pannerNode) {
-			this.pannerNode.disconnect();
-			this.pannerNode = null;
+
+		if (!active) {
+			meterStore.updateOut([-60, -60]);
+			return;
 		}
 
-		if (!active) return;
+		meterStore.updateOut([level, level]);
 
 		this.generatorGainNode = this.audioContext.createGain();
-		this.generatorGainNode.gain.value = Math.pow(10, level / 20);
+		this.generatorGainNode.gain.setValueAtTime(Math.pow(10, level / 20), this.audioContext.currentTime);
 
 		this.pannerNode = this.audioContext.createStereoPanner();
-		this.pannerNode.pan.value = routing === 'L' ? -1 : routing === 'R' ? 1 : 0;
+		this.pannerNode.pan.setValueAtTime(routing === 'L' ? -1 : routing === 'R' ? 1 : 0, this.audioContext.currentTime);
+
+		const sampleRate = this.audioContext.sampleRate;
 
 		if (type === 'sweep') {
-			const osc = this.audioContext.createOscillator();
-			osc.type = 'sine';
-			osc.frequency.setValueAtTime(freq, this.audioContext.currentTime);
-			osc.frequency.exponentialRampToValueAtTime(20000, this.audioContext.currentTime + 5);
-			osc.start();
-			this.generatorNode = osc;
-		} else if (type === 'sine') {
-			const osc = this.audioContext.createOscillator();
-			osc.type = 'sine';
-			osc.frequency.setValueAtTime(freq, this.audioContext.currentTime);
-			osc.start();
-			this.generatorNode = osc;
-		} else if (type === 'white') {
-			const bufferSize = 2 * this.audioContext.sampleRate;
-			const noiseBuffer = this.audioContext.createBuffer(1, bufferSize, this.audioContext.sampleRate);
-			const output = noiseBuffer.getChannelData(0);
-			for (let i = 0; i < bufferSize; i++) {
-				output[i] = Math.random() * 2 - 1;
+			// Barrido Logarítmico Puro via AudioBuffer
+			const duration = 5;
+			const f1 = 10; // Start below 20Hz
+			const f2 = 20000;
+			const buffer = this.audioContext.createBuffer(1, sampleRate * duration, sampleRate);
+			const data = buffer.getChannelData(0);
+			const L = duration / Math.log(f2 / f1);
+			
+			for (let i = 0; i < data.length; i++) {
+				const t = i / sampleRate;
+				data[i] = Math.sin(2 * Math.PI * f1 * L * (Math.exp(t / L) - 1));
 			}
-			const whiteNoise = this.audioContext.createBufferSource();
-			whiteNoise.buffer = noiseBuffer;
-			whiteNoise.loop = true;
-			whiteNoise.start();
-			this.generatorNode = whiteNoise;
+
+			const source = this.audioContext.createBufferSource();
+			source.buffer = buffer;
+			source.loop = true;
+			source.start();
+			this.generatorNode = source;
+		} else if (type === 'white' || type === 'brown') {
+			const bufferSize = 2 * sampleRate;
+			const buffer = this.audioContext.createBuffer(1, bufferSize, sampleRate);
+			const data = buffer.getChannelData(0);
+			let lastOut = 0;
+			
+			for (let i = 0; i < bufferSize; i++) {
+				const white = Math.random() * 2 - 1;
+				if (type === 'white') {
+					data[i] = white;
+				} else {
+					// Brown noise (leaked integrator)
+					data[i] = (lastOut + (0.02 * white)) / 1.02;
+					lastOut = data[i];
+					data[i] *= 3.5; // Gain compensation
+				}
+			}
+			const source = this.audioContext.createBufferSource();
+			source.buffer = buffer;
+			source.loop = true;
+			source.start();
+			this.generatorNode = source;
 		} else if (type === 'pink') {
 			const node = this.audioContext.createScriptProcessor(4096, 1, 1);
 			let b0=0, b1=0, b2=0, b3=0, b4=0, b5=0, b6=0;
@@ -155,6 +181,13 @@ export class WebAudioProvider implements AudioProvider {
 				}
 			};
 			this.generatorNode = node;
+		} else {
+			// Sine fallback
+			const osc = this.audioContext.createOscillator();
+			osc.type = 'sine';
+			osc.frequency.setValueAtTime(freq, this.audioContext.currentTime);
+			osc.start();
+			this.generatorNode = osc;
 		}
 
 		if (this.generatorNode && this.generatorGainNode && this.pannerNode) {

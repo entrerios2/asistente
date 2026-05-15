@@ -6,7 +6,7 @@
 export interface Trace {
     id: string;
     name: string;
-    type: 'live' | 'snapshot' | 'math';
+    type: 'live' | 'snapshot' | 'math' | 'eq';
     metric: string;
     data: Float32Array;
     color: string;
@@ -17,9 +17,25 @@ export interface Trace {
     source: 'manual' | 'secuencial';
 }
 
+export interface EQBand {
+    freq: number;
+    gain: number;
+    q: number;
+    type: string;
+}
+
 class TraceManager {
     // Estado reactivo de los trazos
     traces = $state<Trace[]>([]);
+    
+    // Estado de las bandas de EQ (Playground)
+    eqBands = $state<EQBand[]>([
+        { freq: 100, gain: 0, q: 1, type: 'peaking' },
+        { freq: 500, gain: 0, q: 1, type: 'peaking' },
+        { freq: 1000, gain: 0, q: 1, type: 'peaking' },
+        { freq: 5000, gain: 0, q: 1, type: 'peaking' },
+        { freq: 10000, gain: 0, q: 1, type: 'peaking' }
+    ]);
 
     /**
      * Añade un nuevo trazo al gestor.

@@ -3,7 +3,6 @@
     import Header from '../components/medicion/Header.svelte';
     import Sidebar from '../components/medicion/Sidebar.svelte';
     import ViewGrid from '../components/medicion/ViewGrid.svelte';
-    import SnapshotPanel from '../components/medicion/SnapshotPanel.svelte';
     import { traceManager } from '$lib/stores/traceManager.svelte';
     import { uiStore } from '$lib/stores/ui.svelte';
     import { detectTier } from '$lib/utils/tierDetector';
@@ -42,8 +41,6 @@
         <main class="main-viewport">
             <ViewGrid />
         </main>
-
-        <SnapshotPanel />
     </div>
 </div>
 
