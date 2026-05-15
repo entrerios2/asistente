@@ -21,27 +21,47 @@ Mostrar gráficos de alta densidad matemática en un teléfono vertical es un de
 4.  **Modales a Pantalla Completa:** En dispositivos móviles, cualquier menú de opciones complejo (como la configuración de un cuadrante o el panel del **Gestor de Snapshots**) pasará de ser un popup flotante a un modal inmersivo a pantalla completa (*full-screen modal*) para facilitar la gestión sin saturar la UI gráfica subyacente.
 5.  **Interacciones por Gestos:** Las herramientas dependerán de gestos nativos: *Pinch-to-zoom* sobre los ejes para cambiar las escalas, y arrastre con dos dedos para el *offset* de trazos.
 
-## 2. El Sidebar: Tabulador Dual
+## 2. El Sidebar: Controlador Maestro (4 Pestañas)
 
-El sidebar tendrá dos grandes pestañas en la parte superior, cambiando radicalmente la filosofía de trabajo de la herramienta pero compartiendo el mismo lienzo gráfico.
+La interfaz se consolida en un único panel lateral izquierdo (Sidebar) que actúa como el cerebro de la aplicación. Para evitar el uso de emojis, todas las pestañas y controles gráficos utilizarán **Material Icons**. Contará con 4 pestañas principales:
 
-### Pestaña A: Secuencial
+### Pestaña 1: Medición (`graphic_eq`)
+El corazón del sistema. Un selector moderno (tipo *segmented control*) en la parte superior permitirá alternar entre los dos paradigmas de trabajo:
+
+**A. Modo Secuencial (`lists`):**
 El enfoque "Copiloto". Aquí vive la innovación del proyecto.
-*   **Selector de Secuencias:** Dropdown para elegir la secuencia a ejecutar (Full Commission, Quick Check, Cable Tester). *Nota: El wizard guiado completo se dejará para una iteración posterior.*
-*   **Opciones de Disparo:** Un botón dividido (split button) que permita:
-    *   Disparar la secuencia internamente (generador local).
-    *   Activar la "Escucha Offline" (el sistema se pone a la escucha pasiva esperando el trigger), ofreciendo ahí mismo enlaces rápidos para **descargar los archivos de audio** (.wav/.flac) correspondientes a la secuencia seleccionada, listos para reproducir desde un USB externo.
-*   **Progreso en Vivo:** Una lista de pasos (`V`, `A`, `N`, `F`, etc.) con *checkmarks* que se van iluminando a medida que el orquestador escucha el FSK, **y muestra a su lado los resultados numéricos preliminares** apenas cada paso concluye.
-*   **Smart Toasts / Diagnósticos:** Si el Fast-Path detecta un *showstopper*, la alerta roja de acción (ej. "Baje ganancia") aparece aquí.
+*   **Modo Operativo:** Selector *En vivo* vs *Offline*.
+    *   *En vivo:* Muestra botón "Iniciar medición".
+    *   *Offline:* Muestra botón "Escuchar" (espera pasiva de FSK) y, debajo, lista de archivos de audio generados descargables (WAV/FLAC) filtrables por tipo y samplerate.
+*   **Selector de Secuencias APST:** Dropdown para elegir secuencias completas o reducidas. Lista interactiva de los segmentos (V, A, M, N, F, P, T, D, X, R) con tooltips explicativos.
+*   **Progreso en Vivo:** A medida que el orquestador avanza, se muestran los resultados numéricos preliminares.
 
-### Pestaña B: Modo Manual (Estilo OSM)
-El enfoque "Workbench". El control absoluto para el operador veterano.
-*   **Generador de Señales:**
-    *   Ruido Rosa, Ruido Blanco, Ruido Rojo.
-    *   Seno, Sweep Lineal, Sweep Logarítmico.
-    *   Controles: Play/Stop, Frecuencia, Nivel (dBFS), **Selección de canal de salida (L/R/Stereo)**.
-*   **Alineamiento de Delay:** Botón de "Find Delay" para que el usuario fuerce la sincronización temporal manualmente entre la referencia y la medición.
-*(Nota: El selector general de mediciones fue reubicado a la cabecera de cada cuadrante gráfico para permitir mayor modularidad).*
+**B. Modo Manual (`hearing`):**
+El enfoque "Workbench". Control absoluto inspirado en Open Sound Meter.
+*   **Generador de Señales:** Equiparación total con OSM (Ruido rosa, blanco, Brown, music-noise, Seno continuo, Sweep logarítmico puro, burst, SinBurst, MLS+).
+*   **Opciones por generador:** Exposición dinámica de controles (ej. Frecuencia, ciclos, ancho de banda) idéntica a OSM.
+*   **Controles:** Botones "Generador" y "Escuchar". Input de retardo manual y botón "Calcular retardo".
+
+### Pestaña 2: Ecualización (`equalizer`)
+El módulo de corrección acústica.
+*   **Selector de Tipo:** Ecualizador Gráfico, Paramétrico, etc.
+*   **Playground Interactivo:** Controles de Ganancia, Frecuencia y Q dinámicos según el tipo seleccionado.
+*   **Interacción Visual:** La curva resultante de la suma del impulso acústico + el filtro del playground se dibujará en tiempo real sobre el lienzo.
+*   **Auto EQ:** Botón "Calcular ecualización" que alimenta automáticamente los parámetros sugeridos al playground para su ajuste manual final.
+
+### Pestaña 3: Instantáneas (`screenshot_frame_2`)
+La memoria acústica (antiguo SnapshotPanel). Módulo central y compartido.
+*   **Auto-save (Secuencial):** Tras una secuencia, se guarda el trazo automáticamente.
+*   **Manual-save:** Botón de captura congela el estado actual.
+*   **Identidad Visual:** Íconos distintivos (Material Icons) diferencian snapshots Secuenciales de Manuales.
+*   **Offset Manual (Y-Offset):** Capacidad de aplicar compensación de decibeles.
+*   **Visibilidad:** Botón "Ojito" para encender/apagar el trazo sobre el lienzo.
+
+### Pestaña 4: Configuración (`settings`)
+El ruteo y visualización.
+*   **Audio I/O:** Selectores de dispositivo de Entrada y Salida, selección individual de canales, y definición de Canal de Referencia (con opción Loopback).
+*   **Pantalla:** Selector visual estilo "Insertar tabla de Word" para definir la grilla de gráficos (desde 1x1 hasta 2x3).
+*   **Tema:** Toggle de Modo oscuro.
 
 ## 3. Lienzo Principal (Main View)
 

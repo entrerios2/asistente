@@ -101,42 +101,47 @@ El lienzo principal deja de ser un gráfico único para convertirse en una grill
 
 ---
 
-## 5. Fase 2A.1: Refactorización UX/UI
+## 5. Fase 2A.3: Rediseño Arquitectónico UX/UI
 
-La implementación original requiere ajustes críticos para alinearse estrictamente con `UX_Medicion.md` y corregir los elementos sin funcionalidad. No se deben utilizar fondos con blur (`backdrop-filter`).
+Este rediseño reemplaza iteraciones anteriores para consolidar los controles en un panel maestro y garantizar precisión matemática en el DSP. Queda estrictamente prohibido el uso de emojis; se usarán **Material Icons**.
 
-### 5.1. Cabecera global (`Header.svelte`)
-- **Limpieza visual:** Eliminar elementos inútiles (selector HAL falso, etiqueta "Conectado", medidor SPL hardcodeado y reloj del sistema).
-- **Contenido:** Solo incluir un selector real de dispositivo de entrada (micrófono), un selector de Layout de grilla (1x1, 2x1, 2x2) y el botón de alternar tema (asegurando que inyecte la clase `.dark` en el `<html>`).
+### 5.1. Cabecera (Header)
+- **[MODIFY] `src/components/medicion/Header.svelte`**:
+  - Conservar el componente.
+  - **Izquierda:** Texto estático: "Herramienta para mediciones de audio".
+  - **Derecha:** Implementar componentes de Vúmetros (VU Meters) visuales. Serán barras horizontales organizadas en dos columnas: Entrada (IN) y Salida (OUT), mostrando 1 barra horizontal por cada canal activo.
 
-### 5.2. Panel lateral - Secuencial (`Sidebar.svelte`)
-- **Secuencias:** Ampliar el `<select>` para incluir secuencias reales (ej. "Completa (VANFP)", "Verificación (V)", "Respuesta (F)").
-- **Estado:** Traducir y hacer legible el estado del orquestador (ej. "En espera" en vez de "IDLE").
-- **Explicación de segmentos:** La lista de pasos debe mostrar nombres completos ("V - Verificación de ganancia", "F - Respuesta en frecuencia").
-- **Botón de descarga:** Clarificar el botón de "Descargar WAV" con texto explícito ("Descargar pista de prueba"), no un mero ícono desplegable.
+### 5.2. Consolidación del Sidebar (4 Pestañas)
+El `Sidebar.svelte` actuará como controlador maestro con 4 pestañas, representadas por Material Icons:
+1. **Medición** (`graphic_eq`)
+2. **Ecualización** (`equalizer`)
+3. **Instantáneas** (`screenshot_frame_2`)
+4. **Configuración** (`settings`)
 
-### 5.3. Panel lateral - Manual (`Sidebar.svelte`)
-- **Generadores:** Ampliar la lista a Ruido rosa, Ruido blanco, Seno continuo y Barrido logarítmico (Sweep).
-- **Visibilidad condicional:** Ocultar el control de "Frecuencia" cuando el generador sea Ruido Rosa o Blanco.
-- **Gestión de Retardo:** Incluir un input numérico para el "Retardo de medición (ms)" manual, el cual se autocompletará si se presiona el botón "Alinear retardo".
+#### 5.2.1. Pestaña: Medición
+Selector moderno (segmented control) para alternar modos:
+- **Secuencial** (`lists`): Selector En vivo/Offline. En vivo muestra "Iniciar medición". Offline muestra "Escuchar" y listado de descargas. Lista exhaustiva de secuencias APST (V, A, M, N, F, P, T, D, X, R). Lógica de selección de presetes y tooltips informativos por segmento.
+- **Manual** (`hearing`): Generadores idénticos a OSM (Ruido rosa, blanco, Brown, music-noise, Seno, Sweep, burst, SinBurst, MLS+). Opciones calcadas de OSM por generador. Botones "Generador" y "Escuchar". Input y botón de cálculo de Retardo.
 
-### 5.4. Cuadrantes y Grilla (`ViewGrid.svelte` y `Quadrant.svelte`)
-- **Selector de layout:** El `ViewGrid` debe reaccionar al selector del Header para cambiar sus columnas y filas CSS.
-- **Menú de configuración:** El modal/dropdown de la tuerca `⚙️` debe ser un popover flotante y **compacto** en versión desktop, no ocupando toda la pantalla ni siendo gigante.
-- **Referencias de ejes:** La función `draw` del canvas DEBE incluir llamadas a `fillText` para renderizar los valores en Hz en el eje X inferior y los dB/Grados en el eje Y.
-- **Gestos:** Implementar arrastre para offset y pellizco/rueda para escala (`scaleX/Y`).
+#### 5.2.2. Pestaña: Ecualización
+- Selector de tipo de ecualizador.
+- **Playground:** Controles interactivos dinámicos según el EQ.
+- **Interacción:** Las curvas aplicadas y resultantes se dibujan en vivo en el lienzo.
+- Botón "Calcular ecualización" que autocompleta el playground.
 
-### 5.5. Panel de instantáneas (`SnapshotPanel.svelte`)
-- **Ocultamiento:** Agregar la capacidad de colapsar o cerrar por completo el panel lateral de instantáneas.
-- **Limpieza:** Eliminar cualquier efecto blur.
+#### 5.2.3. Pestaña: Instantáneas
+- Absorbe `SnapshotPanel.svelte`. Uso de Material Icons para distinguir el origen del trazo.
 
----
+#### 5.2.4. Pestaña: Configuración
+- Selectores de dispositivo de entrada/salida y canales. Canal de Referencia (con loopback local).
+- **Pantalla:** Selector visual estilo "insertar tabla" (1x1 hasta 2x3).
+- **Tema:** Modo Oscuro.
 
-## 6. Fase 2A.2: Conexión DSP y Motor de Medición (Wireup)
+### 5.3. Lienzo y Gráficos (Canvas)
+- **[MODIFY] `ViewGrid.svelte`**: Eliminar identificadores textuales (q1, q2). Escuchar al estado de "Configuración" para alterar el Grid CSS.
+- **[MODIFY] `Quadrant.svelte`**:
+  - Eliminar zoom por CSS (`transform: scale()`). Usar `devicePixelRatio` para redimensionar internamente el `<canvas>` y evitar pixelación.
+  - Extraer el menú del engranaje del `overflow` del contenedor, renderizándolo flotante (fixed o `<svelte:window>`).
 
-### 6.1. Motor HAL (`WebAudioProvider.ts`)
-- **RTA Real:** Instanciar un `AnalyserNode` en `startCapture` para obtener los datos de frecuencia en vivo.
-- **Barrido real:** Modificar la lógica de `playGenerator` en modo 'sweep' para usar `exponentialRampToValueAtTime`, generando un barrido auditivo real, no un tono estático.
-
-### 6.2. Inyección Reactiva (`traceManager`)
-- Crear `updateLiveTrace(metric, data)` para que el `traceManager` reciba iterativamente los datos crudos del `AnalyserNode`, forzando el redibujado de los cuadrantes en vivo.
+### 5.4. DSP Matemático Puro (`WebAudioProvider.ts`)
+- Los generadores (Sweep, Noises, MLS+, etc.) no dependerán enteramente de WebAudio nativo. Se portarán los algoritmos matemáticos del CLI `apst-builder` para inyectar buffers perfectos, solucionando la imposibilidad de barrer frecuencias sub-20Hz con los métodos básicos.

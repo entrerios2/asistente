@@ -64,64 +64,75 @@ Este documento contiene los prompts de implementación estructurados para ser ej
 
 ---
 
-## Prompt 6: Refactorización UX (Layout y Panel lateral)
+## Prompt 6: Rediseño Arquitectónico UX/UI (Header y Configuración)
 
-**Contexto:** Fase 2A.1. Limpieza radical de la UI en español. Prohibido usar `backdrop-filter: blur`. CSS puro, Grid/Flexbox y variables `$state`.
+**Contexto:** Iniciamos la Fase 2A.3. El objetivo es una UI profesional y consolidada. Todo ícono debe ser un `Material Icon` (nada de emojis). No usar `backdrop-filter`.
 
 **Instrucciones:**
-1. **Actualización del HAL (`types.ts` y `WebAudioProvider.ts`):**
-   - Modifica `playGenerator(type: 'pink' | 'white' | 'sweep' | 'sine', active: boolean, freq: number, level: number, routing: 'L' | 'R' | 'Stereo')`.
-   - Implementalo en `WebAudioProvider.ts`: Usa `StereoPannerNode` o `ChannelSplitterNode`. 'sine' usa un `OscillatorNode` fijo. 'sweep' debe usar `osc.frequency.exponentialRampToValueAtTime(20000, audioContext.currentTime + 5)`. 
-2. **Cabecera global hiper-limpia (`Header.svelte`):**
-   - Elimina el selector HAL, el SPL falso, el reloj y la etiqueta "Conectado".
-   - Izquierda: Selector de micrófono (`navigator.mediaDevices.enumerateDevices`).
-   - Centro: Selector de Layout (`<select>` con opciones: 1x1, 2x1, 2x2, 3x2).
-   - Derecha: Botón Switch para tema (asegurando que haga `document.documentElement.classList.toggle('dark')`) y un botón para "Ocultar/Mostrar Instantáneas".
-3. **Pestaña secuencial (`Sidebar.svelte`):**
-   - Amplía el selector superior a secuencias reales: "Completa (VANFP)", "Verificación de ganancia (V)", "Respuesta (F)".
-   - Traduce el estado del orquestador (ej. si es "IDLE", muestra "Estado: En espera").
-   - En la lista de pasos, usa nombres explicativos: "V - Verificación", "A - Alineación", etc.
-   - El **Split Button** debe tener un sub-botón a la derecha con el texto explícito "Descargar pista de prueba" (no solo una flecha inentendible).
-4. **Pestaña manual (`Sidebar.svelte`):**
-   - `<select>` para "Tipo de señal": Ruido rosa, Ruido blanco, Seno continuo, Barrido logarítmico.
-   - El control de **Frecuencia** (slider + input numerico) DEBE ocultarse (con `#if`) si el tipo de señal es ruido rosa o blanco. Solo mostrar para seno o barrido.
-   - Crea un input numérico para "Retardo (ms)", que pueda ser editado a mano o autocompletado por el sistema.
-   - El botón gigante inferior debe decir "Calcular retardo".
+1. **Actualización de Cabecera (`src/components/medicion/Header.svelte`):**
+   - Elimina el selector HAL, el reloj, el estado y el SPL falso.
+   - **Izquierda:** Texto estático `Herramienta para mediciones de audio`.
+   - **Derecha:** Implementa Vúmetros (VU Meters) visuales. Usa barras horizontales apiladas en dos columnas (una columna "IN" y otra "OUT"), mostrando 1 barra por cada canal activo.
+2. **Consolidación del Sidebar (`src/components/medicion/Sidebar.svelte`):**
+   - Convierte el Sidebar en el panel maestro con 4 pestañas (orden exacto):
+     1. Medición (ícono `graphic_eq`)
+     2. Ecualización (ícono `equalizer`)
+     3. Instantáneas (ícono `screenshot_frame_2`)
+     4. Configuración (ícono `settings`)
+3. **Pestaña Configuración:**
+   - **Audio IN:** Selector de dispositivo. Checkboxes para canales. Selector de Canal de Referencia (con opción Loopback).
+   - **Audio OUT:** Selector de dispositivo. Checkboxes para canales.
+   - **Pantalla:** Un selector de grilla visual (estilo insertar tabla de Word) con opciones: 1x1, 1x2, 1x3, 2x1, 2x2, 2x3. Almacena esta selección en un estado global (ej. `traceManager.layout`).
+   - **Tema:** Toggle para modo oscuro (`document.documentElement.classList.toggle('dark')`).
+4. **Pestaña Instantáneas:**
+   - Traslada todo el HTML/Lógica de `SnapshotPanel.svelte` aquí adentro, eliminando el componente externo.
+   - Usa íconos para diferenciar origen (Manual o Secuencial).
+5. **ViewGrid (`src/components/medicion/ViewGrid.svelte`):**
+   - Elimina la cabecera `q1`, `q2`. 
+   - Modifica el CSS Grid para que reaccione directamente al layout elegido en la pestaña de Configuración.
 
 ---
 
-## Prompt 7: Refactorización UX (Cuadrante e instantáneas)
+## Prompt 7: Sidebar (Medición y Ecualización)
 
-**Contexto:** Fase 2A.1 (Continuación). Implementación interactiva del lienzo y ejes. Sin uso de blur.
+**Contexto:** Fase 2A.3 (Continuación). Reestructuración de la operación de medición y la nueva pestaña de ecualización.
 
 **Instrucciones:**
-1. **Lógica de Gestos y Ejes (`Quadrant.svelte`):**
-   - Mantén las variables `scaleX`, `scaleY`, `offsetX`, `offsetY`.
-   - Modifica `draw()` para invocar `ctx.fillText` al dibujar la grilla: escribe las frecuencias (Hz) en el borde inferior del canvas, y los niveles (dB) o Grados (°) en el borde derecho, usando color `#888`.
-   - Implementa `onwheel` para pellizco/rueda (escalas) y `onmousemove` con `onmousedown` para paneo (offsets). Modifica las matemáticas de dibujo para que apliquen dichas escalas.
-2. **Interfaz de Cuadrante (Popover compacto):**
-   - El botón del engranaje `⚙️` debe abrir un panel flotante **compacto** posicionado absolutamente junto al botón (dropdown), NO un modal gigante en pantalla completa.
-   - Mantiene opciones de métricas, suavizado (`1/3` a `1/48`), toggle de "Ocultamiento por coherencia" y botón de desenvolvimiento de fase.
-3. **ViewGrid y Layout (`ViewGrid.svelte`):**
-   - Conecta el selector de Layout del `Header.svelte` al `ViewGrid` mediante un estado global (puedes meter el layout en `traceManager` o usar un store derivado) para que cambie la grilla de CSS.
-4. **Gestor de instantáneas (`SnapshotPanel.svelte`):**
-   - Modifica el contenedor principal para obedecer al botón "Ocultar/Mostrar Instantáneas" del Header, colapsándose hacia la derecha con una transición.
-   - Asegúrate de que el título diga "Instantáneas" y no haya ningún efecto `blur`. Añade un ícono `🖱️` o `⚙️` en la lista para diferenciar la fuente.
+1. **Pestaña Medición (`Sidebar.svelte`):**
+   - Incluye un selector moderno (segmented control) en la parte superior para alternar entre "Secuencial" (`lists`) y "Manual" (`hearing`).
+2. **Modo Secuencial:**
+   - Selector moderno: En vivo / Offline.
+   - **En vivo:** Muestra botón "Iniciar medición".
+   - **Offline:** Muestra botón "Escuchar" y, debajo, una tabla de descargas filtrable (Formato, Tipo Normal/Sub, SampleRate).
+   - **Secuencias APST:** Muestra una lista de todos los segmentos (V, A, M, N, F, P, T, D, X, R) con Tooltips de información (ícono `info`).
+   - Usa una lógica donde seleccionar segmentos a mano activa automáticamente el Preset que los contenga en el dropdown superior.
+3. **Modo Manual:**
+   - **Generadores:** Selector con Ruido rosa, Ruido blanco, Brown, music-noise, Seno continuo, Sweep logarítmico puro, burst, SinBurst, MLS+.
+   - **Opciones por generador:** Exponer inputs calcados de OSM (Frecuencia, Ciclos, Periodo, etc., ocultando dinámicamente según la señal elegida).
+   - **Controles:** Botón "Generador" y Botón "Escuchar". Input numérico de "Retardo (ms)" manual y botón "Calcular retardo".
+4. **Pestaña Ecualización:**
+   - Dropdown de tipo de Ecualizador (Gráfico, Paramétrico).
+   - **Playground Interactivo:** Sliders/Inputs para Ganancia, Frecuencia y Q de cada banda.
+   - **Botón "Calcular ecualización":** Imprime un log y autocompleta el playground con valores ficticios para probar reactividad.
+   - (El dibujo de las curvas se conectará en el siguiente paso).
 
 ---
 
-## Prompt 8: Conexión DSP y Motor de Medición (Wireup)
+## Prompt 8: Motor DSP y Corrección de Lienzo
 
-**Contexto:** Fase 2A.2. La UI está lista pero necesita matemáticas acústicas reales para dejar de ser un cascarón vacío.
+**Contexto:** Fase 2A.3. Matemáticas acústicas puras y corrección del escalado de Canvas.
 
 **Instrucciones:**
-1. **RTA Nativo en HAL (`WebAudioProvider.ts`):**
-   - Instancia un `AnalyserNode` en `startCapture` conectado a la fuente del micrófono. `fftSize = 4096`, `smoothingTimeConstant = 0`.
-   - Modifica `AudioListener` para aceptar `onFrequencyData?(data: Float32Array): void;`.
-   - En el bucle de `requestAnimationFrame`, lee `analyser.getFloatFrequencyData` y envíalo al listener.
-2. **Inyección Reactiva (`traceManager.svelte.ts`):**
-   - Crea `updateLiveTrace(metric: string, data: Float32Array)`. Si existe el trazo `live-1`, muta o clona los datos del array para forzar el `$state` de Svelte 5 a repintar a 60fps.
-3. **Cableado del Sidebar (`Sidebar.svelte`):**
-   - Modifica `startLocal()` y la pestaña manual para que al invocar `startCapture`, le pasen el callback `onFrequencyData: (data) => traceManager.updateLiveTrace('Magnitud', data)`.
-   - Asegúrate de que, si el contexto de audio estaba `suspended`, invoque `audioContext.resume()` al encender cualquier generador.
-   - Matemáticas del retardo: El botón "Calcular retardo" debe (simulado por ahora si no hay loopback físico) ejecutar un log y poblar automáticamente el `<input>` de retardo manual creado en el Prompt 6.
+1. **Arreglo del Lienzo (`src/components/medicion/Quadrant.svelte`):**
+   - **Pixelación:** Elimina variables `$state` para el CSS `transform: scale()`. Para garantizar nitidez máxima (crisp), vincula la resolución interna del canvas al pixelaje real usando `devicePixelRatio`. Ajusta la lógica de dibujo a este nuevo factor de escala interna.
+   - **Z-Index Configuración:** Mueve el dropdown del menú de configuración (`⚙️`) fuera del div del lienzo, usando `fixed` o la etiqueta `<svelte:window>` para que no se recorte por culpa del `overflow: hidden`.
+2. **WebAudioProvider y Generadores Puros (`src/lib/hal/web/WebAudioProvider.ts`):**
+   - Refactoriza `playGenerator` para soportar las nuevas señales OSM (MLS+, burst, etc.).
+   - **Sweep Crítico:** No uses `OscillatorNode`. Implementa el barrido inyectando en un `AudioBuffer` la fórmula matemática pura del `apst-builder` para permitir arrancar en frecuencias sub-20Hz garantizando alineación de fase.
+   - Agrega un `AnalyserNode` en el proceso de captura y envía los datos crudos a un `onFrequencyData` (Fast-Path en tiempo real).
+3. **Inyección Reactiva (`src/lib/stores/traceManager.svelte.ts`):**
+   - Implementa `updateLiveTrace(metric, data)`. Enlázalo con la salida del `AnalyserNode`.
+   - Modifica el `draw` del Quadrant para mostrar:
+     1. La medición en vivo.
+     2. (Si estamos en Ecualización) la curva del filtro actual del Playground.
+     3. La curva predictiva (Medición + Filtro sumados matemáticamente).
