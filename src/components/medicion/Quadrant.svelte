@@ -58,6 +58,7 @@
         let min = dbMin, max = dbMax;
         if (metric === 'Fase') { min = -180; max = 180; }
         else if (metric === 'Coherencia') { min = 0; max = 1; }
+        else if (metric === 'RTA') { min = -120; max = 10; }
         
         const range = max - min;
         const normalized = (val - min) / range;
@@ -70,48 +71,95 @@
         let min = dbMin, max = dbMax;
         if (metric === 'Fase') { min = -180; max = 180; }
         else if (metric === 'Coherencia') { min = 0; max = 1; }
+        else if (metric === 'RTA') { min = -120; max = 10; }
         
         const range = max - min;
         return min + (1 - adjustedY / height) * range;
     }
 
-    /**
-     * Calcula la respuesta en frecuencia de las bandas de EQ.
-     */
-    function getEQResponse(f: number): number {
-        let totalGain = 0;
-        traceManager.eqBands.forEach(band => {
-            const fo = band.freq;
-            const G = band.gain;
-            const Q = band.q;
-            
-            // Aproximación de campana (Peaking Filter)
-            const bw = fo / Q;
-            const dist = Math.abs(Math.log2(f / fo));
-            const octBw = bw / fo; 
-            const weight = Math.exp(-Math.pow(dist / (octBw * 1.2), 2));
-            totalGain += G * weight;
-        });
-        return totalGain;
+    // Caché reactivo Svelte 5 para respuesta en frecuencia del EQ (Playground)
+    const eqResponseCache = $derived.by(() => {
+        const size = 4096; // Resolucion correspondiente a la mitad de 8192 FFT
+        const cache = new Float32Array(size);
+        const sr = 48000;
+        for (let i = 0; i < size; i++) {
+            const freq = (i * sr / 2) / size;
+            let totalGain = 0;
+            for (let b = 0; b < traceManager.eqBands.length; b++) {
+                const band = traceManager.eqBands[b];
+                const fo = band.freq;
+                const G = band.gain;
+                const Q = band.q;
+                
+                // Aproximación de campana (Peaking Filter)
+                const bw = fo / Q;
+                const dist = Math.abs(Math.log2(freq / fo || 1e-6));
+                const octBw = bw / fo; 
+                const weight = Math.exp(-Math.pow(dist / (octBw * 1.2), 2));
+                totalGain += G * weight;
+            }
+            cache[i] = totalGain;
+        }
+        return cache;
+    });
+
+    function getEQResponseCached(f: number): number {
+        const binWidth = 24000 / 4096;
+        const idx = Math.round(f / binWidth);
+        if (idx < 0) return eqResponseCache[0];
+        if (idx >= 4096) return eqResponseCache[4095];
+        return eqResponseCache[idx];
     }
 
-    function smoothData(data: Float32Array, octaveFraction: number): Float32Array {
-        if (octaveFraction === 0) return data;
-        const smoothed = new Float32Array(data.length);
+    interface DataPoint {
+        freq: number;
+        val: number;
+    }
+
+    /**
+     * Decimación logarítmica (Logarithmic Binning) con prefix sums para query O(1).
+     * Reduce 4096 bins de FFT a 400 puntos logarítmicos óptimos para pantalla.
+     */
+    function smoothDataLog(data: Float32Array, octaveFraction: number): DataPoint[] {
         const sr = 48000;
+        const numPoints = 400; // Suficientes puntos para visualización perfecta en cualquier resolución
+        const points: DataPoint[] = [];
+
+        // 1. Prefix Sums para cálculo instantáneo del promedio de cualquier ventana
+        const prefixSums = new Float32Array(data.length + 1);
         for (let i = 0; i < data.length; i++) {
-            const freq = (i * sr / 2) / data.length;
-            const bandwidth = freq * (Math.pow(2, octaveFraction / 2) - Math.pow(2, -octaveFraction / 2));
-            const binWidth = (sr / 2) / data.length;
-            const windowSize = Math.max(1, Math.round(bandwidth / binWidth));
-            let sum = 0, count = 0;
-            for (let j = Math.max(0, i - windowSize); j <= Math.min(data.length - 1, i + windowSize); j++) {
-                sum += data[j];
-                count++;
-            }
-            smoothed[i] = sum / count;
+            prefixSums[i + 1] = prefixSums[i] + data[i];
         }
-        return smoothed;
+
+        const logMin = Math.log10(freqMin);
+        const logMax = Math.log10(freqMax);
+        const binWidth = (sr / 2) / data.length;
+
+        for (let i = 0; i < numPoints; i++) {
+            const logFreq = logMin + (i / (numPoints - 1)) * (logMax - logMin);
+            const freq = Math.pow(10, logFreq);
+
+            // Ancho de banda de la ventana logarítmica (fracción de octava)
+            const frac = octaveFraction > 0 ? octaveFraction : 1/48;
+            const f_start = freq * Math.pow(2, -frac / 2);
+            const f_end = freq * Math.pow(2, frac / 2);
+
+            const startBin = Math.max(0, Math.round(f_start / binWidth));
+            const endBin = Math.min(data.length - 1, Math.round(f_end / binWidth));
+
+            let val = 0;
+            if (endBin >= startBin) {
+                const sum = prefixSums[endBin + 1] - prefixSums[startBin];
+                val = sum / (endBin - startBin + 1);
+            } else {
+                const binIdx = Math.min(data.length - 1, Math.round(freq / binWidth));
+                val = data[binIdx];
+            }
+
+            points.push({ freq, val });
+        }
+
+        return points;
     }
 
     function draw() {
@@ -131,19 +179,17 @@
         // 2. Trazo en Vivo (Rojo)
         const liveTrace = traceManager.traces.find(t => t.id === 'live-1' && t.visible);
         if (liveTrace) {
-            const data = smoothData(liveTrace.data, smoothing);
-            drawPath(ctx, data, width, height, '#ff4444', 2);
+            const points = smoothDataLog(liveTrace.data, smoothing);
+            drawPath(ctx, points, width, height, '#ff4444', 2);
 
             // 3. Trazo Predictivo (Cian punteado) = Live + EQ
             ctx.setLineDash([4, 4]);
             ctx.beginPath();
-            const sr = 48000;
-            for (let i = 0; i < data.length; i++) {
-                const freq = (i * sr / 2) / data.length;
-                if (freq < freqMin) continue;
-                const x = freqToX(freq, width);
-                const eqGain = getEQResponse(freq);
-                const y = valToY(data[i] + eqGain, height);
+            for (let i = 0; i < points.length; i++) {
+                const p = points[i];
+                const x = freqToX(p.freq, width);
+                const eqGain = getEQResponseCached(p.freq);
+                const y = valToY(p.val + eqGain, height);
                 if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
             }
             ctx.strokeStyle = '#00ffff';
@@ -155,7 +201,7 @@
         ctx.beginPath();
         for (let f = freqMin; f <= freqMax; f *= 1.05) {
             const x = freqToX(f, width);
-            const y = valToY(getEQResponse(f), height);
+            const y = valToY(getEQResponseCached(f), height);
             if (f === freqMin) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
         ctx.strokeStyle = '#00ff88';
@@ -164,7 +210,8 @@
 
         // 5. Otros trazos (Snapshots)
         traceManager.traces.filter(t => t.type === 'snapshot' && t.visible).forEach(t => {
-            drawPath(ctx, t.data, width, height, t.color, 1.5, t.style === 'dashed');
+            const points = smoothDataLog(t.data, smoothing);
+            drawPath(ctx, points, width, height, t.color, 1.5, t.style === 'dashed');
         });
 
         if (showCrosshair) drawCrosshair(ctx, width, height);
@@ -172,18 +219,16 @@
         requestAnimationFrame(draw);
     }
 
-    function drawPath(ctx: CanvasRenderingContext2D, data: Float32Array, width: number, height: number, color: string, lw: number, dashed = false) {
+    function drawPath(ctx: CanvasRenderingContext2D, points: DataPoint[], width: number, height: number, color: string, lw: number, dashed = false) {
         ctx.strokeStyle = color;
         ctx.lineWidth = lw;
         if (dashed) ctx.setLineDash([5, 5]); else ctx.setLineDash([]);
         ctx.beginPath();
-        const sr = 48000;
         let first = true;
-        for (let i = 0; i < data.length; i++) {
-            const freq = (i * sr / 2) / data.length;
-            if (freq < freqMin) continue;
-            const x = freqToX(freq, width);
-            const y = valToY(data[i], height);
+        for (let i = 0; i < points.length; i++) {
+            const p = points[i];
+            const x = freqToX(p.freq, width);
+            const y = valToY(p.val, height);
             if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y);
         }
         ctx.stroke();
@@ -199,10 +244,18 @@
             ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
             ctx.fillText(f >= 1000 ? `${f/1000}k` : `${f}`, x + 2, height - 5);
         });
-        for (let val = dbMin; val <= dbMax; val += 10) {
+
+        let min = dbMin, max = dbMax;
+        let step = 10;
+        let unit = 'dB';
+        if (metric === 'Fase') { min = -180; max = 180; step = 60; unit = '°'; }
+        else if (metric === 'Coherencia') { min = 0; max = 1; step = 0.2; unit = ''; }
+        else if (metric === 'RTA') { min = -120; max = 10; step = 20; unit = 'dB'; }
+
+        for (let val = min; val <= max; val += step) {
             const y = valToY(val, height);
             ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
-            ctx.fillText(`${val}dB`, width - 30, y - 2);
+            ctx.fillText(`${val}${unit}`, width - 35, y - 2);
         }
     }
 
