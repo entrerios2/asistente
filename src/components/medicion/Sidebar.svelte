@@ -116,11 +116,30 @@
 
     async function toggleGenerator() {
         genActive = !genActive;
-        if (genActive) {
-            await provider.startCapture({
-                onAudioData: () => {},
-                onFrequencyData: (data) => traceManager.updateLiveTrace('live-1', data)
-            });
+        // La activación del analizador ahora es independiente del generador,
+        // pero podemos encender el RTA automáticamente si se enciende el generador
+        if (genActive && !isListening) {
+            await toggleListen();
+        }
+    }
+
+    let isListening = $state(false);
+
+    async function toggleListen() {
+        if (!isListening) {
+            try {
+                await provider.startCapture({
+                    onAudioData: () => {},
+                    onFrequencyData: (data) => traceManager.updateLiveTrace('live-1', data)
+                });
+                isListening = true;
+            } catch (err) {
+                console.error("Error al iniciar captura de audio:", err);
+                isListening = false;
+            }
+        } else {
+            provider.stopCapture();
+            isListening = false;
         }
     }
 
@@ -282,7 +301,10 @@
                                 <button class="btn-toggle" class:active={genActive} onclick={toggleGenerator}>
                                     Generador
                                 </button>
-                                <button class="btn-outline">Escuchar</button>
+                                <button class="btn-outline" class:active={isListening} onclick={toggleListen}>
+                                    <span class="material-symbols-outlined">{isListening ? 'stop_circle' : 'play_circle'}</span>
+                                    {isListening ? 'Detener' : 'Escuchar'}
+                                </button>
                             </div>
                         </section>
                     {/if}

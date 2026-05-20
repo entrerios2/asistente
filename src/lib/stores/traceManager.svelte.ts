@@ -26,7 +26,19 @@ export interface EQBand {
 
 class TraceManager {
     // Estado reactivo de los trazos
-    traces = $state<Trace[]>([]);
+    traces = $state<Trace[]>([{
+        id: 'live-1',
+        name: 'Micrófono en vivo',
+        type: 'live',
+        metric: 'magnitude',
+        data: new Float32Array(0),
+        color: '#00ff88',
+        style: 'solid',
+        visible: true,
+        offsetY: 0,
+        timestamp: Date.now(),
+        source: 'manual'
+    }]);
     
     // Estado de las bandas de EQ (Playground)
     eqBands = $state<EQBand[]>([
