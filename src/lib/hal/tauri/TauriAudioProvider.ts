@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { AudioProvider, AudioListener, AudioBufferChunk, AudioDevice } from '../types';
+import type { AudioProvider, AudioListener, AudioBufferChunk, AudioDevice, SignalType } from '../types';
 
 export class TauriAudioProvider implements AudioProvider {
 	private intervalId: any = null;
@@ -21,8 +21,8 @@ export class TauriAudioProvider implements AudioProvider {
 		}
 	}
 
-	playPinkNoise(active: boolean): void {
-		console.info(`Tauri Pink Noise: ${active ? 'ON (Simulated)' : 'OFF'}`);
+	playGenerator(type: SignalType, active: boolean, freq: number, level: number, routing: 'L' | 'R' | 'Stereo'): void {
+		console.info(`Tauri Generator [${type}]: ${active ? 'ON (Simulated)' : 'OFF'}`);
 	}
 
     async listDevices(): Promise<AudioDevice[]> {

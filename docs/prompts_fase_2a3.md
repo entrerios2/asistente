@@ -138,4 +138,33 @@ Requisitos de implementación:
 
 ---
 
-*(Nota para el usuario: Los Prompts 8 y 9 sobre la implementación matemática del pseudocódigo de generadores y de métricas deberán ejecutarse sobre el `WebAudioProvider.ts` o la clase del motor DSP una vez que los archivos base de UI estén estructurados mediante estos 7 primeros prompts).*
+### Prompt 8: Generadores de Señales (Algoritmos DSP)
+**Contexto a inyectar:** `src/lib/hal/web/WebAudioProvider.ts` y lectura estricta del archivo `docs/documentacion_senales_y_metricas.md`.
+```markdown
+Eres un ingeniero experto en DSP de audio y TypeScript.
+Tu objetivo es implementar la síntesis algorítmica para los 9 generadores de señales acústicas poblando un `AudioBuffer` genérico en memoria.
+
+¡CRÍTICO!: No inventes fórmulas ni algoritmos. DEBES leer y utilizar estrictamente la física y el pseudo-código detallado en la **PARTE 1** del archivo `docs/documentacion_senales_y_metricas.md` para implementar las 9 señales:
+- Ruido: Blanco, Rosa (Voss-McCartney), Marrón, Music-Noise (EIA-426-B).
+- Tonos y Barridos: Seno continuo, Sweep Logarítmico (Farina Sweep).
+- Ráfagas: Burst, SinBurst (con ventana de Hann).
+- Pseudo-aleatorias: MLS+ (LFSR Galois).
+
+Asegúrate de evitar operaciones asíncronas pesadas en el bucle interno y de pre-alojar los `Float32Array` como indica la documentación. Devuelve exclusivamente las funciones generadoras en TypeScript, traduciendo exactamente el pseudo-código documentado.
+```
+
+---
+
+### Prompt 9: Métricas OSM y Procesamiento (Math Pipeline)
+**Contexto a inyectar:** El módulo DSP que alimenta a `Quadrant.svelte` y lectura estricta del archivo `docs/documentacion_senales_y_metricas.md`.
+```markdown
+Eres un ingeniero experto en análisis de señales matemáticas (DSP) en TypeScript.
+Tu objetivo es implementar el motor de cálculo en tiempo real para las 10 métricas de Open Sound Meter (OSM) a partir de los buffers de entrada del micrófono y referencia.
+
+¡CRÍTICO!: No derives la matemática por tu cuenta. DEBES leer y basar tu código estrictamente en la física y el pseudo-código detallado en la **PARTE 2** del archivo `docs/documentacion_senales_y_metricas.md` para implementar:
+- Frecuencia: `Spectrum`, `Magnitude`, `Phase`.
+- Tiempo: `Impulse`, `Step`, `Group Delay`.
+- Estadísticas: `Coherence`, `Level`, `Spectrogram`, `Numeric`.
+
+El código debe estar fuertemente tipado en TypeScript. Prioriza el uso de arreglos tipados (`Float32Array`) y recicla matrices para evitar el garbage collection, respetando las fórmulas exactas del documento provisto. Devuelve el código del pipeline matemático.
+```

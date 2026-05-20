@@ -1,6 +1,17 @@
 import { base } from '$app/paths';
-import type { AudioProvider, AudioListener } from '../types';
+import type { AudioProvider, AudioListener, SignalType } from '../types';
 import { meterStore } from '../../stores/meterStore.svelte';
+import {
+	generateWhiteNoise,
+	generatePinkNoise,
+	generateBrownNoise,
+	generateMusicNoise,
+	generateSineBuffer,
+	generateLogSweep,
+	generateBurst,
+	generateSinBurst,
+	generateMLS
+} from '../../dsp/signalGenerators';
 
 export class WebAudioProvider implements AudioProvider {
 	private audioContext: AudioContext | null = null;
@@ -92,7 +103,7 @@ export class WebAudioProvider implements AudioProvider {
 		this.freqDataArray = null;
 	}
 
-	playGenerator(type: string, active: boolean, freq: number, level: number, routing: 'L' | 'R' | 'Stereo'): void {
+	playGenerator(type: SignalType, active: boolean, freq: number, level: number, routing: 'L' | 'R' | 'Stereo'): void {
 		if (!this.audioContext) {
 			this.audioContext = new AudioContext({ sampleRate: 48000 });
 		}
@@ -121,73 +132,78 @@ export class WebAudioProvider implements AudioProvider {
 
 		const sampleRate = this.audioContext.sampleRate;
 
-		if (type === 'sweep') {
-			// Barrido Logarítmico Puro via AudioBuffer
-			const duration = 5;
-			const f1 = 10; // Start below 20Hz
-			const f2 = 20000;
-			const buffer = this.audioContext.createBuffer(1, sampleRate * duration, sampleRate);
-			const data = buffer.getChannelData(0);
-			const L = duration / Math.log(f2 / f1);
-			
-			for (let i = 0; i < data.length; i++) {
-				const t = i / sampleRate;
-				data[i] = Math.sin(2 * Math.PI * f1 * L * (Math.exp(t / L) - 1));
-			}
-
-			const source = this.audioContext.createBufferSource();
-			source.buffer = buffer;
-			source.loop = true;
-			source.start();
-			this.generatorNode = source;
-		} else if (type === 'white' || type === 'brown') {
-			const bufferSize = 2 * sampleRate;
-			const buffer = this.audioContext.createBuffer(1, bufferSize, sampleRate);
-			const data = buffer.getChannelData(0);
-			let lastOut = 0;
-			
-			for (let i = 0; i < bufferSize; i++) {
-				const white = Math.random() * 2 - 1;
-				if (type === 'white') {
-					data[i] = white;
-				} else {
-					// Brown noise (leaked integrator)
-					data[i] = (lastOut + (0.02 * white)) / 1.02;
-					lastOut = data[i];
-					data[i] *= 3.5; // Gain compensation
-				}
-			}
-			const source = this.audioContext.createBufferSource();
-			source.buffer = buffer;
-			source.loop = true;
-			source.start();
-			this.generatorNode = source;
-		} else if (type === 'pink') {
-			const node = this.audioContext.createScriptProcessor(4096, 1, 1);
-			let b0=0, b1=0, b2=0, b3=0, b4=0, b5=0, b6=0;
-			node.onaudioprocess = (e) => {
-				const out = e.outputBuffer.getChannelData(0);
-				for (let i = 0; i < out.length; i++) {
-					const white = Math.random() * 2 - 1;
-					b0 = 0.99886 * b0 + white * 0.0555179;
-					b1 = 0.99332 * b1 + white * 0.0750759;
-					b2 = 0.96900 * b2 + white * 0.1538520;
-					b3 = 0.86650 * b3 + white * 0.3104856;
-					b4 = 0.55000 * b4 + white * 0.5329522;
-					b5 = -0.7616 * b5 - white * 0.0168980;
-					const pink = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
-					b6 = white * 0.115926;
-					out[i] = pink * 0.11;
-				}
-			};
-			this.generatorNode = node;
-		} else {
-			// Sine fallback
+		if (type === 'sine') {
+			// Seno continuo: usar OscillatorNode nativo (máxima eficiencia)
 			const osc = this.audioContext.createOscillator();
 			osc.type = 'sine';
 			osc.frequency.setValueAtTime(freq, this.audioContext.currentTime);
 			osc.start();
 			this.generatorNode = osc;
+		} else if (type === 'sweep') {
+			// Sweep Logarítmico (Farina): buffer pre-renderizado de 5 segundos
+			const duration = 5;
+			const f1 = 10;
+			const f2 = 20000;
+			const numSamples = Math.round(duration * sampleRate);
+			const audioBuffer = this.audioContext.createBuffer(1, numSamples, sampleRate);
+			const data = audioBuffer.getChannelData(0);
+			generateLogSweep(data, numSamples, f1, f2, duration, sampleRate);
+
+			const source = this.audioContext.createBufferSource();
+			source.buffer = audioBuffer;
+			source.loop = true;
+			source.start();
+			this.generatorNode = source;
+		} else if (type === 'mls') {
+			// MLS+: LFSR Galois orden 16 (65535 muestras ≈ 1.37s @ 48kHz)
+			const mlsData = generateMLS(16);
+			const audioBuffer = this.audioContext.createBuffer(1, mlsData.length, sampleRate);
+			audioBuffer.getChannelData(0).set(mlsData);
+
+			const source = this.audioContext.createBufferSource();
+			source.buffer = audioBuffer;
+			source.loop = true;
+			source.start();
+			this.generatorNode = source;
+		} else {
+			// Señales basadas en buffer pre-renderizado de 2 segundos
+			// (white, pink, brown, music-noise, burst, sinburst)
+			const burstDuration = 0.05;  // 50ms de ráfaga
+			const totalDuration = 0.5;   // 500ms periodo total (burst/sinburst)
+			const isBurstType = type === 'burst' || type === 'sinburst';
+			const bufferLength = isBurstType
+				? Math.round(totalDuration * sampleRate)
+				: 2 * sampleRate;
+
+			const audioBuffer = this.audioContext.createBuffer(1, bufferLength, sampleRate);
+			const data = audioBuffer.getChannelData(0);
+
+			switch (type) {
+				case 'white':
+					generateWhiteNoise(data, bufferLength);
+					break;
+				case 'pink':
+					generatePinkNoise(data, bufferLength);
+					break;
+				case 'brown':
+					generateBrownNoise(data, bufferLength);
+					break;
+				case 'music-noise':
+					generateMusicNoise(data, bufferLength, sampleRate);
+					break;
+				case 'burst':
+					generateBurst(data, bufferLength, freq, burstDuration, sampleRate);
+					break;
+				case 'sinburst':
+					generateSinBurst(data, bufferLength, freq, burstDuration, sampleRate);
+					break;
+			}
+
+			const source = this.audioContext.createBufferSource();
+			source.buffer = audioBuffer;
+			source.loop = true;
+			source.start();
+			this.generatorNode = source;
 		}
 
 		if (this.generatorNode && this.generatorGainNode && this.pannerNode) {
