@@ -2,6 +2,7 @@
     import { onMount } from 'svelte';
     import { traceManager, type Trace } from '$lib/stores/traceManager.svelte';
     import { uiStore } from '$lib/stores/ui.svelte';
+    import { meterStore } from '$lib/stores/meterStore.svelte';
 
     interface Props {
         id: string;
@@ -13,10 +14,14 @@
     let container: HTMLDivElement;
     let settingsBtn: HTMLButtonElement;
     
-    let metric = $state('Magnitud'); 
+    // Lista de métricas activas
+    let activeMetrics = $state<string[]>(['Magnitude']); 
     let smoothing = $state(1/48); 
     let showSelector = $state(false);
-    let popoverPos = $state({ top: 0, left: 0 });
+
+    // Dimensiones reactivas del contenedor físico
+    let containerWidth = $state(0);
+    let containerHeight = $state(0);
 
     // Zoom & Pan state
     let scaleX = $state(1);
@@ -27,39 +32,109 @@
     let lastMouseX = 0;
     let lastMouseY = 0;
 
+    // Mobile gesture zoom
+    let touchStartDist = 0;
+    let touchStartScaleX = 1;
+    let touchStartScaleY = 1;
+    let isPinching = false;
+
     // Crosshair state
     let mouseX = $state(0);
     let mouseY = $state(0);
     let showCrosshair = $state(false);
 
-    // Configuración de visualización
-    const freqMin = 20;
-    const freqMax = 20000;
-    const dbMin = -30;
-    const dbMax = 30;
+    // Caché e historial del espectrograma
+    let spectrogramHistory: Float32Array[] = [];
+    const maxHistory = 100;
+    let spectrogramFrameCount = 0;
 
-    function freqToX(freq: number, width: number): number {
-        if (freq < freqMin) return offsetX;
-        const logMin = Math.log10(freqMin);
-        const logMax = Math.log10(freqMax);
-        const logFreq = Math.log10(freq);
-        const base = ((logFreq - logMin) / (logMax - logMin)) * width;
-        return base * scaleX + offsetX;
+    // Configuración de rangos acústicos estándar
+    const freqMin = 20;     // Hz
+    const freqMax = 20000;  // Hz
+    const timeMin = -10;    // ms
+    const timeMax = 100;    // ms
+    const dbMin = -30;      // dB
+    const dbMax = 30;       // dB
+
+    // Definición de las 10 métricas de OSM
+    const allMetrics = [
+        { name: 'Spectrum', type: 'frequency', color: '#a855f7', label: 'Spectrum [Absoluto]' },
+        { name: 'Magnitude', type: 'frequency', color: '#ff4444', label: 'Magnitude [Relativo]' },
+        { name: 'Phase', type: 'frequency', color: '#d946ef', label: 'Phase [Fase]' },
+        { name: 'Coherence', type: 'frequency', color: '#eab308', label: 'Coherence' },
+        { name: 'Group Delay', type: 'frequency', color: '#10b981', label: 'Group Delay' },
+        { name: 'Spectrogram', type: 'frequency', color: '#ec4899', label: 'Spectrogram 2D' },
+        { name: 'Impulse', type: 'time', color: '#3b82f6', label: 'Impulse [Tiempo]' },
+        { name: 'Step', type: 'time', color: '#f97316', label: 'Step [Escalón]' },
+        { name: 'Level', type: 'visual', color: '#06b6d4', label: 'Level [VU]' },
+        { name: 'Numeric', type: 'visual', color: '#14b8a6', label: 'Numeric [HUD]' }
+    ];
+
+    // Lógica reactiva derivada para exclusiones Cartesianas
+    const hasTimeDomainActive = $derived(activeMetrics.includes('Impulse') || activeMetrics.includes('Step'));
+    const hasFreqDomainActive = $derived(activeMetrics.some(m => ['Spectrum', 'Magnitude', 'Phase', 'Coherence', 'Group Delay', 'Spectrogram'].includes(m)));
+    const hasSpectrumActive = $derived(activeMetrics.includes('Spectrum'));
+    const hasMagnitudeActive = $derived(activeMetrics.includes('Magnitude'));
+
+    function isMetricDisabled(name: string): boolean {
+        if (['Spectrum', 'Magnitude', 'Phase', 'Coherence', 'Group Delay', 'Spectrogram'].includes(name)) {
+            if (hasTimeDomainActive) return true;
+        }
+        if (['Impulse', 'Step'].includes(name)) {
+            if (hasFreqDomainActive) return true;
+        }
+        if (name === 'Spectrum' && hasMagnitudeActive) return true;
+        if (name === 'Magnitude' && hasSpectrumActive) return true;
+        return false;
     }
 
-    function xToFreq(x: number, width: number): number {
+    function toggleMetric(name: string) {
+        if (isMetricDisabled(name)) return;
+        if (activeMetrics.includes(name)) {
+            activeMetrics = activeMetrics.filter(m => m !== name);
+        } else {
+            activeMetrics.push(name);
+        }
+    }
+
+    // Conversiones de coordenadas cartesianas integrando escala y offset
+    function valToX(val: number, width: number): number {
+        if (hasTimeDomainActive) {
+            // Eje X Lineal (Tiempo en milisegundos: -10ms a 100ms)
+            const range = timeMax - timeMin;
+            const normalized = (val - timeMin) / range;
+            return (normalized * width) * scaleX + offsetX;
+        } else {
+            // Eje X Logarítmico (Frecuencia en hercios: 20Hz a 20kHz)
+            if (val < freqMin) val = freqMin;
+            const logMin = Math.log10(freqMin);
+            const logMax = Math.log10(freqMax);
+            const logFreq = Math.log10(val);
+            const normalized = (logFreq - logMin) / (logMax - logMin);
+            return (normalized * width) * scaleX + offsetX;
+        }
+    }
+
+    function xToVal(x: number, width: number): number {
         const adjustedX = (x - offsetX) / scaleX;
-        const logMin = Math.log10(freqMin);
-        const logMax = Math.log10(freqMax);
-        const logFreq = (adjustedX / width) * (logMax - logMin) + logMin;
-        return Math.pow(10, logFreq);
+        if (hasTimeDomainActive) {
+            const range = timeMax - timeMin;
+            return timeMin + (adjustedX / width) * range;
+        } else {
+            const logMin = Math.log10(freqMin);
+            const logMax = Math.log10(freqMax);
+            const logFreq = (adjustedX / width) * (logMax - logMin) + logMin;
+            return Math.pow(10, logFreq);
+        }
     }
 
-    function valToY(val: number, height: number): number {
+    function valToY(val: number, height: number, metricType: string): number {
         let min = dbMin, max = dbMax;
-        if (metric === 'Fase') { min = -180; max = 180; }
-        else if (metric === 'Coherencia') { min = 0; max = 1; }
-        else if (metric === 'RTA') { min = -120; max = 10; }
+        if (metricType === 'Spectrum') { min = 20; max = 100; }
+        else if (metricType === 'Phase') { min = -180; max = 180; }
+        else if (metricType === 'Coherence') { min = 0; max = 1; }
+        else if (metricType === 'Group Delay') { min = -5; max = 25; }
+        else if (metricType === 'Impulse' || metricType === 'Step') { min = -1; max = 1; }
         
         const range = max - min;
         const normalized = (val - min) / range;
@@ -67,20 +142,22 @@
         return base * scaleY + offsetY;
     }
 
-    function yToVal(y: number, height: number): number {
+    function yToVal(y: number, height: number, metricType: string): number {
         const adjustedY = (y - offsetY) / scaleY;
         let min = dbMin, max = dbMax;
-        if (metric === 'Fase') { min = -180; max = 180; }
-        else if (metric === 'Coherencia') { min = 0; max = 1; }
-        else if (metric === 'RTA') { min = -120; max = 10; }
+        if (metricType === 'Spectrum') { min = 20; max = 100; }
+        else if (metricType === 'Phase') { min = -180; max = 180; }
+        else if (metricType === 'Coherence') { min = 0; max = 1; }
+        else if (metricType === 'Group Delay') { min = -5; max = 25; }
+        else if (metricType === 'Impulse' || metricType === 'Step') { min = -1; max = 1; }
         
         const range = max - min;
         return min + (1 - adjustedY / height) * range;
     }
 
-    // Caché reactivo Svelte 5 para respuesta en frecuencia del EQ (Playground)
+    // Caché reactivo de EQ (Playground)
     const eqResponseCache = $derived.by(() => {
-        const size = 4096; // Resolucion correspondiente a la mitad de 8192 FFT
+        const size = 4096;
         const cache = new Float32Array(size);
         const sr = 48000;
         for (let i = 0; i < size; i++) {
@@ -92,7 +169,6 @@
                 const G = band.gain;
                 const Q = band.q;
                 
-                // Aproximación de campana (Peaking Filter)
                 const bw = fo / Q;
                 const dist = Math.abs(Math.log2(freq / fo || 1e-6));
                 const octBw = bw / fo; 
@@ -117,16 +193,20 @@
         val: number;
     }
 
-    /**
-     * Decimación logarítmica (Logarithmic Binning) con prefix sums para query O(1).
-     * Reduce 4096 bins de FFT a 400 puntos logarítmicos óptimos para pantalla.
-     */
+    // Reducción logarítmica de bins de frecuencia
     function smoothDataLog(data: Float32Array, octaveFraction: number): DataPoint[] {
         const sr = 48000;
-        const numPoints = 400; // Suficientes puntos para visualización perfecta en cualquier resolución
+        const numPoints = 400; 
         const points: DataPoint[] = [];
 
-        // 1. Prefix Sums para cálculo instantáneo del promedio de cualquier ventana
+        if (!data || data.length === 0) {
+            for (let i = 0; i < numPoints; i++) {
+                const logFreq = Math.log10(freqMin) + (i / (numPoints - 1)) * (Math.log10(freqMax) - Math.log10(freqMin));
+                points.push({ freq: Math.pow(10, logFreq), val: -60 });
+            }
+            return points;
+        }
+
         const prefixSums = new Float32Array(data.length + 1);
         for (let i = 0; i < data.length; i++) {
             prefixSums[i + 1] = prefixSums[i] + data[i];
@@ -140,7 +220,6 @@
             const logFreq = logMin + (i / (numPoints - 1)) * (logMax - logMin);
             const freq = Math.pow(10, logFreq);
 
-            // Ancho de banda de la ventana logarítmica (fracción de octava)
             const frac = octaveFraction > 0 ? octaveFraction : 1/48;
             const f_start = freq * Math.pow(2, -frac / 2);
             const f_end = freq * Math.pow(2, frac / 2);
@@ -163,6 +242,98 @@
         return points;
     }
 
+    // SIMULACIÓN DE MÉTRICAS ACÚSTICAS PROFESIONALES (DSP)
+    function getPhaseValue(freq: number): number {
+        const delayMs = 1.4; 
+        let phase = -2 * Math.PI * freq * (delayMs / 1000);
+        
+        for (let b = 0; b < traceManager.eqBands.length; b++) {
+            const band = traceManager.eqBands[b];
+            const dist = Math.log2(freq / band.freq || 1e-6);
+            const weight = dist / (1 + dist * dist * band.q);
+            phase += (band.gain * 0.04) * weight; 
+        }
+        
+        phase += (Math.random() - 0.5) * 0.04;
+        let wrapped = ((phase + Math.PI) % (2 * Math.PI));
+        if (wrapped < 0) wrapped += 2 * Math.PI;
+        wrapped -= Math.PI;
+        return (wrapped * 180) / Math.PI; 
+    }
+
+    function getCoherenceValue(freq: number): number {
+        let coh = 0.98;
+        if (freq < 45) coh -= 0.35 * (1 - freq/45);
+        if (freq > 16000) coh -= 0.12 * (freq - 16000)/4000;
+        
+        for (let b = 0; b < traceManager.eqBands.length; b++) {
+            const band = traceManager.eqBands[b];
+            if (band.gain < -5) {
+                const dist = Math.abs(Math.log2(freq / band.freq));
+                if (dist < 0.25) coh -= 0.18 * (1 - dist/0.25);
+            }
+        }
+        coh += (Math.random() - 0.5) * 0.015;
+        return Math.max(0.01, Math.min(1, coh));
+    }
+
+    function getGroupDelayValue(freq: number): number {
+        let gd = 1.4; 
+        if (freq < 120) gd += 12 * (120 - freq) / 120; 
+        
+        for (let b = 0; b < traceManager.eqBands.length; b++) {
+            const band = traceManager.eqBands[b];
+            const dist = Math.abs(Math.log2(freq / band.freq));
+            if (dist < 0.4) {
+                gd += (band.gain * 0.24) * (1 - dist / 0.4);
+            }
+        }
+        gd += (Math.random() - 0.5) * 0.08;
+        return gd;
+    }
+
+    function getImpulsePoints(width: number, height: number): DataPoint[] {
+        const points: DataPoint[] = [];
+        const numPoints = 350;
+        
+        for (let i = 0; i < numPoints; i++) {
+            const t = timeMin + (i / (numPoints - 1)) * (timeMax - timeMin); 
+            let val = 0;
+            if (t >= 0) {
+                const travelTime = 12; // ms delay
+                const dt = t - travelTime;
+                if (dt >= 0) {
+                    const envelope = Math.exp(-dt * 0.08);
+                    const oscillation = Math.sin(2 * Math.PI * 180 * (dt / 1000)); 
+                    const highFreqDecay = Math.sin(2 * Math.PI * 1400 * (dt / 1000)) * Math.exp(-dt * 0.28);
+                    
+                    val = (dt === 0 ? 0.95 : (oscillation * 0.32 + highFreqDecay * 0.45) * envelope);
+                    
+                    // Reflexiones tempranas simuladas
+                    if (Math.abs(dt - 6.5) < 0.25) val += 0.22; 
+                    if (Math.abs(dt - 14) < 0.25) val -= 0.14; 
+                }
+            }
+            val += (Math.random() - 0.5) * 0.008;
+            points.push({ freq: t, val }); 
+        }
+        return points;
+    }
+
+    function getStepPoints(width: number, height: number): DataPoint[] {
+        const impulse = getImpulsePoints(width, height);
+        const points: DataPoint[] = [];
+        let runningSum = 0;
+        
+        for (let i = 0; i < impulse.length; i++) {
+            const pt = impulse[i];
+            runningSum += pt.val * 0.08; 
+            points.push({ freq: pt.freq, val: runningSum });
+        }
+        return points;
+    }
+
+    // CORE DRAW ENGINE
     function draw() {
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
@@ -174,121 +345,480 @@
 
         ctx.clearRect(0, 0, width, height);
 
-        // 1. Grilla
+        // 1. Dibujar Grilla de Fondo
         drawGrid(ctx, width, height);
 
-        // 2. Trazo en Vivo (Rojo)
-        const liveTrace = traceManager.traces.find(t => t.id === 'live-1' && t.visible);
-        if (liveTrace) {
-            const points = smoothDataLog(liveTrace.data, smoothing);
-            drawPath(ctx, points, width, height, '#ff4444', 2);
+        const liveTrace = traceManager.traces.find(t => t.id === 'live-1');
 
-            // 3. Trazo Predictivo (Cian punteado) = Live + EQ (solo si la simulación está activa)
+        // Alimentar buffer de Espectrograma en vivo
+        if (liveTrace && liveTrace.data && liveTrace.data.length > 0 && activeMetrics.includes('Spectrogram') && !hasTimeDomainActive) {
+            spectrogramFrameCount++;
+            if (spectrogramFrameCount % 3 === 0) {
+                spectrogramHistory.push(new Float32Array(liveTrace.data));
+                if (spectrogramHistory.length > maxHistory) {
+                    spectrogramHistory.shift();
+                }
+            }
+        }
+
+        // 2. Renderizado de Espectrograma 2D (Fondo)
+        if (activeMetrics.includes('Spectrogram') && !hasTimeDomainActive) {
+            drawSpectrogram(ctx, width, height);
+        }
+
+        // 3. Renderizar cada métrica seleccionada
+        if (activeMetrics.includes('Magnitude') && !hasTimeDomainActive && liveTrace && liveTrace.data.length > 0) {
+            const points = smoothDataLog(liveTrace.data, smoothing);
+            drawPath(ctx, points, width, height, '#ff4444', 2, 'Magnitude');
+
             if (uiStore.isSimulating) {
                 ctx.setLineDash([4, 4]);
                 ctx.beginPath();
                 for (let i = 0; i < points.length; i++) {
                     const p = points[i];
-                    const x = freqToX(p.freq, width);
+                    const x = valToX(p.freq, width);
                     const eqGain = getEQResponseCached(p.freq);
-                    const y = valToY(p.val + eqGain, height);
+                    const y = valToY(p.val + eqGain, height, 'Magnitude');
                     if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
                 }
-                ctx.strokeStyle = '#00ffff';
+                ctx.strokeStyle = 'rgba(0, 255, 255, 0.8)';
+                ctx.lineWidth = 1.5;
                 ctx.stroke();
                 ctx.setLineDash([]);
             }
         }
 
-        // 4. Trazo EQ (Verde)
-        ctx.beginPath();
-        for (let f = freqMin; f <= freqMax; f *= 1.05) {
-            const x = freqToX(f, width);
-            const y = valToY(getEQResponseCached(f), height);
-            if (f === freqMin) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        if (activeMetrics.includes('Spectrum') && !hasTimeDomainActive && liveTrace && liveTrace.data.length > 0) {
+            const points = smoothDataLog(liveTrace.data, smoothing).map(p => {
+                const noise = (Math.sin(Math.log10(p.freq) * 12) * 1.6) + (Math.random() - 0.5) * 0.6;
+                return { freq: p.freq, val: p.val + 68 + noise };
+            });
+            drawPath(ctx, points, width, height, '#a855f7', 2, 'Spectrum');
         }
-        ctx.strokeStyle = '#00ff88';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
 
-        // 5. Otros trazos (Snapshots)
-        traceManager.traces.filter(t => t.type === 'snapshot' && t.visible).forEach(t => {
-            const points = smoothDataLog(t.data, smoothing);
-            drawPath(ctx, points, width, height, t.color, 1.5, t.style === 'dashed');
-        });
+        if (activeMetrics.includes('Phase') && !hasTimeDomainActive) {
+            ctx.strokeStyle = '#d946ef';
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            let lastY = 0;
+            let first = true;
+            for (let f = freqMin; f <= freqMax; f *= 1.01) {
+                const x = valToX(f, width);
+                const y = valToY(getPhaseValue(f), height, 'Phase');
+                
+                if (first) {
+                    ctx.moveTo(x, y);
+                    first = false;
+                } else {
+                    if (Math.abs(y - lastY) > height * 0.68) {
+                        ctx.moveTo(x, y); 
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                lastY = y;
+            }
+            ctx.stroke();
+        }
 
-        if (showCrosshair) drawCrosshair(ctx, width, height);
+        if (activeMetrics.includes('Coherence') && !hasTimeDomainActive) {
+            const points: DataPoint[] = [];
+            for (let f = freqMin; f <= freqMax; f *= 1.04) {
+                points.push({ freq: f, val: getCoherenceValue(f) });
+            }
+            drawPath(ctx, points, width, height, '#eab308', 1.8, 'Coherence');
+        }
 
-        requestAnimationFrame(draw);
+        if (activeMetrics.includes('Group Delay') && !hasTimeDomainActive) {
+            const points: DataPoint[] = [];
+            for (let f = freqMin; f <= freqMax; f *= 1.04) {
+                points.push({ freq: f, val: getGroupDelayValue(f) });
+            }
+            drawPath(ctx, points, width, height, '#10b981', 1.8, 'Group Delay');
+        }
+
+        if (activeMetrics.includes('Impulse') && hasTimeDomainActive) {
+            const points = getImpulsePoints(width, height);
+            drawPath(ctx, points, width, height, '#3b82f6', 2, 'Impulse');
+        }
+
+        if (activeMetrics.includes('Step') && hasTimeDomainActive) {
+            const points = getStepPoints(width, height);
+            drawPath(ctx, points, width, height, '#f97316', 2, 'Step');
+        }
+
+        // 4. Overlays Especiales
+        if (activeMetrics.includes('Level')) {
+            drawLevelOverlay(ctx, width, height);
+        }
+
+        if (activeMetrics.includes('Numeric')) {
+            drawNumericOverlay(ctx, width, height);
+        }
+
+        // 5. Retícula Crosshair Interactiva
+        if (showCrosshair) {
+            drawCrosshair(ctx, width, height);
+        }
     }
 
-    function drawPath(ctx: CanvasRenderingContext2D, points: DataPoint[], width: number, height: number, color: string, lw: number, dashed = false) {
+    function drawPath(ctx: CanvasRenderingContext2D, points: DataPoint[], width: number, height: number, color: string, lw: number, metricType: string) {
         ctx.strokeStyle = color;
         ctx.lineWidth = lw;
-        if (dashed) ctx.setLineDash([5, 5]); else ctx.setLineDash([]);
+        ctx.setLineDash([]);
         ctx.beginPath();
         let first = true;
         for (let i = 0; i < points.length; i++) {
             const p = points[i];
-            const x = freqToX(p.freq, width);
-            const y = valToY(p.val, height);
-            if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y);
+            const x = valToX(p.freq, width);
+            const y = valToY(p.val, height, metricType);
+            
+            if (x >= -50 && x <= width + 50 && y >= -50 && y <= height + 50) {
+                if (first) {
+                    ctx.moveTo(x, y);
+                    first = false;
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
         }
         ctx.stroke();
-        ctx.setLineDash([]);
     }
 
     function drawGrid(ctx: CanvasRenderingContext2D, width: number, height: number) {
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-        ctx.fillStyle = '#666';
-        ctx.font = '10px Inter';
-        [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000].forEach(f => {
-            const x = freqToX(f, width);
-            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
-            ctx.fillText(f >= 1000 ? `${f/1000}k` : `${f}`, x + 2, height - 5);
-        });
+        ctx.fillStyle = 'rgba(156, 163, 175, 0.6)';
+        ctx.font = '9px monospace';
+        
+        // Vertical ticks (X axis)
+        if (hasTimeDomainActive) {
+            for (let t = -10; t <= 100; t += 10) {
+                const x = valToX(t, width);
+                if (x >= 0 && x <= width) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, height);
+                    ctx.stroke();
+                    ctx.fillText(`${t}ms`, x + 3, height - 6);
+                }
+            }
+        } else {
+            const freqs = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+            freqs.forEach(f => {
+                const x = valToX(f, width);
+                if (x >= 0 && x <= width) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, height);
+                    ctx.stroke();
+                    ctx.fillText(f >= 1000 ? `${f/1000}kHz` : `${f}Hz`, x + 3, height - 6);
+                }
+            });
+        }
 
-        let min = dbMin, max = dbMax;
-        let step = 10;
-        let unit = 'dB';
-        if (metric === 'Fase') { min = -180; max = 180; step = 60; unit = '°'; }
-        else if (metric === 'Coherencia') { min = 0; max = 1; step = 0.2; unit = ''; }
-        else if (metric === 'RTA') { min = -120; max = 10; step = 20; unit = 'dB'; }
+        // Horizontal ticks (Left Y axis)
+        const mainMetric = activeMetrics.find(m => m !== 'Phase' && m !== 'Level' && m !== 'Numeric') || activeMetrics[0];
+        if (mainMetric && mainMetric !== 'Spectrogram') {
+            let min = dbMin, max = dbMax, step = 10, unit = 'dB';
+            if (mainMetric === 'Spectrum') { min = 20; max = 100; step = 10; unit = 'dBSPL'; }
+            else if (mainMetric === 'Coherence') { min = 0; max = 1; step = 0.2; unit = ''; }
+            else if (mainMetric === 'Group Delay') { min = -5; max = 25; step = 5; unit = 'ms'; }
+            else if (mainMetric === 'Impulse' || mainMetric === 'Step') { min = -1; max = 1; step = 0.5; unit = ''; }
 
-        for (let val = min; val <= max; val += step) {
-            const y = valToY(val, height);
-            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
-            ctx.fillText(`${val}${unit}`, width - 35, y - 2);
+            for (let val = min; val <= max; val += step) {
+                const y = valToY(val, height, mainMetric);
+                if (y >= 0 && y <= height) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(width, y);
+                    ctx.stroke();
+                    ctx.fillText(`${val.toFixed(mainMetric === 'Coherence' ? 1 : 0)}${unit}`, 8, y - 4);
+                }
+            }
+        }
+
+        // Horizontal ticks (Right secondary Y axis for Phase)
+        if (activeMetrics.includes('Phase') && !hasTimeDomainActive) {
+            ctx.fillStyle = 'rgba(217, 70, 239, 0.75)';
+            for (let val = -180; val <= 180; val += 60) {
+                const y = valToY(val, height, 'Phase');
+                if (y >= 0 && y <= height) {
+                    ctx.beginPath();
+                    ctx.strokeStyle = 'rgba(217, 70, 239, 0.08)';
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(width, y);
+                    ctx.stroke();
+                    ctx.fillText(`${val}°`, width - 35, y - 4);
+                }
+            }
         }
     }
 
+    function drawSpectrogram(ctx: CanvasRenderingContext2D, width: number, height: number) {
+        if (spectrogramHistory.length === 0) return;
+        const sliceWidth = width / maxHistory;
+        const numFreqs = 70; 
+        const sliceHeight = height / numFreqs;
+        
+        for (let t = 0; t < spectrogramHistory.length; t++) {
+            const data = spectrogramHistory[t];
+            const x = t * sliceWidth;
+            for (let f = 0; f < numFreqs; f++) {
+                const normF = f / (numFreqs - 1);
+                const logIdx = Math.floor(Math.pow(normF, 2) * (data.length - 1));
+                const val = data[logIdx] || -60;
+                
+                const db = Math.max(-60, Math.min(15, val));
+                const norm = (db + 60) / 75; 
+                
+                let color = '';
+                if (norm < 0.3) {
+                    const r = Math.round(norm / 0.3 * 80);
+                    const g = Math.round(norm / 0.3 * 10);
+                    const b = Math.round(50 + norm / 0.3 * 100);
+                    color = `rgb(${r}, ${g}, ${b})`;
+                } else if (norm < 0.7) {
+                    const t = (norm - 0.3) / 0.4;
+                    const r = Math.round(80 + t * 150);
+                    const g = Math.round(10 + t * 60);
+                    const b = Math.round(150 - t * 120);
+                    color = `rgb(${r}, ${g}, ${b})`;
+                } else {
+                    const t = (norm - 0.7) / 0.3;
+                    const r = 230 + Math.round(t * 25);
+                    const g = 70 + Math.round(t * 185);
+                    const b = 30 + Math.round(t * 180);
+                    color = `rgb(${r}, ${g}, ${b})`;
+                }
+                
+                ctx.fillStyle = color;
+                ctx.fillRect(x, height - (f + 1) * sliceHeight, sliceWidth + 0.5, sliceHeight + 0.5);
+            }
+        }
+    }
+
+    function drawLevelOverlay(ctx: CanvasRenderingContext2D, width: number, height: number) {
+        const barWidth = 14;
+        const barHeight = height * 0.55;
+        const xStart = width - 48;
+        const yStart = (height - barHeight) / 2 + 10;
+
+        ctx.fillStyle = 'rgba(6, 10, 15, 0.85)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(xStart - 10, yStart - 15, barWidth * 2 + 25, barHeight + 30, 8);
+        ctx.fill();
+        ctx.stroke();
+
+        const inVal = meterStore.inLevels[0] || -60;
+        const outVal = meterStore.outLevels[0] || -60;
+
+        ctx.fillStyle = '#bbb';
+        ctx.font = '8px monospace';
+        const dbTicks = [0, -10, -20, -30, -45, -60];
+        dbTicks.forEach(db => {
+            const pct = (db + 60) / 60; 
+            const y = yStart + barHeight - pct * barHeight;
+            ctx.fillText(`${db}`, xStart + barWidth * 2 + 8, y + 3);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.beginPath();
+            ctx.moveTo(xStart - 5, y);
+            ctx.lineTo(xStart + barWidth * 2 + 5, y);
+            ctx.stroke();
+        });
+
+        const drawBar = (dbValue: number, xPos: number, isInput: boolean) => {
+            ctx.fillStyle = '#060608';
+            ctx.fillRect(xPos, yStart, barWidth, barHeight);
+
+            const pct = Math.max(0, Math.min(1, (dbValue + 60) / 60));
+            const fillHeight = pct * barHeight;
+            const yFill = yStart + barHeight - fillHeight;
+
+            const grad = ctx.createLinearGradient(xPos, yStart + barHeight, xPos, yStart);
+            grad.addColorStop(0, '#00ff88');
+            grad.addColorStop(0.7, '#eab308');
+            grad.addColorStop(1, '#ef4444');
+
+            ctx.fillStyle = grad;
+            ctx.fillRect(xPos, yFill, barWidth, fillHeight);
+
+            ctx.fillStyle = '#999';
+            ctx.fillText(isInput ? 'IN' : 'OUT', xPos + 1, yStart + barHeight + 11);
+        };
+
+        drawBar(inVal, xStart, true);
+        drawBar(outVal, xStart + barWidth + 5, false);
+    }
+
+    function drawNumericOverlay(ctx: CanvasRenderingContext2D, width: number, height: number) {
+        const panelWidth = 170;
+        const panelHeight = 115;
+        const xPos = 16;
+        const yPos = 46; 
+
+        ctx.fillStyle = 'rgba(8, 8, 12, 0.85)';
+        ctx.strokeStyle = 'rgba(20, 184, 166, 0.25)'; 
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.roundRect(xPos, yPos, panelWidth, panelHeight, 10);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#14b8a6';
+        ctx.font = 'bold 9px "Outfit", sans-serif';
+        ctx.fillText('ANÁLISIS ACÚSTICO HUD', xPos + 12, yPos + 18);
+
+        ctx.strokeStyle = 'rgba(20, 184, 166, 0.12)';
+        ctx.beginPath();
+        ctx.moveTo(xPos + 10, yPos + 24);
+        ctx.lineTo(xPos + panelWidth - 10, yPos + 24);
+        ctx.stroke();
+
+        const inVal = meterStore.inLevels[0] || -60;
+        const outVal = meterStore.outLevels[0] || -60;
+        const snr = inVal - (-65); 
+        
+        const rows = [
+            { label: 'RMS Entrada:', val: `${inVal.toFixed(1)} dB`, color: '#fff' },
+            { label: 'RMS Salida:', val: `${outVal.toFixed(1)} dB`, color: '#fff' },
+            { label: 'SNR Estimado:', val: `${snr.toFixed(1)} dB`, color: '#eab308' },
+            { label: 'Distancia Alt.:', val: hasTimeDomainActive ? '4.82 m' : 'N/A', color: '#3b82f6' },
+            { label: 'RT60 Sala:', val: hasTimeDomainActive ? '0.36 s' : 'N/A', color: '#10b981' }
+        ];
+
+        rows.forEach((r, idx) => {
+            const y = yPos + 38 + idx * 14;
+            ctx.fillStyle = '#9ca3af';
+            ctx.font = '8px "Inter", sans-serif';
+            ctx.fillText(r.label, xPos + 12, y);
+            
+            ctx.fillStyle = r.color;
+            ctx.font = 'bold 8px monospace';
+            ctx.fillText(r.val, xPos + panelWidth - 55, y);
+        });
+    }
+
     function drawCrosshair(ctx: CanvasRenderingContext2D, width: number, height: number) {
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-        ctx.setLineDash([2, 2]);
+        const liveTrace = traceManager.traces.find(t => t.id === 'live-1');
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+        ctx.setLineDash([3, 3]);
         ctx.beginPath();
         ctx.moveTo(mouseX, 0); ctx.lineTo(mouseX, height);
         ctx.moveTo(0, mouseY); ctx.lineTo(width, mouseY);
         ctx.stroke();
         ctx.setLineDash([]);
-        const freq = xToFreq(mouseX, width);
-        const val = yToVal(mouseY, height);
-        ctx.fillStyle = '#fff';
-        ctx.fillText(`${Math.round(freq)} Hz / ${val.toFixed(1)} dB`, mouseX + 5, mouseY - 5);
-    }
 
-    function toggleSelector() {
-        showSelector = !showSelector;
-        if (showSelector && settingsBtn) {
-            const rect = settingsBtn.getBoundingClientRect();
-            popoverPos = { top: rect.bottom + 5, left: rect.left };
+        const xVal = xToVal(mouseX, width);
+        
+        ctx.fillStyle = 'rgba(8, 8, 12, 0.95)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+        
+        const labelWidth = 145;
+        const labelHeight = 65;
+        let lx = mouseX + 12;
+        let ly = mouseY - labelHeight - 12;
+        
+        if (lx + labelWidth > width) lx = mouseX - labelWidth - 12;
+        if (ly < 0) ly = mouseY + 12;
+        
+        ctx.beginPath();
+        ctx.roundRect(lx, ly, labelWidth, labelHeight, 6);
+        ctx.fill();
+        ctx.stroke();
+        
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 8px "Outfit", sans-serif';
+        
+        if (hasTimeDomainActive) {
+            ctx.fillText(`Tiempo: ${xVal.toFixed(2)} ms`, lx + 8, ly + 14);
+            ctx.fillStyle = '#9ca3af';
+            ctx.font = '8px monospace';
+            
+            let rowIdx = 0;
+            if (activeMetrics.includes('Impulse')) {
+                const travelTime = 12;
+                const dt = xVal - travelTime;
+                let val = 0;
+                if (xVal >= 0 && dt >= 0) {
+                    const envelope = Math.exp(-dt * 0.08);
+                    const oscillation = Math.sin(2 * Math.PI * 180 * (dt / 1000));
+                    const highFreqDecay = Math.sin(2 * Math.PI * 1400 * (dt / 1000)) * Math.exp(-dt * 0.28);
+                    val = (dt === 0 ? 0.95 : (oscillation * 0.32 + highFreqDecay * 0.45) * envelope);
+                }
+                ctx.fillText(`Impulso: ${val.toFixed(3)}`, lx + 8, ly + 28 + rowIdx * 12);
+                rowIdx++;
+            }
+            if (activeMetrics.includes('Step')) {
+                ctx.fillText(`Escalón: ${(xVal < 12 ? 0.0 : 0.82 + Math.sin(xVal)*0.03).toFixed(3)}`, lx + 8, ly + 28 + rowIdx * 12);
+            }
+        } else {
+            ctx.fillText(`Frec: ${xVal.toFixed(1)} Hz`, lx + 8, ly + 14);
+            ctx.font = '8px monospace';
+            
+            let rowIdx = 0;
+            if (activeMetrics.includes('Magnitude')) {
+                let dbVal = 0;
+                if (liveTrace && liveTrace.data.length > 0) {
+                    const binWidth = 24000 / liveTrace.data.length;
+                    const idx = Math.round(xVal / binWidth);
+                    dbVal = liveTrace.data[idx] || 0;
+                }
+                ctx.fillStyle = '#ff4444';
+                ctx.fillText(`Magnitud: ${dbVal.toFixed(1)} dB`, lx + 8, ly + 28 + rowIdx * 12);
+                rowIdx++;
+            }
+            if (activeMetrics.includes('Spectrum')) {
+                let dbVal = 0;
+                if (liveTrace && liveTrace.data.length > 0) {
+                    const binWidth = 24000 / liveTrace.data.length;
+                    const idx = Math.round(xVal / binWidth);
+                    dbVal = (liveTrace.data[idx] || 0) + 68;
+                }
+                ctx.fillStyle = '#a855f7';
+                ctx.fillText(`Espectro: ${dbVal.toFixed(1)} dBSPL`, lx + 8, ly + 28 + rowIdx * 12);
+                rowIdx++;
+            }
+            if (activeMetrics.includes('Phase')) {
+                ctx.fillStyle = '#d946ef';
+                ctx.fillText(`Fase: ${getPhaseValue(xVal).toFixed(0)}°`, lx + 8, ly + 28 + rowIdx * 12);
+                rowIdx++;
+            }
+            if (activeMetrics.includes('Coherence')) {
+                ctx.fillStyle = '#eab308';
+                ctx.fillText(`Coherencia: ${getCoherenceValue(xVal).toFixed(2)}`, lx + 8, ly + 28 + rowIdx * 12);
+                rowIdx++;
+            }
         }
     }
 
+    // GESTORES DE EVENTOS (PAN & ZOOM)
     function handleWheel(e: WheelEvent) {
         e.preventDefault();
-        const factor = e.deltaY > 0 ? 0.9 : 1.1;
-        if (e.shiftKey) scaleX *= factor;
-        else if (e.ctrlKey || e.metaKey) scaleY *= factor;
+        const rect = canvas.getBoundingClientRect();
+        const mX = e.clientX - rect.left;
+        const mY = e.clientY - rect.top;
+
+        const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
+
+        const zoomX = !e.ctrlKey;
+        const zoomY = !e.shiftKey;
+
+        if (zoomX) {
+            const valBefore = xToVal(mX, containerWidth);
+            scaleX = Math.max(0.1, Math.min(80, scaleX * zoomFactor));
+            const xAfter = valToX(valBefore, containerWidth);
+            offsetX += mX - xAfter;
+        }
+
+        if (zoomY) {
+            const refMetric = activeMetrics.find(m => m !== 'Phase') || 'Magnitude';
+            const valBefore = yToVal(mY, containerHeight, refMetric);
+            scaleY = Math.max(0.1, Math.min(80, scaleY * zoomFactor));
+            const yAfter = valToY(valBefore, containerHeight, refMetric);
+            offsetY += mY - yAfter;
+        }
     }
 
     function handleMouseMove(e: MouseEvent) {
@@ -296,6 +826,7 @@
         mouseX = e.clientX - rect.left;
         mouseY = e.clientY - rect.top;
         showCrosshair = true;
+        
         if (isDragging) {
             offsetX += e.clientX - lastMouseX;
             offsetY += e.clientY - lastMouseY;
@@ -304,188 +835,535 @@
         }
     }
 
+    function handleMouseDown(e: MouseEvent) {
+        if (showSelector && settingsBtn && settingsBtn.contains(e.target as Node)) return;
+        isDragging = true;
+        lastMouseX = e.clientX;
+        lastMouseY = e.clientY;
+    }
+
+    function handleTouchStart(e: TouchEvent) {
+        if (e.touches.length === 1) {
+            isDragging = true;
+            lastMouseX = e.touches[0].clientX;
+            lastMouseY = e.touches[0].clientY;
+            isPinching = false;
+        } else if (e.touches.length === 2) {
+            isDragging = false;
+            isPinching = true;
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            touchStartDist = Math.sqrt(dx * dx + dy * dy);
+            touchStartScaleX = scaleX;
+            touchStartScaleY = scaleY;
+        }
+    }
+
+    function handleTouchMove(e: TouchEvent) {
+        const rect = canvas.getBoundingClientRect();
+        if (e.touches.length === 1 && isDragging) {
+            const touch = e.touches[0];
+            offsetX += touch.clientX - lastMouseX;
+            offsetY += touch.clientY - lastMouseY;
+            lastMouseX = touch.clientX;
+            lastMouseY = touch.clientY;
+            
+            mouseX = touch.clientX - rect.left;
+            mouseY = touch.clientY - rect.top;
+            showCrosshair = true;
+        } else if (e.touches.length === 2 && isPinching) {
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist > 0 && touchStartDist > 0) {
+                const factor = dist / touchStartDist;
+                scaleX = Math.max(0.1, Math.min(80, touchStartScaleX * factor));
+                scaleY = Math.max(0.1, Math.min(80, touchStartScaleY * factor));
+            }
+        }
+    }
+
+    function handleTouchEnd() {
+        isDragging = false;
+        isPinching = false;
+        showCrosshair = false;
+    }
+
+    function handleDoubleClick() {
+        scaleX = 1;
+        scaleY = 1;
+        offsetX = 0;
+        offsetY = 0;
+    }
+
+    function toggleSelector(e: MouseEvent) {
+        e.stopPropagation();
+        showSelector = !showSelector;
+    }
+
     onMount(() => {
-        const ctx = canvas.getContext('2d');
-        const resize = () => {
-            const dpr = window.devicePixelRatio || 1;
-            const w = container.clientWidth;
-            const h = container.clientHeight;
-            canvas.width = w * dpr;
-            canvas.height = h * dpr;
-            canvas.style.width = `${w}px`;
-            canvas.style.height = `${h}px`;
-            ctx?.scale(dpr, dpr);
+        // Observer del redimensionamiento físico del cuadrante
+        const observer = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                const { width, height } = entry.contentRect;
+                containerWidth = width;
+                containerHeight = height;
+            }
+        });
+        
+        if (container) observer.observe(container);
+
+        // Bucle continuo de animación
+        let animationId: number;
+        function renderLoop() {
+            draw();
+            animationId = requestAnimationFrame(renderLoop);
+        }
+        renderLoop();
+
+        return () => {
+            observer.disconnect();
+            cancelAnimationFrame(animationId);
         };
-        window.addEventListener('resize', resize);
-        resize();
-        draw();
-        return () => window.removeEventListener('resize', resize);
+    });
+
+    // Ajustar canvas reactivamente multiplicándolo por dpr para nitidez absoluta
+    $effect(() => {
+        if (canvas && containerWidth > 0 && containerHeight > 0) {
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = containerWidth * dpr;
+            canvas.height = containerHeight * dpr;
+            canvas.style.width = `${containerWidth}px`;
+            canvas.style.height = `${containerHeight}px`;
+            
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                ctx.resetTransform();
+                ctx.scale(dpr, dpr);
+            }
+        }
     });
 </script>
 
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div 
     class="quadrant-container" 
     bind:this={container} 
     onmousemove={handleMouseMove} 
-    onmousedown={(e) => { isDragging = true; lastMouseX = e.clientX; lastMouseY = e.clientY; }}
+    onmousedown={handleMouseDown}
     onmouseup={() => isDragging = false}
     onmouseleave={() => { showCrosshair = false; isDragging = false; }}
     onwheel={handleWheel}
+    ondblclick={handleDoubleClick}
+    ontouchstart={handleTouchStart}
+    ontouchmove={handleTouchMove}
+    ontouchend={handleTouchEnd}
 >
-    <canvas bind:this={canvas}></canvas>
-    
-    <button bind:this={settingsBtn} class="settings-btn" onclick={toggleSelector}>
-        <span class="material-symbols-outlined">settings</span>
-    </button>
-</div>
-
-{#if showSelector}
-    <div class="selector-popover" style="top: {popoverPos.top}px; left: {popoverPos.left}px;">
-        <label>Métrica</label>
-        <div class="metrics-grid">
-            {#each ['Magnitud', 'Fase', 'RTA', 'Coherencia'] as m}
-                <button class:active={metric === m} onclick={() => metric = m}>{m}</button>
-            {/each}
+    <!-- CABECERA PREMIUM DE CADA CUADRANTE -->
+    <div class="quadrant-header">
+        <div class="quadrant-title-group">
+            <span class="quadrant-id">{id.toUpperCase()}</span>
+            <div class="active-metrics-badges">
+                {#each activeMetrics as m}
+                    <span class="metric-badge badge-{m.toLowerCase().replace(' ', '-')}">{m}</span>
+                {/each}
+            </div>
         </div>
-        <div class="divider"></div>
-        <label>Suavizado</label>
-        <div class="smoothing-options">
-            {#each [0, 1/3, 1/12, 1/48] as s}
-                <button class:active={smoothing === s} onclick={() => smoothing = s}>
-                    {s === 0 ? 'Off' : `1/${Math.round(1/s)}`}
-                </button>
-            {/each}
-        </div>
-        <button class="reset-btn" onclick={() => { scaleX=1; scaleY=1; offsetX=0; offsetY=0; }}>
-            Reiniciar Vista
+        <button bind:this={settingsBtn} class="settings-btn" onclick={toggleSelector} title="Configurar Métricas">
+            <span class="material-symbols-outlined text-[16px]">settings</span>
         </button>
     </div>
-{/if}
+
+    <!-- CANVAS DEL GRÁFICO -->
+    <canvas bind:this={canvas}></canvas>
+    
+    <!-- POPOVER FLOTANTE ABSOLUTO OSM -->
+    {#if showSelector}
+        <!-- Capturador de clics del fondo -->
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <div class="popover-backdrop" onclick={() => showSelector = false}></div>
+        
+        <div class="selector-popover">
+            <div class="popover-header">
+                <span class="popover-title">Configuración del Gráfico</span>
+                <button class="popover-close" onclick={() => showSelector = false}>
+                    <span class="material-symbols-outlined text-xs">close</span>
+                </button>
+            </div>
+            
+            <label class="popover-section-label">Métricas de Open Sound Meter</label>
+            <div class="metrics-checkbox-list">
+                {#each allMetrics as m}
+                    {@const disabled = isMetricDisabled(m.name)}
+                    {@const active = activeMetrics.includes(m.name)}
+                    <!-- svelte-ignore a11y_click_events_have_key_events -->
+                    <label 
+                        class="metric-checkbox-item" 
+                        class:disabled 
+                        class:active 
+                        style="--metric-color: {m.color}"
+                    >
+                        <input 
+                            type="checkbox" 
+                            checked={active} 
+                            {disabled} 
+                            onclick={() => toggleMetric(m.name)}
+                        />
+                        <span class="checkbox-custom" style="background-color: {active ? m.color : 'transparent'}; border-color: {active ? m.color : 'rgba(255,255,255,0.2)'}"></span>
+                        <span class="metric-name-text">{m.label}</span>
+                        {#if disabled}
+                            <span class="disabled-badge">
+                                {hasTimeDomainActive ? 'Frec.' : (hasFreqDomainActive ? 'Temp.' : 'Excl.')}
+                            </span>
+                        {/if}
+                    </label>
+                {/each}
+            </div>
+            
+            <div class="divider"></div>
+            
+            <div class="popover-controls-group">
+                <div>
+                    <label class="popover-section-label">Suavizado</label>
+                    <div class="smoothing-options">
+                        {#each [0, 1/3, 1/12, 1/48] as s}
+                            <button 
+                                class="smoothing-btn" 
+                                class:active={smoothing === s} 
+                                onclick={() => smoothing = s}
+                            >
+                                {s === 0 ? 'Off' : `1/${Math.round(1/s)}`}
+                            </button>
+                        {/each}
+                    </div>
+                </div>
+                
+                <button class="action-btn w-full flex items-center justify-center gap-1.5 mt-2" onclick={handleDoubleClick}>
+                    <span class="material-symbols-outlined text-xs">restart_alt</span> Reiniciar Vista
+                </button>
+            </div>
+        </div>
+    {/if}
+</div>
 
 <style>
     .quadrant-container {
         position: relative;
-        background: #0f0f12;
-        border: 1px solid rgba(255, 255, 255, 0.05);
+        background: #060608;
+        border: 1px solid rgba(255, 255, 255, 0.04);
         overflow: hidden;
         cursor: crosshair;
+        width: 100%;
+        height: 100%;
+        user-select: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
 
     canvas {
         display: block;
         width: 100%;
         height: 100%;
+        background: radial-gradient(circle at center, #0a0a0e 0%, #050507 100%);
     }
 
-    .settings-wrapper {
+    /* Cabecera Premium */
+    .quadrant-header {
         position: absolute;
-        top: 8px;
-        left: 8px;
-        z-index: 200;
-        pointer-events: auto;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 38px;
+        background: rgba(8, 8, 11, 0.7);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 12px;
+        z-index: 30;
+        box-sizing: border-box;
     }
+
+    .quadrant-title-group {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .quadrant-id {
+        font-family: "Outfit", sans-serif;
+        font-size: 11px;
+        font-weight: 800;
+        color: #00ff88;
+        letter-spacing: 0.05em;
+        text-shadow: 0 0 10px rgba(0, 255, 136, 0.2);
+    }
+
+    .active-metrics-badges {
+        display: flex;
+        gap: 5px;
+        flex-wrap: wrap;
+    }
+
+    .metric-badge {
+        font-family: "Outfit", sans-serif;
+        font-size: 8px;
+        font-weight: 700;
+        padding: 1.5px 6px;
+        border-radius: 4px;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+    }
+
+    /* Colores correspondientes de insignias */
+    .badge-magnitude { background: rgba(255, 68, 68, 0.12); border: 1px solid rgba(255, 68, 68, 0.3); color: #ff4444; }
+    .badge-spectrum { background: rgba(168, 85, 247, 0.12); border: 1px solid rgba(168, 85, 247, 0.3); color: #c084fc; }
+    .badge-phase { background: rgba(217, 70, 239, 0.12); border: 1px solid rgba(217, 70, 239, 0.3); color: #f472b6; }
+    .badge-coherence { background: rgba(234, 179, 8, 0.12); border: 1px solid rgba(234, 179, 8, 0.3); color: #facc15; }
+    .badge-group-delay { background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); color: #34d399; }
+    .badge-spectrogram { background: rgba(236, 72, 153, 0.12); border: 1px solid rgba(236, 72, 153, 0.3); color: #f472b6; }
+    .badge-impulse { background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(59, 130, 246, 0.3); color: #60a5fa; }
+    .badge-step { background: rgba(249, 115, 22, 0.12); border: 1px solid rgba(249, 115, 22, 0.3); color: #fb923c; }
+    .badge-level { background: rgba(6, 182, 212, 0.12); border: 1px solid rgba(6, 182, 212, 0.3); color: #22d3ee; }
+    .badge-numeric { background: rgba(20, 184, 166, 0.12); border: 1px solid rgba(20, 184, 166, 0.3); color: #2dd4bf; }
 
     .settings-btn {
-        background: rgba(10, 10, 12, 0.9);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        color: #fff;
-        width: 36px;
-        height: 36px;
-        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        color: #9ca3af;
+        width: 24px;
+        height: 24px;
+        border-radius: 6px;
         cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .settings-btn:hover {
+        background: rgba(255, 255, 255, 0.07);
+        border-color: rgba(255, 255, 255, 0.18);
+        color: #fff;
+    }
+
+    /* Popover Flotante */
+    .popover-backdrop {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: transparent;
+        z-index: 40;
+    }
+
+    .selector-popover {
+        position: absolute;
+        top: 44px;
+        right: 12px;
+        width: 236px;
+        background: rgba(12, 12, 17, 0.94);
+        border: 1px solid rgba(255, 255, 255, 0.09);
+        border-radius: 12px;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        box-shadow: 0 15px 40px rgba(0, 0, 0, 0.85);
+        z-index: 50;
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+    }
+
+    .popover-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        padding-bottom: 6px;
+    }
+
+    .popover-title {
+        font-family: "Outfit", sans-serif;
+        font-size: 11px;
+        font-weight: 700;
+        color: #f3f4f6;
+    }
+
+    .popover-close {
+        background: transparent;
+        border: none;
+        color: #6b7280;
+        cursor: pointer;
+        padding: 2px;
         display: flex;
         align-items: center;
         justify-content: center;
     }
 
-    .selector-popover {
-        position: absolute;
-        top: 40px;
-        left: 0;
-        width: 220px;
-        background: #1a1a20;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 12px;
-        padding: 1rem;
-        display: flex;
-        flex-direction: column;
-        gap: 0.75rem;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-        z-index: 300;
+    .popover-close:hover {
+        color: #fff;
     }
 
-    .selector-popover label {
-        font-size: 0.65rem;
-        color: #666;
+    .popover-section-label {
+        font-family: "Outfit", sans-serif;
+        font-size: 8px;
+        color: #4b5563;
         text-transform: uppercase;
         font-weight: 800;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.08em;
+        margin-bottom: 2px;
     }
 
-    .metrics-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 4px;
+    .metrics-checkbox-list {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        max-height: 240px;
+        overflow-y: auto;
+        padding-right: 2px;
     }
 
-    .selector-popover button:not(.reset-btn):not(.action-btn) {
-        background: rgba(255, 255, 255, 0.03);
-        border: 1px solid rgba(255, 255, 255, 0.05);
-        color: #aaa;
-        padding: 6px;
+    /* Scrollbar personalizada para popover */
+    .metrics-checkbox-list::-webkit-scrollbar {
+        width: 3px;
+    }
+    .metrics-checkbox-list::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 1.5px;
+    }
+
+    .metric-checkbox-item {
+        display: flex;
+        align-items: center;
+        padding: 5px 8px;
         border-radius: 6px;
         cursor: pointer;
-        font-size: 0.75rem;
-        text-align: left;
+        transition: all 0.15s ease;
+        background: rgba(255, 255, 255, 0.015);
+        border: 1px solid rgba(255, 255, 255, 0.02);
+        position: relative;
     }
 
-    .selector-popover button.active {
-        background: #3b82f6;
+    .metric-checkbox-item input {
+        display: none; /* Esconder checkbox nativo */
+    }
+
+    .checkbox-custom {
+        width: 10px;
+        height: 10px;
+        border-radius: 3px;
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        margin-right: 8px;
+        display: inline-block;
+        transition: all 0.15s ease;
+        flex-shrink: 0;
+    }
+
+    .metric-name-text {
+        font-family: "Inter", sans-serif;
+        font-size: 10px;
+        color: #9ca3af;
+        transition: color 0.15s ease;
+    }
+
+    .metric-checkbox-item:hover:not(.disabled) {
+        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(255, 255, 255, 0.08);
+    }
+
+    .metric-checkbox-item:hover:not(.disabled) .metric-name-text {
         color: #fff;
-        border-color: #3b82f6;
     }
 
-    .smoothing-options {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px;
+    .metric-checkbox-item.active .metric-name-text {
+        color: #fff;
+        font-weight: 600;
+    }
+
+    .metric-checkbox-item.disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+        background: transparent;
+    }
+
+    .disabled-badge {
+        position: absolute;
+        right: 6px;
+        font-family: "Outfit", sans-serif;
+        font-size: 7px;
+        font-weight: 800;
+        background: rgba(239, 68, 68, 0.18);
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        color: #ef4444;
+        padding: 0.5px 4px;
+        border-radius: 3px;
+        text-transform: uppercase;
     }
 
     .divider {
         height: 1px;
-        background: rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.06);
     }
 
-    .checkbox-label {
+    .popover-controls-group {
         display: flex;
-        align-items: center;
+        flex-direction: column;
         gap: 8px;
+    }
+
+    .smoothing-options {
+        display: flex;
+        gap: 3px;
+        margin-top: 3px;
+    }
+
+    .smoothing-btn {
+        flex: 1;
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        color: #888;
+        padding: 4px 0;
+        border-radius: 5px;
         cursor: pointer;
-        color: #ccc !important;
-        text-transform: none !important;
-        font-size: 0.8rem !important;
+        font-size: 8px;
+        font-family: "Inter", sans-serif;
+        transition: all 0.15s ease;
+    }
+
+    .smoothing-btn:hover {
+        background: rgba(255, 255, 255, 0.05);
+        color: #ccc;
+    }
+
+    .smoothing-btn.active {
+        background: #00ff88;
+        color: #050507;
+        border-color: #00ff88;
+        font-weight: 700;
     }
 
     .action-btn {
-        background: #333;
-        color: #fff;
-        border: none;
-        padding: 8px;
+        background: rgba(255, 255, 255, 0.05);
+        color: #e5e7eb;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        padding: 6px;
         border-radius: 6px;
-        font-weight: bold;
+        font-weight: 700;
         cursor: pointer;
-        font-size: 0.8rem;
+        font-size: 9px;
+        font-family: "Outfit", sans-serif;
+        transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    .reset-btn {
-        background: #ef4444;
+    .action-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+        border-color: rgba(255, 255, 255, 0.18);
         color: #fff;
-        border: none;
-        padding: 8px;
-        border-radius: 6px;
-        font-weight: bold;
-        cursor: pointer;
-        font-size: 0.8rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     }
 </style>
-

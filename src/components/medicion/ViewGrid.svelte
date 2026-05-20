@@ -12,7 +12,7 @@
 
 <div class="view-grid layout-{uiStore.layout}">
     {#each Array(quadrants) as _, i}
-        <Quadrant />
+        <Quadrant id="q-{i + 1}" />
     {/each}
 </div>
 
