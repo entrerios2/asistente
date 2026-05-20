@@ -56,11 +56,8 @@ export class Analyzer {
         const dbSpectrum = new Float32Array(half);
 
         for (let i = 0; i < half; i++) {
-            // Normalización básica: 2/N para compensar pérdida de energía del ventaneo/FFT
-            const val = (mag[i] * 2) / this.fftSize;
-            
-            // Convertir a dBFS. -120dB como piso de ruido.
-            dbSpectrum[i] = val > 0.000001 ? 20 * Math.log10(val) : -120;
+            // §2.2.1: rta[k] = 20 * log10(mag / (N/2) + 1e-8)
+            dbSpectrum[i] = 20 * Math.log10(mag[i] / half + 1e-8);
         }
 
         this.spectrum = dbSpectrum;

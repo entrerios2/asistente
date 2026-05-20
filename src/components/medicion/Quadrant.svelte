@@ -1,8 +1,15 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
-    import { traceManager, type Trace } from '$lib/stores/traceManager.svelte';
-    import { uiStore } from '$lib/stores/ui.svelte';
-    import { meterStore } from '$lib/stores/meterStore.svelte';
+import { onMount } from 'svelte';
+import { traceManager, type Trace } from '$lib/stores/traceManager.svelte';
+import { uiStore } from '$lib/stores/ui.svelte';
+import { meterStore } from '$lib/stores/meterStore.svelte';
+import {
+    calculateMagnitude,
+    calculatePhase,
+    calculateImpulseResponse,
+    calculateStepResponse,
+    calculateGroupDelay
+} from '$lib/dsp/osmMetrics';
 
     interface Props {
         id: string;
@@ -55,6 +62,116 @@
     const timeMax = 100;    // ms
     const dbMin = -30;      // dB
     const dbMax = 30;       // dB
+
+    // === PIPELINE MATEMÁTICO REAL DE OSM ===
+    const FFT_SIZE = 8192;
+    const BINS = 4096;
+
+    const fftInputReal = new Float32Array(BINS);
+    const fftInputImag = new Float32Array(BINS);
+    const fftRefReal = new Float32Array(BINS);
+    const fftRefImag = new Float32Array(BINS);
+    const hReal = new Float32Array(BINS);
+    const hImag = new Float32Array(BINS);
+
+    const outputMagnitude = new Float32Array(BINS);
+    const outputPhase = new Float32Array(BINS);
+    const outputCoherence = new Float32Array(BINS);
+    const outputGroupDelay = new Float32Array(BINS);
+    const outputImpulse = new Float32Array(FFT_SIZE);
+    const outputStep = new Float32Array(FFT_SIZE);
+
+    // Ayudante de interpolación de frecuencia logarítmica para los buffers de bins
+    function getMetricValueInterpolated(freq: number, dataArray: Float32Array): number {
+        const sr = 48000;
+        const bins = dataArray.length;
+        const idx = (freq * bins) / (sr / 2);
+        const i0 = Math.max(0, Math.min(bins - 1, Math.floor(idx)));
+        const i1 = Math.max(0, Math.min(bins - 1, Math.ceil(idx)));
+        const frac = idx - i0;
+        return dataArray[i0] * (1 - frac) + dataArray[i1] * frac;
+    }
+
+    // Ayudante de interpolación circular para el dominio del tiempo
+    function getImpulseValueInterpolated(timeMs: number, impulseArray: Float32Array): number {
+        const size = impulseArray.length;
+        const sampleRate = 48000;
+        const sampleIdx = (timeMs / 1000) * sampleRate;
+        
+        let idx = sampleIdx;
+        if (idx < 0) {
+            idx += size;
+        }
+        idx = Math.max(0, Math.min(size - 1, idx));
+        
+        const i0 = Math.floor(idx);
+        const i1 = (i0 + 1) % size;
+        const frac = idx - i0;
+        return impulseArray[i0] * (1 - frac) + impulseArray[i1] * frac;
+    }
+
+    function getPhaseValueRadians(freq: number): number {
+        const delayMs = 1.4; 
+        let phase = -2 * Math.PI * freq * (delayMs / 1000);
+        
+        for (let b = 0; b < traceManager.eqBands.length; b++) {
+            const band = traceManager.eqBands[b];
+            const dist = Math.log2(freq / band.freq || 1e-6);
+            const weight = dist / (1 + dist * dist * band.q);
+            phase += (band.gain * 0.04) * weight; 
+        }
+        phase += (Math.random() - 0.5) * 0.04;
+        return phase;
+    }
+
+    function runMathPipeline(liveTrace: Trace | undefined) {
+        for (let k = 0; k < BINS; k++) {
+            const f_k = k * (24000 / BINS) || 1e-6;
+            
+            // Referencia de ruido rosa simulada
+            const refDb = -50 + (Math.sin(k * 0.05) * 0.5);
+            const refMag = Math.pow(10, refDb / 20);
+            const refPhase = 0;
+
+            // Medida
+            let liveDb = -50;
+            if (liveTrace && liveTrace.data && liveTrace.data.length > 0) {
+                const mapIdx = Math.floor((k * liveTrace.data.length) / BINS);
+                liveDb = liveTrace.data[mapIdx] || -120;
+            } else {
+                liveDb = -50 + getEQResponseCached(f_k) + (Math.sin(k * 0.08) * 0.3);
+            }
+
+            const liveMag = Math.pow(10, liveDb / 20);
+            const phaseTotal = getPhaseValueRadians(f_k) + refPhase;
+
+            fftInputReal[k] = liveMag * Math.cos(phaseTotal);
+            fftInputImag[k] = liveMag * Math.sin(phaseTotal);
+            fftRefReal[k] = refMag * Math.cos(refPhase);
+            fftRefImag[k] = refMag * Math.sin(refPhase);
+            
+            outputCoherence[k] = getCoherenceValue(f_k);
+        }
+
+        // 1. Magnitude
+        calculateMagnitude(fftInputReal, fftInputImag, fftRefReal, fftRefImag, outputMagnitude, hReal, hImag);
+
+        // 2. Phase
+        calculatePhase(fftInputReal, fftInputImag, fftRefReal, fftRefImag, outputPhase);
+
+        // 3. Impulse Response (IFFT)
+        calculateImpulseResponse(hReal, hImag, outputImpulse);
+
+        // 4. Step Response (integral)
+        calculateStepResponse(outputImpulse, outputStep);
+
+        // 5. Group Delay (derivada de la fase)
+        const phaseRadians = new Float32Array(BINS);
+        for (let k = 0; k < BINS; k++) {
+            phaseRadians[k] = outputPhase[k] * Math.PI / 180;
+        }
+        calculateGroupDelay(phaseRadians, 24000 / BINS, outputGroupDelay);
+    }
 
     // Definición de las 10 métricas de OSM
     const allMetrics = [
@@ -243,24 +360,6 @@
     }
 
     // SIMULACIÓN DE MÉTRICAS ACÚSTICAS PROFESIONALES (DSP)
-    function getPhaseValue(freq: number): number {
-        const delayMs = 1.4; 
-        let phase = -2 * Math.PI * freq * (delayMs / 1000);
-        
-        for (let b = 0; b < traceManager.eqBands.length; b++) {
-            const band = traceManager.eqBands[b];
-            const dist = Math.log2(freq / band.freq || 1e-6);
-            const weight = dist / (1 + dist * dist * band.q);
-            phase += (band.gain * 0.04) * weight; 
-        }
-        
-        phase += (Math.random() - 0.5) * 0.04;
-        let wrapped = ((phase + Math.PI) % (2 * Math.PI));
-        if (wrapped < 0) wrapped += 2 * Math.PI;
-        wrapped -= Math.PI;
-        return (wrapped * 180) / Math.PI; 
-    }
-
     function getCoherenceValue(freq: number): number {
         let coh = 0.98;
         if (freq < 45) coh -= 0.35 * (1 - freq/45);
@@ -275,62 +374,6 @@
         }
         coh += (Math.random() - 0.5) * 0.015;
         return Math.max(0.01, Math.min(1, coh));
-    }
-
-    function getGroupDelayValue(freq: number): number {
-        let gd = 1.4; 
-        if (freq < 120) gd += 12 * (120 - freq) / 120; 
-        
-        for (let b = 0; b < traceManager.eqBands.length; b++) {
-            const band = traceManager.eqBands[b];
-            const dist = Math.abs(Math.log2(freq / band.freq));
-            if (dist < 0.4) {
-                gd += (band.gain * 0.24) * (1 - dist / 0.4);
-            }
-        }
-        gd += (Math.random() - 0.5) * 0.08;
-        return gd;
-    }
-
-    function getImpulsePoints(width: number, height: number): DataPoint[] {
-        const points: DataPoint[] = [];
-        const numPoints = 350;
-        
-        for (let i = 0; i < numPoints; i++) {
-            const t = timeMin + (i / (numPoints - 1)) * (timeMax - timeMin); 
-            let val = 0;
-            if (t >= 0) {
-                const travelTime = 12; // ms delay
-                const dt = t - travelTime;
-                if (dt >= 0) {
-                    const envelope = Math.exp(-dt * 0.08);
-                    const oscillation = Math.sin(2 * Math.PI * 180 * (dt / 1000)); 
-                    const highFreqDecay = Math.sin(2 * Math.PI * 1400 * (dt / 1000)) * Math.exp(-dt * 0.28);
-                    
-                    val = (dt === 0 ? 0.95 : (oscillation * 0.32 + highFreqDecay * 0.45) * envelope);
-                    
-                    // Reflexiones tempranas simuladas
-                    if (Math.abs(dt - 6.5) < 0.25) val += 0.22; 
-                    if (Math.abs(dt - 14) < 0.25) val -= 0.14; 
-                }
-            }
-            val += (Math.random() - 0.5) * 0.008;
-            points.push({ freq: t, val }); 
-        }
-        return points;
-    }
-
-    function getStepPoints(width: number, height: number): DataPoint[] {
-        const impulse = getImpulsePoints(width, height);
-        const points: DataPoint[] = [];
-        let runningSum = 0;
-        
-        for (let i = 0; i < impulse.length; i++) {
-            const pt = impulse[i];
-            runningSum += pt.val * 0.08; 
-            points.push({ freq: pt.freq, val: runningSum });
-        }
-        return points;
     }
 
     // CORE DRAW ENGINE
@@ -350,6 +393,9 @@
 
         const liveTrace = traceManager.traces.find(t => t.id === 'live-1');
 
+        // Ejecutar el pipeline de procesamiento en tiempo real de OSM
+        runMathPipeline(liveTrace);
+
         // Alimentar buffer de Espectrograma en vivo
         if (liveTrace && liveTrace.data && liveTrace.data.length > 0 && activeMetrics.includes('Spectrogram') && !hasTimeDomainActive) {
             spectrogramFrameCount++;
@@ -367,8 +413,11 @@
         }
 
         // 3. Renderizar cada métrica seleccionada
-        if (activeMetrics.includes('Magnitude') && !hasTimeDomainActive && liveTrace && liveTrace.data.length > 0) {
-            const points = smoothDataLog(liveTrace.data, smoothing);
+        if (activeMetrics.includes('Magnitude') && !hasTimeDomainActive) {
+            const points: DataPoint[] = [];
+            for (let f = freqMin; f <= freqMax; f *= 1.01) {
+                points.push({ freq: f, val: getMetricValueInterpolated(f, outputMagnitude) });
+            }
             drawPath(ctx, points, width, height, '#ff4444', 2, 'Magnitude');
 
             if (uiStore.isSimulating) {
@@ -388,11 +437,12 @@
             }
         }
 
-        if (activeMetrics.includes('Spectrum') && !hasTimeDomainActive && liveTrace && liveTrace.data.length > 0) {
-            const points = smoothDataLog(liveTrace.data, smoothing).map(p => {
-                const noise = (Math.sin(Math.log10(p.freq) * 12) * 1.6) + (Math.random() - 0.5) * 0.6;
-                return { freq: p.freq, val: p.val + 68 + noise };
-            });
+        if (activeMetrics.includes('Spectrum') && !hasTimeDomainActive) {
+            const points: DataPoint[] = [];
+            for (let f = freqMin; f <= freqMax; f *= 1.01) {
+                const val = getMetricValueInterpolated(f, liveTrace && liveTrace.data && liveTrace.data.length > 0 ? liveTrace.data : outputMagnitude);
+                points.push({ freq: f, val: val + (liveTrace && liveTrace.data && liveTrace.data.length > 0 ? 0 : 68) });
+            }
             drawPath(ctx, points, width, height, '#a855f7', 2, 'Spectrum');
         }
 
@@ -404,7 +454,8 @@
             let first = true;
             for (let f = freqMin; f <= freqMax; f *= 1.01) {
                 const x = valToX(f, width);
-                const y = valToY(getPhaseValue(f), height, 'Phase');
+                const val = getMetricValueInterpolated(f, outputPhase);
+                const y = valToY(val, height, 'Phase');
                 
                 if (first) {
                     ctx.moveTo(x, y);
@@ -424,7 +475,7 @@
         if (activeMetrics.includes('Coherence') && !hasTimeDomainActive) {
             const points: DataPoint[] = [];
             for (let f = freqMin; f <= freqMax; f *= 1.04) {
-                points.push({ freq: f, val: getCoherenceValue(f) });
+                points.push({ freq: f, val: getMetricValueInterpolated(f, outputCoherence) });
             }
             drawPath(ctx, points, width, height, '#eab308', 1.8, 'Coherence');
         }
@@ -432,18 +483,28 @@
         if (activeMetrics.includes('Group Delay') && !hasTimeDomainActive) {
             const points: DataPoint[] = [];
             for (let f = freqMin; f <= freqMax; f *= 1.04) {
-                points.push({ freq: f, val: getGroupDelayValue(f) });
+                points.push({ freq: f, val: getMetricValueInterpolated(f, outputGroupDelay) });
             }
             drawPath(ctx, points, width, height, '#10b981', 1.8, 'Group Delay');
         }
 
         if (activeMetrics.includes('Impulse') && hasTimeDomainActive) {
-            const points = getImpulsePoints(width, height);
+            const points: DataPoint[] = [];
+            const numPoints = 350;
+            for (let i = 0; i < numPoints; i++) {
+                const t = timeMin + (i / (numPoints - 1)) * (timeMax - timeMin);
+                points.push({ freq: t, val: getImpulseValueInterpolated(t, outputImpulse) });
+            }
             drawPath(ctx, points, width, height, '#3b82f6', 2, 'Impulse');
         }
 
         if (activeMetrics.includes('Step') && hasTimeDomainActive) {
-            const points = getStepPoints(width, height);
+            const points: DataPoint[] = [];
+            const numPoints = 350;
+            for (let i = 0; i < numPoints; i++) {
+                const t = timeMin + (i / (numPoints - 1)) * (timeMax - timeMin);
+                points.push({ freq: t, val: getImpulseValueInterpolated(t, outputStep) });
+            }
             drawPath(ctx, points, width, height, '#f97316', 2, 'Step');
         }
 
@@ -738,20 +799,13 @@
             
             let rowIdx = 0;
             if (activeMetrics.includes('Impulse')) {
-                const travelTime = 12;
-                const dt = xVal - travelTime;
-                let val = 0;
-                if (xVal >= 0 && dt >= 0) {
-                    const envelope = Math.exp(-dt * 0.08);
-                    const oscillation = Math.sin(2 * Math.PI * 180 * (dt / 1000));
-                    const highFreqDecay = Math.sin(2 * Math.PI * 1400 * (dt / 1000)) * Math.exp(-dt * 0.28);
-                    val = (dt === 0 ? 0.95 : (oscillation * 0.32 + highFreqDecay * 0.45) * envelope);
-                }
+                const val = getImpulseValueInterpolated(xVal, outputImpulse);
                 ctx.fillText(`Impulso: ${val.toFixed(3)}`, lx + 8, ly + 28 + rowIdx * 12);
                 rowIdx++;
             }
             if (activeMetrics.includes('Step')) {
-                ctx.fillText(`Escalón: ${(xVal < 12 ? 0.0 : 0.82 + Math.sin(xVal)*0.03).toFixed(3)}`, lx + 8, ly + 28 + rowIdx * 12);
+                const val = getImpulseValueInterpolated(xVal, outputStep);
+                ctx.fillText(`Escalón: ${val.toFixed(3)}`, lx + 8, ly + 28 + rowIdx * 12);
             }
         } else {
             ctx.fillText(`Frec: ${xVal.toFixed(1)} Hz`, lx + 8, ly + 14);
@@ -759,35 +813,28 @@
             
             let rowIdx = 0;
             if (activeMetrics.includes('Magnitude')) {
-                let dbVal = 0;
-                if (liveTrace && liveTrace.data.length > 0) {
-                    const binWidth = 24000 / liveTrace.data.length;
-                    const idx = Math.round(xVal / binWidth);
-                    dbVal = liveTrace.data[idx] || 0;
-                }
+                const val = getMetricValueInterpolated(xVal, outputMagnitude);
                 ctx.fillStyle = '#ff4444';
-                ctx.fillText(`Magnitud: ${dbVal.toFixed(1)} dB`, lx + 8, ly + 28 + rowIdx * 12);
+                ctx.fillText(`Magnitud: ${val.toFixed(1)} dB`, lx + 8, ly + 28 + rowIdx * 12);
                 rowIdx++;
             }
             if (activeMetrics.includes('Spectrum')) {
-                let dbVal = 0;
-                if (liveTrace && liveTrace.data.length > 0) {
-                    const binWidth = 24000 / liveTrace.data.length;
-                    const idx = Math.round(xVal / binWidth);
-                    dbVal = (liveTrace.data[idx] || 0) + 68;
-                }
+                const val = getMetricValueInterpolated(xVal, liveTrace && liveTrace.data && liveTrace.data.length > 0 ? liveTrace.data : outputMagnitude);
+                const offset = liveTrace && liveTrace.data && liveTrace.data.length > 0 ? 0 : 68;
                 ctx.fillStyle = '#a855f7';
-                ctx.fillText(`Espectro: ${dbVal.toFixed(1)} dBSPL`, lx + 8, ly + 28 + rowIdx * 12);
+                ctx.fillText(`Espectro: ${(val + offset).toFixed(1)} dBSPL`, lx + 8, ly + 28 + rowIdx * 12);
                 rowIdx++;
             }
             if (activeMetrics.includes('Phase')) {
+                const val = getMetricValueInterpolated(xVal, outputPhase);
                 ctx.fillStyle = '#d946ef';
-                ctx.fillText(`Fase: ${getPhaseValue(xVal).toFixed(0)}°`, lx + 8, ly + 28 + rowIdx * 12);
+                ctx.fillText(`Fase: ${val.toFixed(0)}°`, lx + 8, ly + 28 + rowIdx * 12);
                 rowIdx++;
             }
             if (activeMetrics.includes('Coherence')) {
+                const val = getMetricValueInterpolated(xVal, outputCoherence);
                 ctx.fillStyle = '#eab308';
-                ctx.fillText(`Coherencia: ${getCoherenceValue(xVal).toFixed(2)}`, lx + 8, ly + 28 + rowIdx * 12);
+                ctx.fillText(`Coherencia: ${val.toFixed(2)}`, lx + 8, ly + 28 + rowIdx * 12);
                 rowIdx++;
             }
         }
