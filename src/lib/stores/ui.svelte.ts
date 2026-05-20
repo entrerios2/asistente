@@ -3,7 +3,7 @@
  */
 
 class UIStore {
-    layout = $state('2x2'); // '1x1' | '1x2' | '1x3' | '2x1' | '2x2' | '2x3'
+    layout = $state('1x1'); // '1x1' | '1x2' | '2x1' | '2x2' | '3x1' | '3x2'
     showSnapshots = $state(true); // Aunque ahora esté en el sidebar, mantenemos el control
     isDarkMode = $state(true);
     

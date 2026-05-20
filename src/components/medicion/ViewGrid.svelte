@@ -4,8 +4,8 @@
 
     const quadrants = $derived(
         uiStore.layout === '1x1' ? 1 :
-        (uiStore.layout === '2x1' || uiStore.layout === '1x2') ? 2 :
-        (uiStore.layout === '1x3' || uiStore.layout === '3x1') ? 3 : // Agregamos por si acaso
+        (uiStore.layout === '1x2' || uiStore.layout === '2x1') ? 2 :
+        uiStore.layout === '3x1' ? 3 :
         uiStore.layout === '2x2' ? 4 : 6
     );
 </script>
@@ -28,12 +28,12 @@
         overflow: hidden;
     }
 
-    .layout-1x1 { grid-template-columns: 1fr; grid-template-rows: 1fr; }
-    .layout-1x2 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr; }
-    .layout-1x3 { grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr; }
-    .layout-2x1 { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
-    .layout-2x2 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
-    .layout-2x3 { grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr; }
+    .layout-1x1 { grid-template-rows: 1fr; grid-template-columns: 1fr; }
+    .layout-1x2 { grid-template-rows: 1fr; grid-template-columns: 1fr 1fr; }
+    .layout-2x1 { grid-template-rows: 1fr 1fr; grid-template-columns: 1fr; }
+    .layout-2x2 { grid-template-rows: 1fr 1fr; grid-template-columns: 1fr 1fr; }
+    .layout-3x1 { grid-template-rows: 1fr 1fr 1fr; grid-template-columns: 1fr; }
+    .layout-3x2 { grid-template-rows: 1fr 1fr 1fr; grid-template-columns: 1fr 1fr; }
 
     @media (max-width: 768px) {
         .view-grid {
