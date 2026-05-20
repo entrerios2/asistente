@@ -58,7 +58,7 @@ Requisitos de implementación:
    - Selector de Presets.
    - Tabla de Segmentos Compacta: Renderiza una sola columna donde el Nombre del segmento esté junto a su Checkbox. Debajo del Nombre, deja espacio div condicional para mostrar los resultados de métricas a medida que se completen. Usa tooltips (`title`) para la explicación de cada segmento.
    - Modo Offline: Un switch booleano. Si está activo, muestra anclado al final un botón "Descargar" (con selector de extensión WAV/FLAC).
-4. Footer Anclado (Global a la pestaña): Un botón principal gigante "Medir / Detener" con el icono `podcast`. En modo secuencial, conviértelo visualmente en una barra de progreso. Coloca texto de estado debajo ("Generando secuencia...", "Esperando...", etc.).
+4. Footer Anclado (Global a la pestaña): Un botón principal gigante "Medir / Detener" con el icono `podcasts`. En modo secuencial, conviértelo visualmente en una barra de progreso. Coloca texto de estado debajo ("Generando secuencia...", "Esperando...", etc.).
 Devuelve el código del bloque insertado.
 ```
 
@@ -113,7 +113,7 @@ Requisitos de implementación:
 1. Izquierda: Título "Herramienta para mediciones de audio".
 2. Centro/Derecha (Controles de Generador y Medición):
    - Control Generador Rápido: Un botón con icono `volume_up`/`volume_mute` pegado a una etiqueta de texto que indica el nombre de la señal generada actual (ej. "Ruido Rosa"). Haz que el click en la etiqueta despache un evento o acceda a una función para abrir la pestaña "Medición Manual" del Sidebar.
-   - Control Medición Rápida: Un icono que represente el modo actual (Secuencial o Manual). Al cliquear el icono, se abre el panel de medición correspondiente. Al lado, el botón principal de acción "Medir" con el icono `podcast`.
+   - Control Medición Rápida: Un icono que represente el modo actual (Secuencial o Manual). Al cliquear el icono, se abre el panel de medición correspondiente. Al lado, el botón principal de acción "Medir" con el icono `podcasts`.
 3. Selector de Grilla Visual: Implementa un widget "Insertar Tabla" estilo Word: un menú desplegable (dropdown) que muestre una matriz de cuadrados de 2x3. Al pasar el mouse, resalta los cuadrados y al hacer clic define la configuración del layout de la grilla principal (ej. 2x1, 1x1). Default 1x1.
 4. Vúmetros (Extremo Derecho): Un componente de barras horizontales apiladas. Arriba (Entrada), Abajo (Salida). Añade un indicador visual LED/icono en el medio de las barras que, cuando el generador está encendido, se ilumine si los niveles IN/OUT están empatados (calibrados/igualados). Al hacer clic en los Vúmetros, abre la pestaña "Configuración".
 ```

@@ -85,7 +85,7 @@ Este documento constituye la especificación técnica final y exhaustiva. Se han
 - **Control Rápido de Generador:** Botón `volume_up`/`volume_mute` + etiqueta de tipo activo. Clic en la etiqueta abre **Medición Manual**.
 - **Control Rápido de Medición:** 
     - Icono del modo actual (Manual/Secuencial). Clic abre el panel de **Medición**.
-    - Botón "Medir" con icono `podcast`.
+    - Botón "Medir" con icono `podcasts`.
 - **Selector de Grilla Visual:** Menú desplegable estilo Word (cuadros pintables) hasta 2x3. Valor inicial: **1x1**.
 
 ### 5.2. Cuadrantes Dinámicos
