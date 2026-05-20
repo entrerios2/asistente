@@ -25,6 +25,9 @@ export interface EQBand {
 }
 
 class TraceManager {
+    // Propiedad reactiva para forzar la reactividad en Svelte 5 al actualizar arrays in-place
+    version = $state(0);
+
     // Estado reactivo de los trazos
     traces = $state<Trace[]>([{
         id: 'live-1',
@@ -89,9 +92,12 @@ class TraceManager {
     updateLiveTrace(id: string, data: Float32Array) {
         const trace = this.traces.find(t => t.id === id);
         if (trace) {
-            // Muta los datos y fuerza la reactividad reemplazando la referencia del array
-            // Svelte 5 $state detecta la reasignación de la propiedad 'data'
-            trace.data = new Float32Array(data);
+            if (trace.data.length === data.length) {
+                trace.data.set(data);
+            } else {
+                trace.data = new Float32Array(data);
+            }
+            this.version++;
         }
     }
 

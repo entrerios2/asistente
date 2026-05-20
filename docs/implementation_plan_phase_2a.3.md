@@ -439,20 +439,27 @@ Para que dos o más métricas puedan ser seleccionadas y dibujadas simultáneame
 
 ---
 
-## 8. Diagnóstico de Rendimiento y Soluciones DSP
-Se integran las siguientes correcciones críticas para el motor de renderizado y procesamiento:
+## 8. Diagnóstico de Rendimiento y Soluciones DSP (Optimizaciones Críticas)
 
-### 8.1. El misterio del "Gráfico Invisible"
-El micrófono en vivo SÍ está capturando el audio y mandando los datos al Canvas, pero se están dibujando por debajo de la pantalla.
-- **Causa:** La constante de visualización en el Quadrant asume por defecto `dbMin = -30` y `dbMax = 30` (ideal para Funciones de Transferencia relativas). Sin embargo, el RTA en vivo (vía `AnalyserNode.getFloatFrequencyData`) escupe niveles crudos absolutos en dBFS (que suelen ir de -120 dB a 0 dB). Como el gráfico corta la pantalla en -30 dB, y el micrófono reporta por ejemplo -60 dB, la línea se dibuja invisiblemente por debajo del borde inferior del monitor.
-- **Solución:** **Escala Y Dinámica.** Ajustar la función `valToY` para que si estamos viendo "RTA" o "Nivel Absoluto", la escala sea de **-120 dB a +10 dB**, permitiendo que la curva del micrófono en vivo sea visible.
+Se han identificado **7 cuellos de botella severos** que destruyen los FPS (provocando renderizados a 1-5 FPS) originados en la forma en la que se comunican Svelte 5 y los loops del Canvas/DSP.
 
-### 8.2. El colapso de rendimiento (1 FPS)
-El brutal bajón de frames es un estrangulamiento de CPU causado por dos algoritmos que se ejecutan de forma ineficiente dentro de `requestAnimationFrame` (que intenta correr 60 veces por segundo):
+### 8.1. `runMathPipeline` a 60 FPS (Prioridad P0)
+- **Causa:** Se llama en cada frame de `draw()`. Hace más de 120,000 operaciones logarítmicas/trigonométricas y aloca un `new Float32Array(BINS)` en cada iteración.
+- **Solución:** Aislar el pipeline de las actualizaciones visuales. Aplicar un mecanismo de throttle (ej. a 15-30 FPS para matemática) y **nunca** hacer alocación dinámica de memoria en un bloque `requestAnimationFrame`. Usar buffers estáticos reutilizables para todo `Float32Array`.
 
-- **A. El algoritmo de Suavizado (Smoothing):** El suavizado (`smoothData`) usa ventanas fraccionales por octava. La matemática hace que la ventana crezca junto con la frecuencia. En las frecuencias altas, si elegís suavizado de 1/3 de octava, el sistema suma unos 900 bins hacia atrás y hacia adelante por cada uno de los 4096 bins de frecuencia. Esto resulta en alrededor de 1.8 millones de iteraciones de bucle por cada frame visual. A 60 FPS, JS está intentando ejecutar más de 110 millones de sumas por segundo, lo cual destruye el Event Loop de la pestaña.
-- **B. El cálculo Predictivo de la Ecualización:** Para dibujar la línea punteada de "Live + EQ", el código recorre los 4096 bins y por cada uno llama a `getEQResponse`. Esta función recorre las 5 bandas de EQ ejecutando operaciones pesadísimas como `Math.log2`, `Math.exp` y `Math.pow`. Esto inyecta otras 20,000 operaciones logarítmicas por frame.
+### 8.2. Alocación In-Place en `traceManager` y GC Stalls (Prioridad P0)
+- **Causa:** Al actualizar trazos en vivo, se hace `trace.data = new Float32Array(data)` para forzar reactividad en Svelte 5, generando ~960 KB de basura por segundo y forzando pausas por Garbage Collection. Lo mismo ocurre en `calculateImpulseResponse` (alocando buffers masivos temporales de N=8192).
+- **Solución:** Usar `trace.data.set(data)` para copiar el contenido en la misma zona de memoria y forzar la reactividad modificando una versión o contador manual en Svelte 5 en vez de destruir el array. Pre-alocar buffers estáticos para la IFFT.
 
-### 8.3. Soluciones de Ingeniería
-- **Caché del Filtro EQ:** En lugar de calcular el impacto del ecualizador millón de veces por segundo, usar Svelte 5 `$derived` para pre-calcular un Array con la curva del filtro **solo cuando el usuario mueva un slider**. El motor de render solo leerá de ese array cacheado a velocidad de la luz.
-- **Decimación Logarítmica:** Para el suavizado en RTA, en lugar de suavizar el array lineal masivo en cada frame, usar un algoritmo de **"Logarithmic Binning"**, que reduce drásticamente los puntos a calcular manteniendo la fidelidad visual, erradicando el bajón de FPS para siempre.
+### 8.3. Over-Rendering de Loops en Canvas y Cascadas `$effect` (Prioridad P1)
+- **Causa 1 (Puntos Innecesarios):** En Quadrant, cada curva itera `f *= 1.01` sumando más de 700 vértices de `lineTo` que superan los píxeles de pantalla.
+- **Causa 2 (Sidebar Svelte 5 Cascades):** Hay 14 bloques `$effect` que rebotan contra el `uiStore` provocando repintados del DOM enteros para controles que ya están en sync.
+- **Solución:** Reducir la resolución de puntos a las frecuencias visualmente detectables (`f *= 1.03` o pre-calcular bins X). Borrar los 14 bloques `$effect` bidireccionales del `Sidebar` en favor del `$state` principal `uiStore`.
+
+### 8.4. Buffer Circular de Espectrograma (Prioridad P2)
+- **Causa:** Se hace `Array.shift()` y `new Float32Array` sobre matrices multidimensionales (Espectrograma 2D). Además se hacen 7000 invocaciones `fillRect` separadas.
+- **Solución:** Sustituir los arreglos por una cola circular real con puntero de escritura. En lugar de rectángulos nativos de Canvas, usar una pre-composición `ImageData` transferida directamente a memoria de GPU.
+
+### 8.5. Solucionar el "Gráfico Invisible"
+- **Causa:** Como el gráfico cortaba por defecto en -30 dB (para H(f) relativo) y el micro reportaba en absolutos -60 dBFS, la curva quedaba oculta bajo la ventana gráfica.
+- **Solución:** Forzar que la métrica de *RTA Absoluto* tenga su escala `valToY` fijada en [-120 dB, +10 dB].

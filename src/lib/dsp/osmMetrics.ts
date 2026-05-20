@@ -120,14 +120,16 @@ export function calculatePhase(
 export function calculateImpulseResponse(
     hReal: Float32Array,
     hImag: Float32Array,
-    output: Float32Array
+    output: Float32Array,
+    tempReal?: Float32Array,
+    tempImag?: Float32Array
 ): void {
     const bins = hReal.length;
     const N = bins * 2;
     
-    // Alocamos o rellenamos arrays simétricos para la IFFT de tamaño N
-    const fullReal = new Float32Array(N);
-    const fullImag = new Float32Array(N);
+    // Usamos los buffers temporales si son válidos para evitar GC, de lo contrario fallback a new Float32Array
+    const fullReal = (tempReal && tempReal.length >= N) ? tempReal : new Float32Array(N);
+    const fullImag = (tempImag && tempImag.length >= N) ? tempImag : new Float32Array(N);
 
     // Espectro simétrico hermítico para señal real
     for (let k = 0; k < bins; k++) {

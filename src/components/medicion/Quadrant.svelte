@@ -74,6 +74,9 @@ import {
     const hReal = new Float32Array(BINS);
     const hImag = new Float32Array(BINS);
 
+    const tempFullReal = new Float32Array(FFT_SIZE);
+    const tempFullImag = new Float32Array(FFT_SIZE);
+
     const outputMagnitude = new Float32Array(BINS);
     const outputPhase = new Float32Array(BINS);
     const outputCoherence = new Float32Array(BINS);
@@ -160,7 +163,7 @@ import {
         calculatePhase(fftInputReal, fftInputImag, fftRefReal, fftRefImag, outputPhase);
 
         // 3. Impulse Response (IFFT)
-        calculateImpulseResponse(hReal, hImag, outputImpulse);
+        calculateImpulseResponse(hReal, hImag, outputImpulse, tempFullReal, tempFullImag);
 
         // 4. Step Response (integral)
         calculateStepResponse(outputImpulse, outputStep);

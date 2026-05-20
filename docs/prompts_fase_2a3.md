@@ -168,3 +168,33 @@ Tu objetivo es implementar el motor de cálculo en tiempo real para las 10 métr
 
 El código debe estar fuertemente tipado en TypeScript. Prioriza el uso de arreglos tipados (`Float32Array`) y recicla matrices para evitar el garbage collection, respetando las fórmulas exactas del documento provisto. Devuelve el código del pipeline matemático.
 ```
+
+---
+
+### Prompt 10: Eliminación de Cuellos de Botella (Memory & GC Optimization)
+**Contexto a inyectar:** `src/lib/stores/traceManager.svelte.ts` y `src/lib/dsp/osmMetrics.ts`.
+```markdown
+Eres un ingeniero de optimización de rendimiento trabajando con Svelte 5 y TS.
+El sistema experimenta severos cuellos de botella por recolección de basura (GC stalls) causados por la alocación continua de `Float32Array` en tiempo real. 
+
+Tu tarea es optimizar estrictamente los siguientes dos puntos:
+1. En `traceManager.svelte.ts`, modifica `updateLiveTrace(id, data)` para que NO use `new Float32Array(data)`. En su lugar, usa `trace.data.set(data)` si el tamaño coincide para actualizar la memoria in-place. Para forzar la reactividad en Svelte 5, introduce una propiedad reactiva local (`version = $state(0)`) en el Store o en el Trace, que se incremente en cada actualización.
+2. En `osmMetrics.ts`, la función `calculateImpulseResponse()` aloca N-tramos (8192 floats) usando `new Float32Array()` dentro del loop de cálculo en CADA invocación. Modifica la firma y la función para que reciba estos buffers temporales ya instanciados desde el módulo exterior (ej. como parte de un objeto de caché).
+
+Devuelve únicamente los métodos optimizados y explicaciones extremadamente cortas. Evita reescribir lo que no necesita cambios.
+```
+
+---
+
+### Prompt 11: Optimización de Render Loop y Svelte Reactivity
+**Contexto a inyectar:** `src/components/medicion/Quadrant.svelte` y `src/components/medicion/Sidebar.svelte`.
+```markdown
+Eres un ingeniero experto en rendimiento del DOM con Canvas 2D y Svelte 5.
+La UI está colapsando el framerate a 1-5 FPS. Aplica con precisión láser estas 3 correcciones:
+
+1. En `Sidebar.svelte`: Hay 14 bloques `$effect` bidireccionales que provocan re-renders infinitos o cascadas reactivas rebotando estados locales (`activeTab`, `generatorType`, etc.) contra `uiStore`. Elimina las variables locales redundantes por completo y todos los bloques `$effect`. Modifica el template del Sidebar para enlazar directamente las variables (ej: `bind:value={uiStore.genFreq}`).
+2. En `Quadrant.svelte` (Render Loop): `runMathPipeline()` procesa 4 millones de ops/segundo. Implementa un throttle o frame-skip simple usando una variable local (ej. contador `mathFrameCount = 0; si (mathFrameCount++ % 3 !== 0) return`) de forma que el dibujo corra a 60 FPS, pero la pesada actualización matemática corra a ~20 FPS.
+3. En `Quadrant.svelte` (Canvas Paths): Actualmente los ciclos `for` dibujan las métricas subiendo la frecuencia: `f *= 1.01`. Modifícalo a `f *= 1.03` (o ajusta el factor/tamaño) para reducir agresivamente la cantidad de llamados a `lineTo`, y asegúrate de que el RTA use escalas dinámicas de [-120 dB, +10 dB] en `valToY` para que el micrófono sea visible y no quede oculto bajo -30 dB.
+
+Devuelve únicamente los segmentos de código modificado y reemplazado en cada archivo. No me des el archivo completo, solo las partes que cambian.
+```
