@@ -138,8 +138,9 @@ asistente/
 
 ---
 
-## Fase 2A — Consolidación Post-Fase 1 y UI de Medición Avanzada
+## Fase 2A — Consolidación Post-Fase 1 y UI de Medición Avanzada ✅ (Base)
 **Objetivo:** Cerrar el backlog del informe post-fase-1 y materializar la especificación de interfaz de medición profesional (`docs/UX_Medicion.md`): panel dual Secuencial/Manual, motor de vistas multi-cuadrante, gestor de snapshots, funciones analíticas avanzadas y responsividad móvil.
+**Estado:** La infraestructura base y el enrutamiento están completados. Queda pendiente el refinamiento final de UI y rendimiento (movido a Fase 2A.3).
 **Depende de:** Fase 1B
 
 ### Componentes — Backlog Post-Fase 1
@@ -182,6 +183,29 @@ asistente/
 - [ ] El Modo Ciego se activa automáticamente en Tier 0 sin interrumpir la grabación
 - [ ] El Testeador de Cables calcula y muestra el Cable Score; el Segmento X es opcional
 - [ ] El botón dividido de "Escucha Offline" descarga los WAV correctos para la secuencia seleccionada
+
+---
+
+## Fase 2A.3 — Refinamiento Profesional y Optimización DSP-UI
+**Objetivo:** Optimizar el motor de renderizado a 60 FPS, corregir la visualización absoluta de RTA y consolidar la UI interactiva (4 pestañas, ecualizadores dinámicos de 3 vías/checkboxes y cabecera reactiva) definida en el Plan de Implementación de la Fase 2A.
+**Depende de:** Fase 2A (Base)
+
+### Componentes
+| Tarea | Ref UX | Complejidad |
+|:------|:------:|:-----------:|
+| **Reestructuración Sidebar:** 4 Pestañas principales con Material Icons específicos (`cadence`, `instant_mix`, `screenshot_frame_2`, `settings`). | Plan F2A.3 | 🟢 |
+| **Pestaña Medición:** Panel compacto, botón principal como barra de estado/progreso, resultados dinámicos. | Plan F2A.3 | 🟡 |
+| **Pestaña Ecualización:** Controles completos para Gráfico, Paramétrico (con checkboxes por polo), y Tono (3 vías). Botón de estado "Simular". | Plan F2A.3 | 🟡 |
+| **Topbar y UI Rápida:** Vúmetros con indicador de igualación, selectores rápidos de generador y grilla estilo Word. | Plan F2A.3 | 🟢 |
+| **Optimización de Rendering (60 FPS):** Implementación de *Logarithmic Binning* para el suavizado de curvas. | DSP | 🔴 |
+| **Optimización de CPU:** Caché de filtros EQ usando Svelte 5 `$derived` para eliminar recálculo logarítmico en cada frame. | DSP | 🟡 |
+| **Corrección de RTA Absoluto:** Escala Y dinámica de -120 a +10 dB para visualización correcta de niveles. | DSP | 🟢 |
+
+### Criterios de Aceptación
+- [ ] El Canvas mantiene 60 FPS consistentes durante la visualización RTA y EQ simultánea.
+- [ ] La señal RTA en vivo es visible y escalada correctamente independientemente del piso de ruido.
+- [ ] La UI principal está consolidada en las 4 pestañas definidas con la iconografía correcta.
+- [ ] La selección dinámica de métricas funciona utilizando la matriz de compatibilidad de escalas.
 
 ---
 
@@ -320,7 +344,8 @@ graph TD
     PF["Pre-Fase ✅<br/>(Deudas F0 + APST Builder)"]
     F1A["Fase 1A ✅<br/>APST Core + DSP<br/>(FSK + Goertzel + TF)"]
     F1B["Fase 1B ✅<br/>Calibración Interactiva<br/>(AutoEq + Trace Math)"]
-    F2A["Fase 2A<br/>UI Medición Avanzada<br/>(Standalone Mode)"]
+    F2A["Fase 2A ✅ (Base)<br/>UI Medición Avanzada<br/>(Standalone Mode)"]
+    F2A3["Fase 2A.3<br/>Refinamiento y Optimización<br/>(DSP, 60FPS, UI Avanzada)"]
     F2B["Fase 2B<br/>Shell de Navegación<br/>(Integración SPA)"]
     F3["Fase 3<br/>Planificación Espacial<br/>(Stage Plot + Inv/Local/Evento)"]
     F4["Fase 4<br/>Asistente IA<br/>(RAG + LLM aplicado a Datos)"]
@@ -331,7 +356,8 @@ graph TD
     PF --> F1A
     F1A --> F1B
     F1B --> F2A
-    F2A --> F2B
+    F2A --> F2A3
+    F2A3 --> F2B
     F2B --> F3
     F3 --> F4
     F4 --> F5
@@ -348,7 +374,8 @@ graph TD
 | **Pre** ✅ | Motor FFT propio + Ruido Rosa + APST Builder CLI | 2.2, 2.5 | — | Que suene (cierre) |
 | **1A** ✅ | Orquestador APST funcional + TF dual-canal | 2.2, 2.3, 4.13 | Calibración | Que mida (FSK) |
 | **1B** ✅ | AutoEq + Trace Math + STI-Est | 4.3, 4.7.1 | Calibración | Que mida (interactivo) |
-| **2A** | UI Medición multi-cuadrante + Backlog post-F1 | DDS 2.2/2.5/4.13, UX_Medicion | Calibración | Que mida (profesional) |
+| **2A** ✅ (Base) | UI Medición multi-cuadrante + Backlog post-F1 | DDS 2.2/2.5/4.13, UX_Medicion | Calibración | Que mida (base) |
+| **2A.3** | Refinamiento Profesional, 60FPS y UI Consolidada | DSP, UX_Medicion | Calibración | Que mida (profesional) |
 | **2B** | Shell de Navegación + SPA Routing | Organizacion_interfaz | Todos | Que navegue |
 | **3** | Stage Plot + Inventario/Local/Evento + Persistencia | 4.1, 4.1.3, 4.8, 4.12 | Planificación | Que recuerde |
 | **4** | Asistente IA para Medición y Diseño (RAG + LLM) | 4.4, 4.5, 4.9 | Referencia | Que explique |
