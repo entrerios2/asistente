@@ -83,6 +83,7 @@ import {
     const outputGroupDelay = new Float32Array(BINS);
     const outputImpulse = new Float32Array(FFT_SIZE);
     const outputStep = new Float32Array(FFT_SIZE);
+    const tempPhaseRadians = new Float32Array(BINS);
 
     // Ayudante de interpolación de frecuencia logarítmica para los buffers de bins
     function getMetricValueInterpolated(freq: number, dataArray: Float32Array): number {
@@ -127,7 +128,9 @@ import {
         return phase;
     }
 
+    let mathFrameCount = 0;
     function runMathPipeline(liveTrace: Trace | undefined) {
+        if (mathFrameCount++ % 3 !== 0) return;
         for (let k = 0; k < BINS; k++) {
             const f_k = k * (24000 / BINS) || 1e-6;
             
@@ -169,11 +172,10 @@ import {
         calculateStepResponse(outputImpulse, outputStep);
 
         // 5. Group Delay (derivada de la fase)
-        const phaseRadians = new Float32Array(BINS);
         for (let k = 0; k < BINS; k++) {
-            phaseRadians[k] = outputPhase[k] * Math.PI / 180;
+            tempPhaseRadians[k] = outputPhase[k] * Math.PI / 180;
         }
-        calculateGroupDelay(phaseRadians, 24000 / BINS, outputGroupDelay);
+        calculateGroupDelay(tempPhaseRadians, 24000 / BINS, outputGroupDelay);
     }
 
     // Definición de las 10 métricas de OSM
@@ -250,7 +252,7 @@ import {
 
     function valToY(val: number, height: number, metricType: string): number {
         let min = dbMin, max = dbMax;
-        if (metricType === 'Spectrum') { min = 20; max = 100; }
+        if (metricType === 'Spectrum') { min = -120; max = 10; }
         else if (metricType === 'Phase') { min = -180; max = 180; }
         else if (metricType === 'Coherence') { min = 0; max = 1; }
         else if (metricType === 'Group Delay') { min = -5; max = 25; }
@@ -265,7 +267,7 @@ import {
     function yToVal(y: number, height: number, metricType: string): number {
         const adjustedY = (y - offsetY) / scaleY;
         let min = dbMin, max = dbMax;
-        if (metricType === 'Spectrum') { min = 20; max = 100; }
+        if (metricType === 'Spectrum') { min = -120; max = 10; }
         else if (metricType === 'Phase') { min = -180; max = 180; }
         else if (metricType === 'Coherence') { min = 0; max = 1; }
         else if (metricType === 'Group Delay') { min = -5; max = 25; }
@@ -418,7 +420,7 @@ import {
         // 3. Renderizar cada métrica seleccionada
         if (activeMetrics.includes('Magnitude') && !hasTimeDomainActive) {
             const points: DataPoint[] = [];
-            for (let f = freqMin; f <= freqMax; f *= 1.01) {
+            for (let f = freqMin; f <= freqMax; f *= 1.03) {
                 points.push({ freq: f, val: getMetricValueInterpolated(f, outputMagnitude) });
             }
             drawPath(ctx, points, width, height, '#ff4444', 2, 'Magnitude');
@@ -442,7 +444,7 @@ import {
 
         if (activeMetrics.includes('Spectrum') && !hasTimeDomainActive) {
             const points: DataPoint[] = [];
-            for (let f = freqMin; f <= freqMax; f *= 1.01) {
+            for (let f = freqMin; f <= freqMax; f *= 1.03) {
                 const val = getMetricValueInterpolated(f, liveTrace && liveTrace.data && liveTrace.data.length > 0 ? liveTrace.data : outputMagnitude);
                 points.push({ freq: f, val: val + (liveTrace && liveTrace.data && liveTrace.data.length > 0 ? 0 : 68) });
             }
@@ -455,7 +457,7 @@ import {
             ctx.beginPath();
             let lastY = 0;
             let first = true;
-            for (let f = freqMin; f <= freqMax; f *= 1.01) {
+            for (let f = freqMin; f <= freqMax; f *= 1.03) {
                 const x = valToX(f, width);
                 const val = getMetricValueInterpolated(f, outputPhase);
                 const y = valToY(val, height, 'Phase');

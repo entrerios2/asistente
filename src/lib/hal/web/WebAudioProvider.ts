@@ -81,8 +81,8 @@ export class WebAudioProvider implements AudioProvider {
 			}
 
 			if (this.analyserNode && this.freqDataArray && listener.onFrequencyData) {
-				this.analyserNode.getFloatFrequencyData(this.freqDataArray);
-				listener.onFrequencyData(this.freqDataArray);
+				this.analyserNode.getFloatFrequencyData(this.freqDataArray as any);
+				listener.onFrequencyData(this.freqDataArray as any);
 			}
 
 			this.animationFrameId = requestAnimationFrame(readData);

@@ -6,22 +6,9 @@
 
     const provider = getAudioProvider();
 
-    let activeTab = $state("medicion"); // 'medicion' | 'eq' | 'snaps' | 'config'
-
-    // Estado global de medición
-    let mode = $state("manual"); // 'manual' | 'secuencial'
-    let isMeasuring = $state(false);
     let isCapturing = $state(false);
     let statusText = $state("Listo para medir");
     let progress = $state(0);
-
-    // --- MODO MANUAL ---
-    let generatorType = $state("pink"); // 'pink' | 'white' | 'brown' | 'music-noise' | 'sine' | 'sweep' | 'burst' | 'sinburst' | 'mls'
-    let genActive = $state(false);
-    let genFreq = $state(1000);
-    let genLevel = $state(0);
-    let genRouting = $state<"L" | "R" | "Stereo">("Stereo");
-    let manualDelay = $state(0); // en ms
 
     // Opciones del Sweep
     let sweepF1 = $state(20);
@@ -34,74 +21,13 @@
 
     // Opciones del MLS
     let mlsOrder = $state(15);
+    let manualDelay = $state(0); // en ms
 
     // --- MODO SECUENCIAL ---
     let sampleRate = $state(48000);
     let selectedPreset = $state("all");
     let isOffline = $state(false);
     let downloadFormat = $state("wav");
-
-    // --- SINCRONIZACIÓN BIDIRECCIONAL CON UISTORE (FASE 2A.3) ---
-    $effect(() => {
-        activeTab = uiStore.activeTab;
-    });
-    $effect(() => {
-        uiStore.activeTab = activeTab;
-    });
-
-    $effect(() => {
-        mode = uiStore.measurementMode;
-    });
-    $effect(() => {
-        uiStore.measurementMode = mode;
-    });
-
-    $effect(() => {
-        generatorType = uiStore.generatorType;
-    });
-    $effect(() => {
-        uiStore.generatorType = generatorType;
-    });
-
-    $effect(() => {
-        genActive = uiStore.genActive;
-    });
-    $effect(() => {
-        uiStore.genActive = genActive;
-    });
-
-    $effect(() => {
-        genFreq = uiStore.genFreq;
-    });
-    $effect(() => {
-        uiStore.genFreq = genFreq;
-    });
-
-    $effect(() => {
-        genLevel = uiStore.genLevel;
-    });
-    $effect(() => {
-        uiStore.genLevel = genLevel;
-    });
-
-    $effect(() => {
-        genRouting = uiStore.genRouting;
-    });
-    $effect(() => {
-        uiStore.genRouting = genRouting;
-    });
-
-    // Sincronización de medición reactiva
-    $effect(() => {
-        if (uiStore.isMeasuring !== isMeasuring) {
-            untrack(() => {
-                toggleMeasurement();
-            });
-        }
-    });
-    $effect(() => {
-        uiStore.isMeasuring = isMeasuring;
-    });
 
     // --- ESTADOS DE ECUALIZACIÓN ---
     let eqType = $state("grafico"); // 'grafico' | 'parametrico' | 'tono'
@@ -369,85 +295,98 @@
 
     // Control reactivo del generador en modo manual
     $effect(() => {
-        if (mode === "manual") {
-            // @ts-ignore
+        if (uiStore.measurementMode === "manual") {
             provider.playGenerator(
-                generatorType,
-                genActive,
-                genFreq,
-                genLevel,
-                genRouting,
+                uiStore.generatorType as any,
+                uiStore.genActive,
+                uiStore.genFreq,
+                uiStore.genLevel,
+                uiStore.genRouting,
             );
         } else {
             // Si cambiamos de modo, apagamos el generador
-            // @ts-ignore
             provider.playGenerator(
-                generatorType,
+                uiStore.generatorType as any,
                 false,
-                genFreq,
-                genLevel,
-                genRouting,
+                uiStore.genFreq,
+                uiStore.genLevel,
+                uiStore.genRouting,
             );
-            genActive = false;
+            uiStore.genActive = false;
         }
     });
 
-    async function toggleMeasurement() {
-        if (isMeasuring) {
-            isMeasuring = false;
-            statusText = "Medición cancelada";
-            progress = 0;
-            if (mode === "manual") {
-                provider.stopCapture();
-                isCapturing = false;
+    // Puente reactivo: reaccionar a cambios en uiStore.isMeasuring sin escribirlo
+    $effect(() => {
+        const shouldMeasure = uiStore.isMeasuring;
+        untrack(() => {
+            if (shouldMeasure) {
+                startMeasurement();
+            } else {
+                stopMeasurement();
             }
-        } else {
-            isMeasuring = true;
-            progress = 0;
-            statusText = "Iniciando captura...";
-            try {
-                if (mode === "manual") {
-                    // Inicializar trazo live en traceManager si no existe
-                    if (!traceManager.traces.some((t) => t.id === "live-1")) {
-                        traceManager.addTrace({
-                            id: "live-1",
-                            name: "Micrófono en Vivo",
-                            type: "live",
-                            metric: "RTA",
-                            data: new Float32Array(4096),
-                            color: "#ff4444",
-                            style: "solid",
-                            visible: true,
-                            offsetY: 0,
-                            timestamp: Date.now(),
-                            source: "manual",
-                        });
-                    }
+        });
+    });
 
-                    await provider.startCapture({
-                        onAudioData: () => {},
-                        onFrequencyData: (data) => {
-                            traceManager.updateLiveTrace("live-1", data);
-                        },
-                    });
-                    isCapturing = true;
-                    statusText = "Medición en vivo activa";
-                } else {
-                    statusText = "Ejecutando secuencia...";
-                    runSequentialSequence();
-                }
-            } catch (e) {
-                console.error(e);
-                isMeasuring = false;
-                statusText = "Error de captura";
-            }
+    function stopMeasurement() {
+        statusText = "Medición cancelada";
+        progress = 0;
+        if (uiStore.measurementMode === "manual") {
+            provider.stopCapture();
+            isCapturing = false;
         }
+    }
+
+    async function startMeasurement() {
+        progress = 0;
+        statusText = "Iniciando captura...";
+        try {
+            if (uiStore.measurementMode === "manual") {
+                // Inicializar trazo live en traceManager si no existe
+                if (!traceManager.traces.some((t) => t.id === "live-1")) {
+                    traceManager.addTrace({
+                        id: "live-1",
+                        name: "Micrófono en Vivo",
+                        type: "live",
+                        metric: "RTA",
+                        data: new Float32Array(4096),
+                        color: "#ff4444",
+                        style: "solid",
+                        visible: true,
+                        offsetY: 0,
+                        timestamp: Date.now(),
+                        source: "manual",
+                    });
+                }
+
+                await provider.startCapture({
+                    onAudioData: () => {},
+                    onFrequencyData: (data) => {
+                        traceManager.updateLiveTrace("live-1", data);
+                    },
+                });
+                isCapturing = true;
+                statusText = "Medición en vivo activa";
+            } else {
+                statusText = "Ejecutando secuencia...";
+                runSequentialSequence();
+            }
+        } catch (e) {
+            console.error(e);
+            uiStore.isMeasuring = false;
+            statusText = "Error de captura";
+        }
+    }
+
+    // Wrapper para uso desde botones del Sidebar (toggle seguro)
+    async function toggleMeasurement() {
+        uiStore.isMeasuring = !uiStore.isMeasuring;
     }
 
     async function runSequentialSequence() {
         const activeSegments = segments.filter((s) => s.checked);
         if (activeSegments.length === 0) {
-            isMeasuring = false;
+            uiStore.isMeasuring = false;
             statusText = "Seleccione al menos un segmento";
             return;
         }
@@ -456,27 +395,27 @@
         activeSegments.forEach((s) => (s.result = undefined));
 
         for (let i = 0; i < activeSegments.length; i++) {
-            if (!isMeasuring) break;
+            if (!uiStore.isMeasuring) break;
             const seg = activeSegments[i];
             statusText = `Midiendo: ${seg.name}...`;
 
             // Simular adquisición y procesamiento por segmento
             for (let p = 0; p <= 100; p += 20) {
-                if (!isMeasuring) break;
+                if (!uiStore.isMeasuring) break;
                 progress = Math.round(
                     ((i + p / 100) / activeSegments.length) * 100,
                 );
                 await new Promise((r) => setTimeout(r, 200));
             }
 
-            if (isMeasuring) {
+            if (uiStore.isMeasuring) {
                 // Resultado simulado para la UI
                 seg.result = `${(Math.random() * 3 - 1.5).toFixed(1)} dB / ${(Math.random() * 10).toFixed(0)} ms`;
             }
         }
 
-        if (isMeasuring) {
-            isMeasuring = false;
+        if (uiStore.isMeasuring) {
+            uiStore.isMeasuring = false;
             progress = 100;
             statusText = "Secuencia completada con éxito";
         }
@@ -748,7 +687,7 @@
             traceManager.captureSnapshot(
                 liveTrace.id,
                 `Instantánea #${traceManager.traces.filter((t) => t.type === "snapshot").length + 1}`,
-                mode === "manual" ? "manual" : "secuencial",
+                uiStore.measurementMode === "manual" ? "manual" : "secuencial",
             );
             statusText = "Instantánea capturada con éxito";
         } else {
@@ -777,7 +716,7 @@
                 visible: true,
                 offsetY: 0,
                 timestamp: Date.now(),
-                source: mode === "manual" ? "manual" : "secuencial",
+                source: uiStore.measurementMode === "manual" ? "manual" : "secuencial",
             });
             statusText = "Instantánea de prueba capturada";
         }
@@ -793,10 +732,10 @@
     >
         <button
             class="w-11 h-11 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer min-h-[44px] min-w-[44px]
-                   {activeTab === 'medicion'
+                   {uiStore.activeTab === 'medicion'
                 ? 'bg-[#3b82f6]/10 text-[#3b82f6]'
                 : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}"
-            onclick={() => (activeTab = "medicion")}
+            onclick={() => (uiStore.activeTab = "medicion")}
             title="Medición"
         >
             <span class="material-symbols-outlined text-[22px]">cadence</span>
@@ -804,10 +743,10 @@
 
         <button
             class="w-11 h-11 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer min-h-[44px] min-w-[44px]
-                   {activeTab === 'eq'
+                   {uiStore.activeTab === 'eq'
                 ? 'bg-[#3b82f6]/10 text-[#3b82f6]'
                 : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}"
-            onclick={() => (activeTab = "eq")}
+            onclick={() => (uiStore.activeTab = "eq")}
             title="Ecualización"
         >
             <span class="material-symbols-outlined text-[22px]"
@@ -817,10 +756,10 @@
 
         <button
             class="w-11 h-11 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer min-h-[44px] min-w-[44px]
-                   {activeTab === 'snaps'
+                   {uiStore.activeTab === 'snaps'
                 ? 'bg-[#3b82f6]/10 text-[#3b82f6]'
                 : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}"
-            onclick={() => (activeTab = "snaps")}
+            onclick={() => (uiStore.activeTab = "snaps")}
             title="Instantáneas"
         >
             <span class="material-symbols-outlined text-[22px]"
@@ -830,10 +769,10 @@
 
         <button
             class="w-11 h-11 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer min-h-[44px] min-w-[44px]
-                   {activeTab === 'config'
+                   {uiStore.activeTab === 'config'
                 ? 'bg-[#3b82f6]/10 text-[#3b82f6]'
                 : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}"
-            onclick={() => (activeTab = "config")}
+            onclick={() => (uiStore.activeTab = "config")}
             title="Configuración"
         >
             <span class="material-symbols-outlined text-[22px]">settings</span>
@@ -842,7 +781,7 @@
 
     <!-- Contenido Principal del Sidebar -->
     <div class="flex-1 h-full overflow-hidden flex flex-col bg-[#0a0a0c]">
-        {#if activeTab === "medicion"}
+        {#if uiStore.activeTab === "medicion"}
             <div
                 class="flex-1 p-5 overflow-y-auto flex flex-col gap-5"
                 id="panel-medicion"
@@ -853,24 +792,24 @@
                 >
                     <button
                         class="flex-1 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer min-h-[36px]
-                               {mode === 'manual'
+                               {uiStore.measurementMode === 'manual'
                             ? 'bg-[#3b82f6] text-white shadow'
                             : 'text-gray-400 hover:text-gray-200'}"
                         onclick={() => {
-                            mode = "manual";
-                            if (isMeasuring) toggleMeasurement();
+                            uiStore.measurementMode = "manual";
+                            if (uiStore.isMeasuring) toggleMeasurement();
                         }}
                     >
                         Manual
                     </button>
                     <button
                         class="flex-1 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer min-h-[36px]
-                               {mode === 'secuencial'
+                               {uiStore.measurementMode === 'secuencial'
                             ? 'bg-[#3b82f6] text-white shadow'
                             : 'text-gray-400 hover:text-gray-200'}"
                         onclick={() => {
-                            mode = "secuencial";
-                            if (isMeasuring) toggleMeasurement();
+                            uiStore.measurementMode = "secuencial";
+                            if (uiStore.isMeasuring) toggleMeasurement();
                         }}
                     >
                         Secuencial
@@ -878,7 +817,7 @@
                 </div>
 
                 <!-- CONTENIDO MODO MANUAL -->
-                {#if mode === "manual"}
+                {#if uiStore.measurementMode === "manual"}
                     <div class="flex flex-col gap-4">
                         <!-- Dropdown Generador -->
                         <div class="flex flex-col gap-1.5">
@@ -887,7 +826,7 @@
                                 >Generador</label
                             >
                             <select
-                                bind:value={generatorType}
+                                bind:value={uiStore.generatorType}
                                 class="w-full bg-[#121216] border border-[#1a1a24] rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#3b82f6]"
                             >
                                 <option value="pink">Ruido Rosa</option>
@@ -906,7 +845,7 @@
                         <div
                             class="bg-[#121216]/50 border border-[#1a1a24]/30 rounded-lg p-3 flex flex-col gap-3"
                         >
-                            {#if generatorType === "sine"}
+                            {#if uiStore.generatorType === "sine"}
                                 <div class="flex flex-col gap-1">
                                     <label
                                         class="text-[10px] font-bold text-gray-500 uppercase"
@@ -914,13 +853,13 @@
                                     >
                                     <input
                                         type="number"
-                                        bind:value={genFreq}
+                                        bind:value={uiStore.genFreq}
                                         min="10"
                                         max="22000"
                                         class="w-full bg-[#121216] border border-[#1a1a24] rounded-md px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-[#3b82f6]"
                                     />
                                 </div>
-                            {:else if generatorType === "sweep"}
+                            {:else if uiStore.generatorType === "sweep"}
                                 <div class="grid grid-cols-2 gap-2">
                                     <div class="flex flex-col gap-1">
                                         <label
@@ -956,7 +895,7 @@
                                         class="w-full bg-[#121216] border border-[#1a1a24] rounded-md px-2 py-1 text-sm text-gray-200"
                                     />
                                 </div>
-                            {:else if generatorType === "burst" || generatorType === "sinburst"}
+                            {:else if uiStore.generatorType === "burst" || uiStore.generatorType === "sinburst"}
                                 <div class="grid grid-cols-2 gap-2">
                                     <div class="flex flex-col gap-1">
                                         <label
@@ -981,7 +920,7 @@
                                         />
                                     </div>
                                 </div>
-                            {:else if generatorType === "mls"}
+                            {:else if uiStore.generatorType === "mls"}
                                 <div class="flex flex-col gap-1">
                                     <label
                                         class="text-[10px] font-bold text-gray-500 uppercase"
@@ -1015,12 +954,11 @@
                                     >Canal de Salida</label
                                 >
                                 <select
-                                    bind:value={genRouting}
+                                    bind:value={uiStore.genRouting}
                                     class="w-full bg-[#121216] border border-[#1a1a24] rounded-md px-2 py-1.5 text-xs text-gray-200"
                                 >
                                     <option value="Stereo">Estéreo</option>
-                                    <option value="L">Solo Izquierdo (L)</option
-                                    >
+                                    <option value="L">Solo Izquierdo (L)</option>
                                     <option value="R">Solo Derecho (R)</option>
                                 </select>
                             </div>
@@ -1035,14 +973,14 @@
                                 >
                                 <span
                                     class="text-xs font-mono font-bold text-[#3b82f6]"
-                                    >{genLevel} dBFS</span
+                                    >{uiStore.genLevel} dBFS</span
                                 >
                             </div>
                             <input
                                 type="range"
                                 min="-60"
                                 max="10"
-                                bind:value={genLevel}
+                                bind:value={uiStore.genLevel}
                                 class="w-full h-1.5 bg-[#121216] rounded-lg appearance-none cursor-pointer accent-[#3b82f6]"
                             />
                         </div>
@@ -1051,7 +989,7 @@
                         <div class="flex gap-2">
                             <button
                                 class="flex-1 min-h-[44px] bg-[#10b981]/15 text-[#10b981] hover:bg-[#10b981]/25 border border-[#10b981]/30 rounded-lg flex items-center justify-center gap-2 text-xs font-bold transition-all cursor-pointer"
-                                onclick={() => (genActive = true)}
+                                onclick={() => (uiStore.genActive = true)}
                             >
                                 <span class="material-symbols-outlined text-sm"
                                     >volume_up</span
@@ -1060,7 +998,7 @@
                             </button>
                             <button
                                 class="flex-1 min-h-[44px] bg-[#ef4444]/15 text-[#ef4444] hover:bg-[#ef4444]/25 border border-[#ef4444]/30 rounded-lg flex items-center justify-center gap-2 text-xs font-bold transition-all cursor-pointer"
-                                onclick={() => (genActive = false)}
+                                onclick={() => (uiStore.genActive = false)}
                             >
                                 <span class="material-symbols-outlined text-sm"
                                     >volume_mute</span
@@ -1104,7 +1042,7 @@
                 {/if}
 
                 <!-- CONTENIDO MODO SECUENCIAL -->
-                {#if mode === "secuencial"}
+                {#if uiStore.measurementMode === "secuencial"}
                     <div class="flex flex-col gap-4">
                         <div class="grid grid-cols-2 gap-2">
                             <!-- Dropdown Tasa de Muestreo -->
@@ -1245,7 +1183,7 @@
                 <div
                     class="mt-auto pt-4 border-t border-[#1a1a24]/50 flex flex-col gap-2"
                 >
-                    {#if mode === "secuencial" && isMeasuring}
+                    {#if uiStore.measurementMode === "secuencial" && uiStore.isMeasuring}
                         <!-- Barra de Progreso en Modo Secuencial -->
                         <div
                             class="w-full bg-[#121216] rounded-full h-2.5 overflow-hidden border border-white/5"
@@ -1267,15 +1205,15 @@
 
                     <button
                         class="w-full min-h-[48px] bg-gradient-to-r transition-all duration-300 text-white rounded-lg font-bold flex items-center justify-center gap-2 cursor-pointer shadow-lg
-                               {isMeasuring
+                               {uiStore.isMeasuring
                             ? 'from-[#ef4444] to-[#dc2626] hover:opacity-90'
                             : 'from-[#3b82f6] to-[#2563eb] hover:from-[#2563eb] hover:to-[#1d4ed8]'}"
                         onclick={toggleMeasurement}
                     >
                         <span class="material-symbols-outlined"
-                            >{isMeasuring ? "stop" : "podcasts"}</span
+                            >{uiStore.isMeasuring ? "stop" : "podcasts"}</span
                         >
-                        {isMeasuring ? "Detener Medición" : "Medir / Iniciar"}
+                        {uiStore.isMeasuring ? "Detener Medición" : "Medir / Iniciar"}
                     </button>
 
                     <span
@@ -1285,7 +1223,7 @@
                     </span>
                 </div>
             </div>
-        {:else if activeTab === "eq"}
+        {:else if uiStore.activeTab === "eq"}
             <div
                 class="flex-1 p-5 overflow-y-auto flex flex-col gap-5"
                 id="panel-eq"
@@ -1732,7 +1670,7 @@
                     </button>
                 </div>
             </div>
-        {:else if activeTab === "snaps"}
+        {:else if uiStore.activeTab === "snaps"}
             <div
                 class="flex-1 p-5 overflow-y-auto flex flex-col gap-5"
                 id="panel-snaps"
@@ -2003,7 +1941,7 @@
                     {/if}
                 </div>
             </div>
-        {:else if activeTab === "config"}
+        {:else if uiStore.activeTab === "config"}
             <div
                 class="flex-1 p-5 overflow-y-auto flex flex-col gap-5"
                 id="panel-config"
