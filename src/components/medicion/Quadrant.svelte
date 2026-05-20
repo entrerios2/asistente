@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import { traceManager, type Trace } from '$lib/stores/traceManager.svelte';
+    import { uiStore } from '$lib/stores/ui.svelte';
 
     interface Props {
         id: string;
@@ -182,19 +183,21 @@
             const points = smoothDataLog(liveTrace.data, smoothing);
             drawPath(ctx, points, width, height, '#ff4444', 2);
 
-            // 3. Trazo Predictivo (Cian punteado) = Live + EQ
-            ctx.setLineDash([4, 4]);
-            ctx.beginPath();
-            for (let i = 0; i < points.length; i++) {
-                const p = points[i];
-                const x = freqToX(p.freq, width);
-                const eqGain = getEQResponseCached(p.freq);
-                const y = valToY(p.val + eqGain, height);
-                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            // 3. Trazo Predictivo (Cian punteado) = Live + EQ (solo si la simulación está activa)
+            if (uiStore.isSimulating) {
+                ctx.setLineDash([4, 4]);
+                ctx.beginPath();
+                for (let i = 0; i < points.length; i++) {
+                    const p = points[i];
+                    const x = freqToX(p.freq, width);
+                    const eqGain = getEQResponseCached(p.freq);
+                    const y = valToY(p.val + eqGain, height);
+                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                }
+                ctx.strokeStyle = '#00ffff';
+                ctx.stroke();
+                ctx.setLineDash([]);
             }
-            ctx.strokeStyle = '#00ffff';
-            ctx.stroke();
-            ctx.setLineDash([]);
         }
 
         // 4. Trazo EQ (Verde)

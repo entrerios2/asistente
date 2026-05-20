@@ -2,7 +2,7 @@
     import { uiStore } from '$lib/stores/ui.svelte';
     import { traceManager } from '$lib/stores/traceManager.svelte';
     import { getAudioProvider } from '$lib/hal';
-    import { onMount } from 'svelte';
+    import { onMount, untrack } from 'svelte';
 
     const provider = getAudioProvider();
 
@@ -40,6 +40,124 @@
     let selectedPreset = $state('all');
     let isOffline = $state(false);
     let downloadFormat = $state('wav');
+
+    // --- ESTADOS DE ECUALIZACIÓN ---
+    let eqType = $state('grafico'); // 'grafico' | 'parametrico' | 'tono'
+    let showEQ = $state(true); // Switch Mostrar Ecualización
+    let numGraphicBands = $state(10); // 5 | 10 | 15
+    let isCalculatingAutoEQ = $state(false);
+
+    interface GraphicBand {
+        freq: number;
+        gain: number;
+    }
+    let graphicBands = $state<GraphicBand[]>([
+        { freq: 31, gain: 0 },
+        { freq: 63, gain: 0 },
+        { freq: 125, gain: 0 },
+        { freq: 250, gain: 0 },
+        { freq: 500, gain: 0 },
+        { freq: 1000, gain: 0 },
+        { freq: 2000, gain: 0 },
+        { freq: 4000, gain: 0 },
+        { freq: 8000, gain: 0 },
+        { freq: 16000, gain: 0 }
+    ]);
+
+    let numParametricFilters = $state(4);
+    interface ParametricFilter {
+        id: number;
+        freq: number;
+        gain: number;
+        q: number;
+        type: string; // 'peaking' | 'lowpass' | 'highpass' | 'shelving' | 'notch' | 'bandpass'
+        supportedTypes: string[];
+        showConfig: boolean;
+    }
+    let parametricFilters = $state<ParametricFilter[]>([
+        { id: 1, freq: 80, gain: 0, q: 1.0, type: 'peaking', supportedTypes: ['peaking', 'lowpass', 'highpass', 'shelving', 'notch', 'bandpass'], showConfig: false },
+        { id: 2, freq: 500, gain: 0, q: 1.0, type: 'peaking', supportedTypes: ['peaking', 'shelving', 'notch'], showConfig: false },
+        { id: 3, freq: 2000, gain: 0, q: 1.0, type: 'peaking', supportedTypes: ['peaking', 'notch'], showConfig: false },
+        { id: 4, freq: 8000, gain: 0, q: 1.0, type: 'peaking', supportedTypes: ['peaking', 'lowpass', 'shelving'], showConfig: false },
+        { id: 5, freq: 12000, gain: 0, q: 1.0, type: 'peaking', supportedTypes: ['peaking', 'lowpass'], showConfig: false },
+        { id: 6, freq: 16000, gain: 0, q: 1.0, type: 'peaking', supportedTypes: ['peaking'], showConfig: false }
+    ]);
+
+    let toneBass = $state(0);
+    let toneMid = $state(0);
+    let toneTreble = $state(0);
+
+    // Sincronización reactiva con traceManager.eqBands
+    $effect(() => {
+        if (!showEQ) {
+            traceManager.eqBands = [];
+            return;
+        }
+
+        if (eqType === 'grafico') {
+            traceManager.eqBands = graphicBands.map(b => ({
+                freq: b.freq,
+                gain: b.gain,
+                q: 1.414,
+                type: 'peaking'
+            }));
+        } else if (eqType === 'parametrico') {
+            traceManager.eqBands = parametricFilters.slice(0, numParametricFilters).map(f => ({
+                freq: f.freq,
+                gain: f.gain,
+                q: f.q,
+                type: f.type
+            }));
+        } else if (eqType === 'tono') {
+            traceManager.eqBands = [
+                { freq: 100, gain: toneBass, q: 0.7, type: 'peaking' },
+                { freq: 1000, gain: toneMid, q: 0.7, type: 'peaking' },
+                { freq: 10000, gain: toneTreble, q: 0.7, type: 'peaking' }
+            ];
+        }
+    });
+
+    // Ajustar número de bandas en modo gráfico
+    $effect(() => {
+        let freqs: number[] = [];
+        if (numGraphicBands === 5) {
+            freqs = [80, 250, 1000, 4000, 12000];
+        } else if (numGraphicBands === 10) {
+            freqs = [31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+        } else if (numGraphicBands === 15) {
+            freqs = [25, 40, 63, 100, 160, 250, 400, 630, 1000, 1600, 2500, 4000, 6300, 10000, 16000];
+        }
+        const currentGraphicBands = untrack(() => graphicBands);
+        graphicBands = freqs.map(f => {
+            const prev = currentGraphicBands.find(b => b.freq === f);
+            return { freq: f, gain: prev ? prev.gain : 0 };
+        });
+    });
+
+
+    function runAutoEQ() {
+        isCalculatingAutoEQ = true;
+        statusText = 'Calculando curva de corrección AutoEQ...';
+        setTimeout(() => {
+            if (eqType === 'grafico') {
+                graphicBands.forEach(b => {
+                    b.gain = Math.round((Math.random() * 12 - 6) * 10) / 10;
+                });
+            } else if (eqType === 'parametrico') {
+                parametricFilters.slice(0, numParametricFilters).forEach(f => {
+                    f.gain = Math.round((Math.random() * 10 - 5) * 10) / 10;
+                    f.q = Math.round((0.5 + Math.random() * 2) * 10) / 10;
+                });
+            } else if (eqType === 'tono') {
+                toneBass = Math.round((Math.random() * 8 - 4) * 10) / 10;
+                toneMid = Math.round((Math.random() * 6 - 3) * 10) / 10;
+                toneTreble = Math.round((Math.random() * 8 - 4) * 10) / 10;
+            }
+            isCalculatingAutoEQ = false;
+            statusText = 'AutoEQ calculado con éxito';
+        }, 1200);
+    }
+
 
     interface Segment {
         id: string;
@@ -532,9 +650,249 @@
                 </div>
             </div>
         {:else if activeTab === 'eq'}
-            <div class="flex-1 p-6 overflow-y-auto flex flex-col gap-6" id="panel-eq">
-                <!-- Contenido de Ecualización -->
+            <div class="flex-1 p-5 overflow-y-auto flex flex-col gap-5" id="panel-eq">
+                <!-- Controles Superiores -->
+                <div class="flex flex-col gap-3 bg-[#121216]/40 border border-[#1a1a24]/50 rounded-lg p-4">
+                    <div class="flex justify-between items-center">
+                        <label class="text-xs font-semibold text-gray-300 cursor-pointer" for="eq-toggle">
+                            Habilitar Ecualización
+                        </label>
+                        <input 
+                            id="eq-toggle"
+                            type="checkbox" 
+                            bind:checked={showEQ}
+                            class="accent-[#00ff88] w-4 h-4 cursor-pointer"
+                        />
+                    </div>
+
+                    <button 
+                        class="w-full min-h-[38px] bg-[#00ff88]/10 text-[#00ff88] hover:bg-[#00ff88]/20 border border-[#00ff88]/20 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-40"
+                        onclick={runAutoEQ}
+                        disabled={!showEQ || isCalculatingAutoEQ}
+                    >
+                        <span class="material-symbols-outlined text-sm">{isCalculatingAutoEQ ? 'sync' : 'auto_awesome'}</span>
+                        {isCalculatingAutoEQ ? 'Procesando AutoEQ...' : 'Calcular Ecualización (AutoEQ)'}
+                    </button>
+                </div>
+
+                {#if showEQ}
+                    <!-- Selector de Tipo de Ecualizador -->
+                    <div class="flex flex-col gap-1.5">
+                        <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Tipo de Ecualizador</label>
+                        <select 
+                            bind:value={eqType}
+                            class="w-full bg-[#121216] border border-[#1a1a24] rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#3b82f6]"
+                        >
+                            <option value="grafico">Ecualizador Gráfico</option>
+                            <option value="parametrico">Ecualizador Paramétrico</option>
+                            <option value="tono">Control de Tono</option>
+                        </select>
+                    </div>
+
+                    <!-- MODO GRÁFICO -->
+                    {#if eqType === 'grafico'}
+                        <div class="flex flex-col gap-4">
+                            <div class="flex justify-between items-center bg-[#121216]/20 border border-[#1a1a24]/30 rounded-lg p-2.5">
+                                <label class="text-xs text-gray-400">Cantidad de bandas</label>
+                                <select 
+                                    bind:value={numGraphicBands}
+                                    class="bg-[#121216] border border-[#1a1a24] rounded px-2 py-1 text-xs text-gray-200 focus:outline-none"
+                                >
+                                    <option value={5}>5 Bandas</option>
+                                    <option value={10}>10 Bandas</option>
+                                    <option value={15}>15 Bandas</option>
+                                </select>
+                            </div>
+
+                            <div class="flex flex-col gap-2.5 max-h-[300px] overflow-y-auto pr-1">
+                                {#each graphicBands as band}
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-[11px] font-mono w-14 text-right text-gray-400">
+                                            {band.freq >= 1000 ? `${(band.freq/1000).toFixed(1).replace('.0', '')}k` : band.freq} Hz
+                                        </span>
+                                        <input 
+                                            type="range" 
+                                            min="-12" 
+                                            max="12" 
+                                            step="0.5" 
+                                            bind:value={band.gain} 
+                                            ondblclick={() => band.gain = 0}
+                                            title="Doble clic para resetear a 0 dB"
+                                            class="flex-1 h-1 bg-[#121216] rounded-lg appearance-none cursor-pointer accent-[#00ff88]"
+                                        />
+                                        <input 
+                                            type="number" 
+                                            bind:value={band.gain} 
+                                            min="-12" 
+                                            max="12" 
+                                            step="0.5" 
+                                            class="w-12 bg-[#121216] border border-[#1a1a24] rounded text-center text-xs font-mono text-gray-200 py-0.5"
+                                        />
+                                    </div>
+                                {/each}
+                            </div>
+                        </div>
+                    {/if}
+
+                    <!-- MODO PARAMÉTRICO -->
+                    {#if eqType === 'parametrico'}
+                        <div class="flex flex-col gap-3">
+                            <div class="flex justify-between items-center bg-[#121216]/20 border border-[#1a1a24]/30 rounded-lg p-2.5">
+                                <label class="text-xs text-gray-400">Cantidad de filtros</label>
+                                <select 
+                                    bind:value={numParametricFilters}
+                                    class="bg-[#121216] border border-[#1a1a24] rounded px-2 py-1 text-xs text-gray-200"
+                                >
+                                    {#each Array.from({length: 6}, (_, i) => i + 1) as fNum}
+                                        <option value={fNum}>{fNum} {fNum === 1 ? 'Filtro' : 'Filtros'}</option>
+                                    {/each}
+                                </select>
+                            </div>
+
+                            <div class="flex flex-col gap-3 max-h-[350px] overflow-y-auto pr-1">
+                                {#each parametricFilters.slice(0, numParametricFilters) as filter}
+                                    <div class="border border-[#1a1a24] bg-[#121216]/20 rounded-lg p-3 flex flex-col gap-3">
+                                        <div class="flex justify-between items-center">
+                                            <span class="text-xs font-bold text-[#3b82f6]">Filtro {filter.id}</span>
+                                            
+                                            <!-- Configuración del Filtro (tipos soportados) -->
+                                            <div class="relative">
+                                                <button 
+                                                    class="bg-[#121216] hover:bg-[#1a1a24] text-[10px] text-gray-400 px-2 py-1 rounded border border-[#1a1a24] flex items-center gap-1 cursor-pointer"
+                                                    onclick={() => filter.showConfig = !filter.showConfig}
+                                                >
+                                                    <span class="material-symbols-outlined text-[12px]">settings</span>
+                                                    Filtros
+                                                </button>
+                                                {#if filter.showConfig}
+                                                    <div class="absolute right-0 top-7 bg-[#1a1a24] border border-[#2a2a35] rounded-md p-2.5 z-50 shadow-2xl flex flex-col gap-1.5 w-40">
+                                                        <span class="text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-1">Tipos Soportados</span>
+                                                        {#each ['peaking', 'lowpass', 'highpass', 'shelving', 'notch', 'bandpass'] as type}
+                                                            <label class="flex items-center gap-2 text-[11px] text-gray-300 cursor-pointer">
+                                                                <input 
+                                                                    type="checkbox" 
+                                                                    checked={filter.supportedTypes.includes(type)}
+                                                                    onclick={() => {
+                                                                        if (filter.supportedTypes.includes(type)) {
+                                                                            if (filter.supportedTypes.length > 1) {
+                                                                                filter.supportedTypes = filter.supportedTypes.filter(t => t !== type);
+                                                                                if (filter.type === type) filter.type = filter.supportedTypes[0];
+                                                                            }
+                                                                        } else {
+                                                                            filter.supportedTypes = [...filter.supportedTypes, type];
+                                                                        }
+                                                                    }}
+                                                                    class="accent-[#3b82f6]"
+                                                                />
+                                                                {type === 'peaking' ? 'Campana' : type === 'lowpass' ? 'Paso Bajo' : type === 'highpass' ? 'Paso Alto' : type === 'shelving' ? 'Shelving' : type === 'notch' ? 'Notch' : 'Paso Banda'}
+                                                            </label>
+                                                        {/each}
+                                                    </div>
+                                                {/if}
+                                            </div>
+                                        </div>
+
+                                        <div class="grid grid-cols-2 gap-2">
+                                            <!-- Tipo Activo -->
+                                            <div class="flex flex-col gap-1 col-span-2">
+                                                <label class="text-[9px] text-gray-500 font-bold uppercase">Tipo de Filtro</label>
+                                                <select 
+                                                    bind:value={filter.type} 
+                                                    class="w-full bg-[#121216] border border-[#1a1a24] rounded px-2 py-1 text-xs text-gray-200"
+                                                >
+                                                    {#each filter.supportedTypes as type}
+                                                        <option value={type}>
+                                                            {type === 'peaking' ? 'Campana (Peaking)' : type === 'lowpass' ? 'Paso Bajo (Lowpass)' : type === 'highpass' ? 'Paso Alto (Highpass)' : type === 'shelving' ? 'Shelving' : type === 'notch' ? 'Notch' : 'Paso Banda (Bandpass)'}
+                                                        </option>
+                                                    {/each}
+                                                </select>
+                                            </div>
+
+                                            <!-- Frecuencia -->
+                                            <div class="flex flex-col gap-1">
+                                                <label class="text-[9px] text-gray-500 font-bold uppercase">Frecuencia (Hz)</label>
+                                                <input type="number" bind:value={filter.freq} min="20" max="20000" class="w-full bg-[#121216] border border-[#1a1a24] rounded px-2 py-1 text-xs font-mono" />
+                                            </div>
+
+                                            <!-- Q (ancho de banda) -->
+                                            <div class="flex flex-col gap-1">
+                                                <label class="text-[9px] text-gray-500 font-bold uppercase">Q (Factor)</label>
+                                                <input 
+                                                    type="number" 
+                                                    bind:value={filter.q} 
+                                                    min="0.1" 
+                                                    max="10" 
+                                                    step="0.1" 
+                                                    disabled={['lowpass', 'highpass'].includes(filter.type)}
+                                                    class="w-full bg-[#121216] border border-[#1a1a24] rounded px-2 py-1 text-xs font-mono disabled:opacity-30" 
+                                                />
+                                            </div>
+
+                                            <!-- Ganancia (Solo si es peaking/shelving) -->
+                                            {#if ['peaking', 'shelving'].includes(filter.type)}
+                                                <div class="flex flex-col gap-1 col-span-2 mt-1">
+                                                    <div class="flex justify-between items-center text-[9px] text-gray-500 font-bold uppercase">
+                                                        <span>Ganancia</span>
+                                                        <span class="text-[#00ff88]">{filter.gain} dB</span>
+                                                    </div>
+                                                    <input type="range" min="-15" max="15" step="0.5" bind:value={filter.gain} class="w-full h-1 bg-[#121216] rounded-lg appearance-none cursor-pointer accent-[#00ff88]" />
+                                                </div>
+                                            {/if}
+                                        </div>
+                                    </div>
+                                {/each}
+                            </div>
+                        </div>
+                    {/if}
+
+                    <!-- MODO TONO -->
+                    {#if eqType === 'tono'}
+                        <div class="flex flex-col gap-4 bg-[#121216]/20 border border-[#1a1a24] rounded-lg p-4">
+                            <div class="flex flex-col gap-1.5">
+                                <div class="flex justify-between text-xs font-bold text-gray-300">
+                                    <span>Graves (Bass)</span>
+                                    <span class="font-mono text-[#3b82f6]">{toneBass} dB</span>
+                                </div>
+                                <input type="range" min="-12" max="12" step="0.5" bind:value={toneBass} class="w-full h-1.5 bg-[#121216] appearance-none cursor-pointer accent-[#3b82f6] rounded-full" />
+                            </div>
+
+                            <div class="flex flex-col gap-1.5">
+                                <div class="flex justify-between text-xs font-bold text-gray-300">
+                                    <span>Medios (Mid)</span>
+                                    <span class="font-mono text-[#3b82f6]">{toneMid} dB</span>
+                                </div>
+                                <input type="range" min="-12" max="12" step="0.5" bind:value={toneMid} class="w-full h-1.5 bg-[#121216] appearance-none cursor-pointer accent-[#3b82f6] rounded-full" />
+                            </div>
+
+                            <div class="flex flex-col gap-1.5">
+                                <div class="flex justify-between text-xs font-bold text-gray-300">
+                                    <span>Agudos (Treble)</span>
+                                    <span class="font-mono text-[#3b82f6]">{toneTreble} dB</span>
+                                </div>
+                                <input type="range" min="-12" max="12" step="0.5" bind:value={toneTreble} class="w-full h-1.5 bg-[#121216] appearance-none cursor-pointer accent-[#3b82f6] rounded-full" />
+                            </div>
+                        </div>
+                    {/if}
+                {:else}
+                    <div class="flex-1 flex flex-col items-center justify-center p-6 text-center border border-dashed border-[#1a1a24] rounded-lg bg-[#121216]/5">
+                        <span class="material-symbols-outlined text-gray-600 text-3xl mb-2">equalizer</span>
+                        <p class="text-xs text-gray-500">Active el switch superior para habilitar el procesamiento de ecualización y simular la curva predictiva.</p>
+                    </div>
+                {/if}
+
+                <!-- BOTÓN ANCLADO AL FONDO -->
+                <div class="mt-auto pt-4 border-t border-[#1a1a24]/50 flex flex-col gap-2">
+                    <button 
+                        class="w-full min-h-[48px] border transition-all duration-300 rounded-lg font-bold flex items-center justify-center gap-2 cursor-pointer shadow-lg
+                               {uiStore.isSimulating ? 'bg-[#3b82f6]/10 hover:bg-[#3b82f6]/20 border-[#3b82f6]/30 text-[#3b82f6]' : 'bg-transparent hover:bg-white/5 border-white/10 text-gray-400'}"
+                        onclick={() => uiStore.isSimulating = !uiStore.isSimulating}
+                    >
+                        <span class="material-symbols-outlined">{uiStore.isSimulating ? 'analytics' : 'insights'}</span>
+                        {uiStore.isSimulating ? 'Detener Simulación' : 'Simular Respuesta'}
+                    </button>
+                </div>
             </div>
+
         {:else if activeTab === 'snaps'}
             <div class="flex-1 p-6 overflow-y-auto flex flex-col gap-6" id="panel-snaps">
                 <!-- Contenido de Instantáneas -->
