@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "osm": {
+      "type": "streamable-http",
+      "url": "https://gitmcp.io/psmokotnin/osm"
+    },
+    "meyda": {
+      "type": "streamable-http",
+      "url": "https://gitmcp.io/meyda/meyda"
+    },
+    "req": {
+      "type": "streamable-http",
+      "url": "https://gitmcp.io/RightL/room-eq-optimizer"
+    },
+    "webfft": {
+      "type": "streamable-http",
+      "url": "https://gitmcp.io/IQEngine/WebFFT"
+    },
+    "cavern": {
+      "type": "streamable-http",
+      "url": "https://gitmcp.io/VoidXH/Cavern"
+    }
+  }
+}
