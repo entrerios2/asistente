@@ -16,7 +16,7 @@ El motor DSP soporta 9 tipos de señales para la estimulación de sistemas elect
   // Distribución estadística uniforme de energía.
   function generateWhiteNoiseSample() {
       return Math.random() * 2.0 - 1.0;
-  }
+  } 
   ```
 
 ### 1.2. Ruido Rosa (Pink Noise)
