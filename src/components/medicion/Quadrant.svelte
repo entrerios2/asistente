@@ -3,13 +3,7 @@
     import { traceManager, type Trace } from "$lib/stores/traceManager.svelte";
     import { uiStore } from "$lib/stores/ui.svelte";
     import { meterStore } from "$lib/stores/meterStore.svelte";
-    import {
-        calculateMagnitude,
-        calculatePhase,
-        calculateImpulseResponse,
-        calculateStepResponse,
-        calculateGroupDelay,
-    } from "$lib/dsp/osmMetrics";
+    import { mathOrchestrator } from "$lib/stores/mathOrchestrator.svelte";
 
     interface Props {
         id: string;
@@ -117,27 +111,32 @@
     const dbMin = -30; // dB
     const dbMax = 30; // dB
 
-    // === PIPELINE MATEMÁTICO REAL DE OSM ===
-    const FFT_SIZE = 8192;
+    // === PIPELINE MATEMÁTICO CENTRALIZADO Y SUAVIZADO ===
     const BINS = 4096;
+    const FFT_SIZE = 8192;
 
-    const fftInputReal = new Float32Array(BINS);
-    const fftInputImag = new Float32Array(BINS);
-    const fftRefReal = new Float32Array(BINS);
-    const fftRefImag = new Float32Array(BINS);
-    const hReal = new Float32Array(BINS);
-    const hImag = new Float32Array(BINS);
+    // Buffers de interpolación temporal (Exponential Smoothing) para renderizado a 60+ FPS
+    const interpMagnitude = new Float32Array(BINS);
+    const interpPhase = new Float32Array(BINS);
+    const interpCoherence = new Float32Array(BINS);
+    const interpGroupDelay = new Float32Array(BINS);
+    const interpImpulse = new Float32Array(FFT_SIZE);
+    const interpStep = new Float32Array(FFT_SIZE);
 
-    const tempFullReal = new Float32Array(FFT_SIZE);
-    const tempFullImag = new Float32Array(FFT_SIZE);
+    // Factor de suavizado temporal (0.15 = ~100ms de tiempo de asentamiento para transiciones ultra-suaves)
+    const SMOOTHING_FACTOR = 0.15;
 
-    const outputMagnitude = new Float32Array(BINS);
-    const outputPhase = new Float32Array(BINS);
-    const outputCoherence = new Float32Array(BINS);
-    const outputGroupDelay = new Float32Array(BINS);
-    const outputImpulse = new Float32Array(FFT_SIZE);
-    const outputStep = new Float32Array(FFT_SIZE);
-    const tempPhaseRadians = new Float32Array(BINS);
+    // Inicializar buffers de interpolación con valores por defecto razonables
+    for (let i = 0; i < BINS; i++) {
+        interpMagnitude[i] = -50;
+        interpPhase[i] = 0;
+        interpCoherence[i] = 0.98;
+        interpGroupDelay[i] = 0;
+    }
+    for (let i = 0; i < FFT_SIZE; i++) {
+        interpImpulse[i] = 0;
+        interpStep[i] = 0;
+    }
 
     // Ayudante de interpolación de frecuencia logarítmica para los buffers de bins
     function getMetricValueInterpolated(
@@ -174,110 +173,35 @@
         return impulseArray[i0] * (1 - frac) + impulseArray[i1] * frac;
     }
 
-    function getPhaseValueRadians(freq: number, isMeasuring: boolean): number {
-        const delayMs = 1.4;
-        let phase = -2 * Math.PI * freq * (delayMs / 1000);
+    /**
+     * Realiza la interpolación temporal (Exponential Smoothing) de los buffers de salida
+     * del MathOrchestrator hacia los buffers locales de renderizado.
+     * Si snap es true, copia directamente los valores para una respuesta instantánea.
+     */
+    function interpolateBuffers(snap: boolean) {
+        const factor = snap ? 1.0 : SMOOTHING_FACTOR;
 
-        for (let b = 0; b < traceManager.eqBands.length; b++) {
-            const band = traceManager.eqBands[b];
-            const dist = Math.log2(freq / band.freq || 1e-6);
-            const weight = dist / (1 + dist * dist * band.q);
-            phase += band.gain * 0.04 * weight;
-        }
-        if (isMeasuring) {
-            phase += (Math.random() - 0.5) * 0.04;
-        }
-        return phase;
-    }
-
-    function runMathPipeline(liveTrace: Trace | undefined, force: boolean) {
-        const now = performance.now();
-        const isMeasuring = uiStore.isMeasuring;
-
-        // Si no se está midiendo y no está marcado como dirty, omitir por completo
-        if (!isMeasuring && !force) {
-            return;
+        // Interpolación de buffers de frecuencia (BINS)
+        for (let i = 0; i < BINS; i++) {
+            interpMagnitude[i] +=
+                (mathOrchestrator.outputMagnitude[i] - interpMagnitude[i]) *
+                factor;
+            interpPhase[i] +=
+                (mathOrchestrator.outputPhase[i] - interpPhase[i]) * factor;
+            interpCoherence[i] +=
+                (mathOrchestrator.outputCoherence[i] - interpCoherence[i]) *
+                factor;
+            interpGroupDelay[i] +=
+                (mathOrchestrator.outputGroupDelay[i] - interpGroupDelay[i]) *
+                factor;
         }
 
-        // Si se está midiendo, aplicar throttling de 50ms (20 FPS)
-        if (isMeasuring && !force) {
-            if (now - lastMathTime < MATH_THROTTLE_MS) {
-                return;
-            }
-        }
-
-        lastMathTime = now;
-
-        for (let k = 0; k < BINS; k++) {
-            const f_k = k * (24000 / BINS) || 1e-6;
-
-            // Referencia de ruido rosa simulada
-            const refDb = -50 + Math.sin(k * 0.05) * 0.5;
-            const refMag = Math.pow(10, refDb / 20);
-            const refPhase = 0;
-
-            // Medida
-            let liveDb = -50;
-            if (liveTrace && liveTrace.data && liveTrace.data.length > 0) {
-                const mapIdx = Math.floor((k * liveTrace.data.length) / BINS);
-                liveDb = liveTrace.data[mapIdx] || -120;
-            } else {
-                liveDb =
-                    -50 + getEQResponseCached(f_k) + Math.sin(k * 0.08) * 0.3;
-            }
-
-            const liveMag = Math.pow(10, liveDb / 20);
-            const phaseTotal =
-                getPhaseValueRadians(f_k, isMeasuring) + refPhase;
-
-            fftInputReal[k] = liveMag * Math.cos(phaseTotal);
-            fftInputImag[k] = liveMag * Math.sin(phaseTotal);
-            fftRefReal[k] = refMag * Math.cos(refPhase);
-            fftRefImag[k] = refMag * Math.sin(refPhase);
-
-            outputCoherence[k] = getCoherenceValue(f_k, isMeasuring);
-        }
-
-        // 1. Magnitude
-        calculateMagnitude(
-            fftInputReal,
-            fftInputImag,
-            fftRefReal,
-            fftRefImag,
-            outputMagnitude,
-            hReal,
-            hImag,
-        );
-
-        // 2. Phase
-        calculatePhase(
-            fftInputReal,
-            fftInputImag,
-            fftRefReal,
-            fftRefImag,
-            outputPhase,
-        );
-
-        // 3. Impulse Response (IFFT)
-        calculateImpulseResponse(
-            hReal,
-            hImag,
-            outputImpulse,
-            tempFullReal,
-            tempFullImag,
-        );
-
-        // 4. Step Response (integral)
-        calculateStepResponse(outputImpulse, outputStep);
-
-        // 5. Group Delay (derivada de la fase)
-        for (let k = 0; k < BINS; k++) {
-            tempPhaseRadians[k] = (outputPhase[k] * Math.PI) / 180;
-        }
-        calculateGroupDelay(tempPhaseRadians, 24000 / BINS, outputGroupDelay);
-
-        if (force) {
-            dirty = false;
+        // Interpolación de buffers de tiempo (FFT_SIZE)
+        for (let i = 0; i < FFT_SIZE; i++) {
+            interpImpulse[i] +=
+                (mathOrchestrator.outputImpulse[i] - interpImpulse[i]) * factor;
+            interpStep[i] +=
+                (mathOrchestrator.outputStep[i] - interpStep[i]) * factor;
         }
     }
 
@@ -611,8 +535,16 @@
 
         const liveTrace = traceManager.traces.find((t) => t.id === "live-1");
 
-        // Ejecutar el pipeline de procesamiento en tiempo real de OSM
-        runMathPipeline(liveTrace, dirty);
+        // Ejecutar el pipeline matemático centralizado en el MathOrchestrator
+        // El MathOrchestrator se encarga de aplicar el throttling adaptativo y EQ caching
+        mathOrchestrator.run(liveTrace);
+
+        // Realizar la interpolación temporal (Exponential Smoothing) a 60+ FPS
+        // Si dirty es true, forzamos un snap instantáneo para que la UI responda de inmediato
+        interpolateBuffers(dirty);
+        if (dirty) {
+            dirty = false;
+        }
 
         // Alimentar buffer de Espectrograma en vivo optimizado con offscreen canvas
         if (
@@ -670,11 +602,11 @@
             drawSpectrogram(ctx, width, height);
         }
 
-        // 3. Renderizar cada métrica seleccionada con zero-allocation helpers
+        // 3. Renderizar cada métrica seleccionada con zero-allocation helpers usando los buffers interpolados
         if (activeMetrics.includes("Magnitude") && !hasTimeDomainActive) {
             drawMetricPath(
                 ctx,
-                outputMagnitude,
+                interpMagnitude,
                 width,
                 height,
                 "#ff4444",
@@ -691,7 +623,7 @@
                 let first = true;
                 for (let f = freqMin; f <= freqMax; f *= 1.03) {
                     const x = valToX(f, width);
-                    const val = getMetricValueInterpolated(f, outputMagnitude);
+                    const val = getMetricValueInterpolated(f, interpMagnitude);
                     const eqGain = getEQResponseCached(f);
                     const y = valToY(val + eqGain, height, "Magnitude");
                     if (first) {
@@ -718,7 +650,7 @@
             let first = true;
             for (let f = freqMin; f <= freqMax; f *= 1.03) {
                 const x = valToX(f, width);
-                const val = getMetricValueInterpolated(f, outputPhase);
+                const val = getMetricValueInterpolated(f, interpPhase);
                 const y = valToY(val, height, "Phase");
 
                 if (first) {
@@ -739,7 +671,7 @@
         if (activeMetrics.includes("Coherence") && !hasTimeDomainActive) {
             drawMetricPath(
                 ctx,
-                outputCoherence,
+                interpCoherence,
                 width,
                 height,
                 "#eab308",
@@ -752,7 +684,7 @@
         if (activeMetrics.includes("Group Delay") && !hasTimeDomainActive) {
             drawMetricPath(
                 ctx,
-                outputGroupDelay,
+                interpGroupDelay,
                 width,
                 height,
                 "#10b981",
@@ -765,7 +697,7 @@
         if (activeMetrics.includes("Impulse") && hasTimeDomainActive) {
             drawTimeDomainPath(
                 ctx,
-                outputImpulse,
+                interpImpulse,
                 width,
                 height,
                 "#3b82f6",
@@ -777,7 +709,7 @@
         if (activeMetrics.includes("Step") && hasTimeDomainActive) {
             drawTimeDomainPath(
                 ctx,
-                outputStep,
+                interpStep,
                 width,
                 height,
                 "#f97316",
@@ -850,7 +782,7 @@
         let first = true;
         const hasLive =
             liveTrace && liveTrace.data && liveTrace.data.length > 0;
-        const dataArray = hasLive ? liveTrace.data : outputMagnitude;
+        const dataArray = hasLive ? liveTrace.data : interpMagnitude;
         const offset = hasLive ? 0 : 68;
 
         for (let f = freqMin; f <= freqMax; f *= 1.03) {
@@ -1209,7 +1141,7 @@
 
             let rowIdx = 0;
             if (activeMetrics.includes("Impulse")) {
-                const val = getImpulseValueInterpolated(xVal, outputImpulse);
+                const val = getImpulseValueInterpolated(xVal, interpImpulse);
                 ctx.fillText(
                     `Impulso: ${val.toFixed(3)}`,
                     lx + 8,
@@ -1218,7 +1150,7 @@
                 rowIdx++;
             }
             if (activeMetrics.includes("Step")) {
-                const val = getImpulseValueInterpolated(xVal, outputStep);
+                const val = getImpulseValueInterpolated(xVal, interpStep);
                 ctx.fillText(
                     `Escalón: ${val.toFixed(3)}`,
                     lx + 8,
@@ -1231,7 +1163,7 @@
 
             let rowIdx = 0;
             if (activeMetrics.includes("Magnitude")) {
-                const val = getMetricValueInterpolated(xVal, outputMagnitude);
+                const val = getMetricValueInterpolated(xVal, interpMagnitude);
                 ctx.fillStyle = "#ff4444";
                 ctx.fillText(
                     `Magnitud: ${val.toFixed(1)} dB`,
@@ -1245,7 +1177,7 @@
                     xVal,
                     liveTrace && liveTrace.data && liveTrace.data.length > 0
                         ? liveTrace.data
-                        : outputMagnitude,
+                        : interpMagnitude,
                 );
                 const offset =
                     liveTrace && liveTrace.data && liveTrace.data.length > 0
@@ -1260,7 +1192,7 @@
                 rowIdx++;
             }
             if (activeMetrics.includes("Phase")) {
-                const val = getMetricValueInterpolated(xVal, outputPhase);
+                const val = getMetricValueInterpolated(xVal, interpPhase);
                 ctx.fillStyle = "#d946ef";
                 ctx.fillText(
                     `Fase: ${val.toFixed(0)}°`,
@@ -1270,7 +1202,7 @@
                 rowIdx++;
             }
             if (activeMetrics.includes("Coherence")) {
-                const val = getMetricValueInterpolated(xVal, outputCoherence);
+                const val = getMetricValueInterpolated(xVal, interpCoherence);
                 ctx.fillStyle = "#eab308";
                 ctx.fillText(
                     `Coherencia: ${val.toFixed(2)}`,
