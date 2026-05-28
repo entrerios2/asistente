@@ -13,7 +13,7 @@ class UIStore {
     inChannels = $state([true, false]); // Canal 1 activo, Canal 2 inactivo (ejemplo)
     outChannels = $state([true, true]);
     referenceChannel = $state('Loopback'); // 'Loopback' o índice del canal
-    isSimulating = $state(true);
+    isSimulating = $state(false);
 
     // NUEVOS ESTADOS COMPARTIDOS FASE 2A.3
     activeTab = $state('medicion'); // 'medicion' | 'eq' | 'snaps' | 'config'

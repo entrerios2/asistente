@@ -28,6 +28,7 @@
         "Group Delay": { color: "#10b981", lineWidth: 1.8, lineDash: [] },
         "Impulse": { color: "#3b82f6", lineWidth: 2, lineDash: [] },
         "Step": { color: "#f97316", lineWidth: 2, lineDash: [] },
+        "Simulated Magnitude": { color: "#00ffff", lineWidth: 1.5, lineDash: [4, 4] },
     });
 
     let editingStyleMetric = $state<string | null>(null);
@@ -90,6 +91,27 @@
     const MATH_THROTTLE_MS = 50;
 
     // Puente reactivo de Svelte 5 para marcar dirty = true
+    let lastVersion = 0;
+    // Sincronización desde el panel lateral hacia el cuadrante
+    $effect(() => {
+        const isSimulatingGlobal = uiStore.isSimulating;
+        const hasPill = activeMetrics.includes("Simulated Magnitude");
+        
+        if (isSimulatingGlobal && !hasPill) {
+            activeMetrics = [...activeMetrics, "Simulated Magnitude"];
+        } else if (!isSimulatingGlobal && hasPill) {
+            activeMetrics = activeMetrics.filter(m => m !== "Simulated Magnitude");
+        }
+    });
+
+    // Sincronización desde el cuadrante hacia el panel lateral
+    $effect(() => {
+        const hasPill = activeMetrics.includes("Simulated Magnitude");
+        if (hasPill !== uiStore.isSimulating) {
+            uiStore.isSimulating = hasPill;
+        }
+    });
+
     $effect(() => {
         // Observar cambios en variables que alteran el cálculo
         const _bands = JSON.stringify(traceManager.eqBands);
@@ -268,6 +290,12 @@
             label: "Magnitude [Relativo]",
         },
         {
+            name: "Simulated Magnitude",
+            type: "frequency",
+            color: "#00ffff",
+            label: "Magnitud Simulada (EQ)",
+        },
+        {
             name: "Phase",
             type: "frequency",
             color: "#d946ef",
@@ -326,6 +354,7 @@
             [
                 "Spectrum",
                 "Magnitude",
+                "Simulated Magnitude",
                 "Phase",
                 "Coherence",
                 "Group Delay",
@@ -341,6 +370,7 @@
             [
                 "Spectrum",
                 "Magnitude",
+                "Simulated Magnitude",
                 "Phase",
                 "Coherence",
                 "Group Delay",
@@ -671,37 +701,37 @@
                 style.lineWidth,
                 style.lineDash,
                 "Magnitude",
-                1.03,
             );
+        }
 
-            if (uiStore.isSimulating && frequencyLUT.length > 0) {
-                ctx.setLineDash([4, 4]);
-                ctx.strokeStyle = "rgba(0, 255, 255, 0.8)";
-                ctx.lineWidth = 1.5;
-                const pathSim = new Path2D();
-                let firstSim = true;
-                const sr = 48000;
-                const binWidth = sr / 2 / BINS;
+        if (activeMetrics.includes("Simulated Magnitude") && !hasTimeDomainActive && frequencyLUT.length > 0) {
+            const style = metricStyles["Simulated Magnitude"] || { color: "#00ffff", lineWidth: 1.5, lineDash: [4, 4] };
+            ctx.setLineDash(style.lineDash);
+            ctx.strokeStyle = style.color;
+            ctx.lineWidth = style.lineWidth;
+            const pathSim = new Path2D();
+            let firstSim = true;
+            const sr = 48000;
+            const binWidth = sr / 2 / BINS;
 
-                for (let x = 0; x < width; x++) {
-                    const binIndex = frequencyLUT[x];
-                    if (binIndex === undefined) continue;
+            for (let x = 0; x < width; x++) {
+                const binIndex = frequencyLUT[x];
+                if (binIndex === undefined) continue;
 
-                    const val = interpMagnitude[binIndex];
-                    const f = binIndex * binWidth || 1e-6;
-                    const eqGain = getEQResponseCached(f);
-                    const y = valToY(val + eqGain, height, "Magnitude");
+                const val = interpMagnitude[binIndex];
+                const f = binIndex * binWidth || 1e-6;
+                const eqGain = getEQResponseCached(f);
+                const y = valToY(val + eqGain, height, "Magnitude");
 
-                    if (firstSim) {
-                        pathSim.moveTo(x, y);
-                        firstSim = false;
-                    } else {
-                        pathSim.lineTo(x, y);
-                    }
+                if (firstSim) {
+                    pathSim.moveTo(x, y);
+                    firstSim = false;
+                } else {
+                    pathSim.lineTo(x, y);
                 }
-                ctx.stroke(pathSim);
-                ctx.setLineDash([]);
             }
+            ctx.stroke(pathSim);
+            ctx.setLineDash([]);
         }
 
         if (activeMetrics.includes("Spectrum") && !hasTimeDomainActive) {
