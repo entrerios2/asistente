@@ -163,6 +163,8 @@
         spectrogramLUT[i] = `rgb(${r},${g},${b})`;
     }
 
+    let spectrogramDbHistory = $state<Float32Array[]>([]);
+
     function initOffscreenCanvas() {
         if (typeof document === "undefined") return;
         offscreenCanvas = document.createElement("canvas");
@@ -174,6 +176,7 @@
             offscreenCtx.fillStyle = "#000000";
             offscreenCtx.fillRect(0, 0, w, maxHistory);
         }
+        spectrogramDbHistory = [];
     }
 
     // Configuración de rangos acústicos estándar
@@ -668,7 +671,12 @@
 
         ctx.clearRect(0, 0, width, height);
 
-        // 1. Dibujar Grilla de Fondo
+        // 1. Renderizado de Espectrograma 2D (Fondo)
+        if (activeMetrics.includes("Spectrogram") && !hasTimeDomainActive) {
+            drawSpectrogram(ctx, width, height);
+        }
+
+        // 2. Dibujar Grilla de Fondo (encima)
         drawGrid(ctx, width, height);
 
         const liveTrace = traceManager.traces.find((t) => t.id === "live-1");
@@ -727,29 +735,31 @@
                     const logMin = Math.log10(freqMin);
                     const logMax = Math.log10(freqMax);
 
-                    for (let x = 0; x < w; x++) {
-                        const logFreq = (x / w) * (logMax - logMin) + logMin;
-                        const freq = Math.pow(10, logFreq);
-                        const val = getMetricValueInterpolated(freq, data);
+                        const dbRow = new Float32Array(w);
+                        for (let x = 0; x < w; x++) {
+                            const logFreq = (x / w) * (logMax - logMin) + logMin;
+                            const freq = Math.pow(10, logFreq);
+                            const val = getMetricValueInterpolated(freq, data);
+                            dbRow[x] = val;
 
-                        const db = Math.max(-60, Math.min(15, val));
-                        const norm = (db + 60) / 75;
-                        const lutIdx = Math.max(
-                            0,
-                            Math.min(255, Math.floor(norm * 255)),
-                        );
+                            const db = Math.max(-60, Math.min(15, val));
+                            const norm = (db + 60) / 75;
+                            const lutIdx = Math.max(
+                                0,
+                                Math.min(255, Math.floor(norm * 255)),
+                            );
 
-                        offscreenCtx.fillStyle = spectrogramLUT[lutIdx];
-                        offscreenCtx.fillRect(x, yRow, 1, 1);
+                            offscreenCtx.fillStyle = spectrogramLUT[lutIdx];
+                            offscreenCtx.fillRect(x, yRow, 1, 1);
+                        }
+
+                        spectrogramDbHistory.push(dbRow);
+                        if (spectrogramDbHistory.length > maxHistory) {
+                            spectrogramDbHistory.shift();
+                        }
                     }
                 }
             }
-        }
-
-        // 2. Renderizado de Espectrograma 2D (Fondo)
-        if (activeMetrics.includes("Spectrogram") && !hasTimeDomainActive) {
-            drawSpectrogram(ctx, width, height);
-        }
 
         // 3. Renderizar cada métrica seleccionada con zero-allocation helpers usando los buffers interpolados
         if (activeMetrics.includes("Magnitude") && !hasTimeDomainActive) {
@@ -1131,7 +1141,7 @@
         width: number,
         height: number,
     ) {
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
         ctx.fillStyle = "rgba(156, 163, 175, 0.6)";
         ctx.font = "9px monospace";
 
@@ -1245,6 +1255,25 @@
                     ctx.fillText(`${val} dBSPL`, width - 40, y - 4);
                 }
             }
+        }
+
+        // Eje Y Secundario (Historial de Tiempo para Espectrograma)
+        if (activeMetrics.includes("Spectrogram") && !hasTimeDomainActive) {
+            ctx.fillStyle = "#888";
+            ctx.font = "9px monospace";
+            const timeLabels = [
+                { yPct: 1.0, text: "0s" },
+                { yPct: 0.75, text: "-2.5s" },
+                { yPct: 0.5, text: "-5s" },
+                { yPct: 0.25, text: "-7.5s" },
+                { yPct: 0.0, text: "-10s" }
+            ];
+            timeLabels.forEach((lbl) => {
+                let yPos = lbl.yPct * height;
+                if (lbl.yPct === 1.0) yPos -= 6;
+                if (lbl.yPct === 0.0) yPos += 12;
+                ctx.fillText(lbl.text, width - 42, yPos);
+            });
         }
     }
 
@@ -1421,11 +1450,35 @@
 
         const xVal = xToVal(mouseX, width);
 
+        // Calcular cantidad de filas dinámicas
+        let numRows = 0;
+        let showSpectrogramHover = false;
+        let spectrogramTime = 0;
+        let spectrogramVal = -120;
+
+        if (hasTimeDomainActive) {
+            if (activeMetrics.includes("Impulse")) numRows++;
+            if (activeMetrics.includes("Step")) numRows++;
+        } else {
+            if (activeMetrics.includes("Magnitude")) numRows++;
+            if (activeMetrics.includes("Spectrum")) numRows++;
+            if (activeMetrics.includes("Phase")) numRows++;
+            if (activeMetrics.includes("Coherence")) numRows++;
+            if (activeMetrics.includes("Spectrogram") && spectrogramDbHistory.length > 0) {
+                showSpectrogramHover = true;
+                numRows += 2; // Añadimos tiempo e intensidad del espectrograma
+                const historyLine = Math.max(0, Math.min(spectrogramDbHistory.length - 1, Math.floor((mouseY / height) * spectrogramDbHistory.length)));
+                const pixelX = Math.max(0, Math.min(width - 1, Math.round(mouseX)));
+                spectrogramVal = spectrogramDbHistory[historyLine]?.[pixelX] ?? -120;
+                spectrogramTime = -10 + (mouseY / height) * 10;
+            }
+        }
+
         ctx.fillStyle = "rgba(8, 8, 12, 0.95)";
         ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
 
         const labelWidth = 145;
-        const labelHeight = 65;
+        const labelHeight = 22 + numRows * 12;
         let lx = mouseX + 12;
         let ly = mouseY - labelHeight - 12;
 
@@ -1512,6 +1565,21 @@
                 ctx.fillStyle = "#eab308";
                 ctx.fillText(
                     `Coherencia: ${val.toFixed(2)}`,
+                    lx + 8,
+                    ly + 28 + rowIdx * 12,
+                );
+                rowIdx++;
+            }
+            if (showSpectrogramHover) {
+                ctx.fillStyle = "#ec4899";
+                ctx.fillText(
+                    `Tiempo: ${spectrogramTime.toFixed(1)} s`,
+                    lx + 8,
+                    ly + 28 + rowIdx * 12,
+                );
+                rowIdx++;
+                ctx.fillText(
+                    `Espectrog.: ${spectrogramVal.toFixed(1)} dB`,
                     lx + 8,
                     ly + 28 + rowIdx * 12,
                 );
