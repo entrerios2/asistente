@@ -33,6 +33,16 @@
 
     let editingStyleMetric = $state<string | null>(null);
 
+    let showAddDropdown = $state(false);
+    let activeConfigMetric = $state<string | null>(null);
+    let metricConfigs = $state<Record<string, any>>({
+        "Spectrum": { modeY: "dB", sensorResistance: 10, smoothingPPO: 48, invertY: false, enableCoherence: false, coherenceThreshold: 0.5, yShift: 0 },
+        "Magnitude": { modeY: "dB", sensorResistance: 10, smoothingPPO: 48, invertY: false, enableCoherence: false, coherenceThreshold: 0.5, yShift: 0 },
+        "Simulated Magnitude": { modeY: "dB", sensorResistance: 10, smoothingPPO: 48, invertY: false, enableCoherence: false, coherenceThreshold: 0.5, yShift: 0 },
+        "Phase": { unwrapMode: "±180", rotate: 0, range: 360, yShift: 0 },
+        "Coherence": { cohType: "normal", showThresholdLine: false, thresholdColor: "#eab308", thresholdValue: 0.5, yShift: 0 },
+    });
+
     let frequencyLUT = $state<Int32Array>(new Int32Array(0));
 
     function rebuildFrequencyLUT(width: number) {
@@ -394,6 +404,33 @@
         }
     }
 
+    function removeMetric(name: string) {
+        activeMetrics = activeMetrics.filter((m) => m !== name);
+    }
+
+    function getPPOSmoothedValue(binIndex: number, dataArray: Float32Array, ppo: number): number {
+        if (ppo >= 48) return dataArray[binIndex];
+        
+        const octaveFraction = 1 / ppo;
+        const sr = 48000;
+        const binWidth = 24000 / BINS;
+        const freq = binIndex * binWidth || 1e-6;
+        
+        const f_start = freq * Math.pow(2, -octaveFraction / 2);
+        const f_end = freq * Math.pow(2, octaveFraction / 2);
+        
+        const k_start = Math.max(0, Math.round(f_start / binWidth));
+        const k_end = Math.min(dataArray.length - 1, Math.round(f_end / binWidth));
+        
+        let sum = 0;
+        let count = 0;
+        for (let k = k_start; k <= k_end; k++) {
+            sum += dataArray[k];
+            count++;
+        }
+        return count > 0 ? sum / count : dataArray[binIndex];
+    }
+
     // Conversiones de coordenadas cartesianas integrando escala y offset
     function valToX(val: number, width: number): number {
         if (hasTimeDomainActive) {
@@ -428,21 +465,46 @@
     function valToY(val: number, height: number, metricType: string): number {
         let min = dbMin,
             max = dbMax;
-        if (metricType === "Spectrum") {
-            min = -120;
-            max = 10;
+
+        const cfg = metricConfigs[metricType];
+
+        if (metricType === "Spectrum" || metricType === "Magnitude" || metricType === "Simulated Magnitude") {
+            const currentCfg = metricConfigs[metricType] || { modeY: "dB" };
+            if (currentCfg.modeY === "Linear") {
+                min = 0;
+                max = 1;
+            } else if (currentCfg.modeY === "Impedance") {
+                min = 0;
+                max = 100;
+            } else {
+                min = metricType === "Spectrum" ? -120 : dbMin;
+                max = metricType === "Spectrum" ? 10 : dbMax;
+            }
         } else if (metricType === "Phase") {
-            min = -180;
-            max = 180;
+            const phaseCfg = metricConfigs["Phase"] || { range: 360 };
+            min = -phaseCfg.range / 2;
+            max = phaseCfg.range / 2;
         } else if (metricType === "Coherence") {
-            min = 0;
-            max = 1;
+            const cohCfg = metricConfigs["Coherence"] || { cohType: "normal" };
+            if (cohCfg.cohType === "SNR") {
+                min = -20;
+                max = 40;
+            } else {
+                min = 0;
+                max = 1;
+            }
         } else if (metricType === "Group Delay") {
             min = -5;
             max = 25;
         } else if (metricType === "Impulse" || metricType === "Step") {
             min = -1;
             max = 1;
+        }
+
+        if (cfg && cfg.invertY) {
+            const temp = min;
+            min = max;
+            max = temp;
         }
 
         const range = max - min;
@@ -709,6 +771,9 @@
             ctx.setLineDash(style.lineDash);
             ctx.strokeStyle = style.color;
             ctx.lineWidth = style.lineWidth;
+            
+            const cfg = metricConfigs["Simulated Magnitude"] || { modeY: "dB", smoothingPPO: 48, enableCoherence: false, coherenceThreshold: 0.5 };
+            
             const pathSim = new Path2D();
             let firstSim = true;
             const sr = 48000;
@@ -718,10 +783,27 @@
                 const binIndex = frequencyLUT[x];
                 if (binIndex === undefined) continue;
 
-                const val = interpMagnitude[binIndex];
+                // Coherence masking
+                if (cfg.enableCoherence && interpCoherence[binIndex] < cfg.coherenceThreshold) {
+                    firstSim = true;
+                    continue;
+                }
+
+                // Smooth data log based on PPO config
+                let val = getPPOSmoothedValue(binIndex, interpMagnitude, cfg.smoothingPPO);
                 const f = binIndex * binWidth || 1e-6;
                 const eqGain = getEQResponseCached(f);
-                const y = valToY(val + eqGain, height, "Magnitude");
+                
+                val = val + eqGain;
+
+                // Mode Y transformations
+                if (cfg.modeY === "Linear") {
+                    val = Math.pow(10, val / 20);
+                } else if (cfg.modeY === "Impedance") {
+                    val = Math.pow(10, val / 20) * (cfg.sensorResistance || 10);
+                }
+
+                const y = valToY(val, height, "Simulated Magnitude") + (cfg.yShift || 0);
 
                 if (firstSim) {
                     pathSim.moveTo(x, y);
@@ -745,6 +827,7 @@
             ctx.lineWidth = style.lineWidth;
             ctx.setLineDash(style.lineDash || []);
             
+            const cfg = metricConfigs["Phase"] || { rotate: 0, unwrapMode: "±180", yShift: 0 };
             const path = new Path2D();
             let lastY = 0;
             let first = true;
@@ -753,8 +836,21 @@
                 const binIndex = frequencyLUT[x];
                 if (binIndex === undefined) continue;
 
-                const val = interpPhase[binIndex];
-                const y = valToY(val, height, "Phase");
+                let val = interpPhase[binIndex];
+                
+                // Rotar fase
+                val = val + (cfg.rotate || 0);
+                
+                // Envoltura/Unwrap mode
+                if (cfg.unwrapMode === "360") {
+                    val = ((val % 360) + 360) % 360;
+                } else {
+                    val = (val + 180) % 360;
+                    if (val < 0) val += 360;
+                    val -= 180;
+                }
+
+                const y = valToY(val, height, "Phase") + (cfg.yShift || 0);
 
                 if (first) {
                     path.moveTo(x, y);
@@ -862,6 +958,8 @@
         ctx.lineWidth = lw;
         ctx.setLineDash(lineDash || []);
         
+        const cfg = metricConfigs[metricType];
+        
         const path = new Path2D();
         let first = true;
 
@@ -869,8 +967,35 @@
             const binIndex = frequencyLUT[x];
             if (binIndex === undefined) continue;
 
-            const val = dataArray[binIndex];
-            const y = valToY(val, height, metricType);
+            // Coherence threshold masking for standard Magnitude
+            if (cfg && cfg.enableCoherence && interpCoherence[binIndex] < cfg.coherenceThreshold) {
+                first = true;
+                continue;
+            }
+
+            // PPO smoothing if applicable
+            let val = (cfg && cfg.smoothingPPO) ? getPPOSmoothedValue(binIndex, dataArray, cfg.smoothingPPO) : dataArray[binIndex];
+
+            // Coherence transformations
+            if (metricType === "Coherence") {
+                const cohCfg = metricConfigs["Coherence"] || { cohType: "normal" };
+                if (cohCfg.cohType === "squared") {
+                    val = val * val;
+                } else if (cohCfg.cohType === "SNR") {
+                    val = 10 * Math.log10(val / (1 - val + 1e-6));
+                }
+            }
+
+            // Mode Y transformations for Magnitude/Spectrum
+            if (cfg && (metricType === "Magnitude" || metricType === "Spectrum")) {
+                if (cfg.modeY === "Linear") {
+                    val = Math.pow(10, val / 20);
+                } else if (cfg.modeY === "Impedance") {
+                    val = Math.pow(10, val / 20) * (cfg.sensorResistance || 10);
+                }
+            }
+
+            const y = valToY(val, height, metricType) + (cfg?.yShift || 0);
 
             if (first) {
                 path.moveTo(x, y);
@@ -882,6 +1007,22 @@
 
         ctx.stroke(path);
         ctx.setLineDash([]);
+
+        // Coherence horizontal threshold line
+        if (metricType === "Coherence") {
+            const cohCfg = metricConfigs["Coherence"];
+            if (cohCfg && cohCfg.showThresholdLine) {
+                const thY = valToY(cohCfg.thresholdValue, height, "Coherence");
+                ctx.strokeStyle = cohCfg.thresholdColor || "#eab308";
+                ctx.lineWidth = 1;
+                ctx.setLineDash([2, 4]);
+                ctx.beginPath();
+                ctx.moveTo(0, thY);
+                ctx.lineTo(width, thY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+        }
     }
 
     // Zero-allocation drawing helper for Spectrum metric (which has a fallback/offset logic)
@@ -900,6 +1041,7 @@
         ctx.lineWidth = lw;
         ctx.setLineDash(lineDash || []);
         
+        const cfg = metricConfigs["Spectrum"] || { modeY: "dB", smoothingPPO: 48 };
         const path = new Path2D();
         let first = true;
         const hasLive =
@@ -911,6 +1053,12 @@
             const binIndex = frequencyLUT[x];
             if (binIndex === undefined) continue;
 
+            // Coherence threshold masking for Spectrum
+            if (cfg.enableCoherence && interpCoherence[binIndex] < cfg.coherenceThreshold) {
+                first = true;
+                continue;
+            }
+
             let val = 0;
             if (hasLive) {
                 const mapIdx = Math.floor((binIndex * dataArray.length) / BINS);
@@ -918,7 +1066,18 @@
             } else {
                 val = dataArray[binIndex] + offset;
             }
-            const y = valToY(val, height, "Spectrum");
+
+            // Smooth using PPO
+            val = getPPOSmoothedValue(binIndex, hasLive ? dataArray : interpMagnitude, cfg.smoothingPPO) + (hasLive ? 0 : offset);
+
+            // Mode Y transformations
+            if (cfg.modeY === "Linear") {
+                val = Math.pow(10, val / 20);
+            } else if (cfg.modeY === "Impedance") {
+                val = Math.pow(10, val / 20) * (cfg.sensorResistance || 10);
+            }
+
+            const y = valToY(val, height, "Spectrum") + (cfg.yShift || 0);
 
             if (first) {
                 path.moveTo(x, y);
@@ -1550,24 +1709,94 @@
     ontouchend={handleTouchEnd}
 >
     <!-- CABECERA PREMIUM DE CADA CUADRANTE -->
-    <div class="quadrant-header">
-        <div class="quadrant-title-group">
-            <span class="quadrant-id">{id.toUpperCase()}</span>
-            <div class="active-metrics-badges">
+    <div class="quadrant-header flex items-center justify-between bg-[#08080a] border-b border-[#1a1a24] px-3 py-1.5 min-h-[40px]"
+         onmousedown={(e) => e.stopPropagation()}
+         onmouseup={(e) => e.stopPropagation()}
+         onclick={(e) => e.stopPropagation()}
+         onwheel={(e) => e.stopPropagation()}
+         ondblclick={(e) => e.stopPropagation()}>
+        <div class="quadrant-title-group flex items-center gap-3">
+            <span class="quadrant-id font-bold text-[14px] text-emerald-400">{id.replace(/[qQ]/g, '')}</span>
+            
+            <!-- Botón "+ Métrica" -->
+            <div class="relative inline-block">
+                <button
+                    class="add-metric-btn bg-[#121216] hover:bg-[#181822] text-[#00ff88] hover:text-[#00ffbb] border border-[#222] hover:border-[#00ff88]/30 px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer select-none"
+                    onclick={(e) => {
+                        e.stopPropagation();
+                        showAddDropdown = !showAddDropdown;
+                    }}
+                >
+                    <span class="material-symbols-outlined text-xs">add</span> Métrica
+                </button>
+                
+                {#if showAddDropdown}
+                    <!-- Backdrop para cerrar con un click fuera -->
+                    <div class="fixed inset-0 z-40" onclick={() => showAddDropdown = false}></div>
+                    
+                    <div class="absolute left-0 mt-1 bg-[#0d0d12] border border-[#222] rounded-lg p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.8)] z-50 min-w-[170px] flex flex-col gap-0.5 select-none"
+                         onmousedown={(e) => e.stopPropagation()} onclick={(e) => e.stopPropagation()}>
+                        {#each allMetrics as m}
+                            {@const active = activeMetrics.includes(m.name)}
+                            {@const disabled = isMetricDisabled(m.name)}
+                            <button
+                                class="w-full text-left px-2 py-1 rounded-md text-[11px] font-medium flex items-center justify-between transition-colors
+                                       {active ? 'bg-[#00ff88]/10 text-[#00ff88] cursor-default' : disabled ? 'text-gray-600 cursor-not-allowed opacity-50' : 'text-gray-300 hover:bg-[#161622] hover:text-[#fff]'}"
+                                onclick={() => {
+                                    if (!active && !disabled) {
+                                        toggleMetric(m.name);
+                                        showAddDropdown = false;
+                                    }
+                                }}
+                                disabled={disabled}
+                            >
+                                <span>{m.label}</span>
+                                {#if active}
+                                    <span class="material-symbols-outlined text-xs">done</span>
+                                {/if}
+                            </button>
+                        {/each}
+                    </div>
+                {/if}
+            </div>
+
+            <!-- Pills Interactivos -->
+            <div class="active-metrics-badges flex items-center gap-2">
                 {#each activeMetrics as m}
-                    <span
-                        class="metric-badge badge-{m
-                            .toLowerCase()
-                            .replace(' ', '-')}">{m}</span
-                    >
+                    <div class="metric-badge-pill flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-[#121216] border border-[#222] text-gray-300">
+                        <span>{m}</span>
+                        {#if metricConfigs[m]}
+                            <button
+                                class="metric-pill-btn text-gray-500 hover:text-emerald-400 transition-colors flex items-center"
+                                onclick={(e) => {
+                                    e.stopPropagation();
+                                    activeConfigMetric = activeConfigMetric === m ? null : m;
+                                }}
+                                title="Configurar {m}"
+                            >
+                                <span class="material-symbols-outlined text-[13px]">tune</span>
+                            </button>
+                        {/if}
+                        <button
+                            class="metric-pill-btn text-gray-500 hover:text-red-400 transition-colors flex items-center"
+                            onclick={(e) => {
+                                e.stopPropagation();
+                                removeMetric(m);
+                            }}
+                            title="Eliminar {m}"
+                        >
+                            <span class="material-symbols-outlined text-[13px]">delete</span>
+                        </button>
+                    </div>
                 {/each}
             </div>
         </div>
+
         <button
             bind:this={settingsBtn}
-            class="settings-btn"
+            class="settings-btn flex items-center justify-center w-8 h-8 rounded-lg border border-[#1a1a24] text-gray-400 hover:text-gray-200 transition-all cursor-pointer hover:bg-[#121216]"
             onclick={toggleSelector}
-            title="Configurar Métricas"
+            title="Configuración Global del Gráfico"
         >
             <span class="material-symbols-outlined text-[16px]">settings</span>
         </button>
@@ -1576,170 +1805,241 @@
     <!-- CANVAS DEL GRÁFICO -->
     <canvas bind:this={canvas}></canvas>
 
-    <!-- POPOVER FLOTANTE ABSOLUTO OSM -->
+    <!-- POPOVER FLOTANTE ABSOLUTO OSM (CONFIGURACIÓN GLOBAL) -->
     {#if showSelector}
         <!-- Capturador de clics del fondo -->
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <div
-            class="popover-backdrop"
+            class="popover-backdrop fixed inset-0 z-30"
             onclick={() => (showSelector = false)}
         ></div>
 
-        <div class="selector-popover">
-            <div class="popover-header">
-                <span class="popover-title">Configuración del Gráfico</span>
+        <div class="selector-popover absolute right-[10px] top-[46px] bg-[#0c0c0e] border border-[#1a1a24] rounded-xl p-4 shadow-[0_10px_30px_#000000] z-50 min-w-[200px] flex flex-col gap-3 select-none text-[11px] text-gray-200"
+             onmousedown={(e) => e.stopPropagation()}
+             onmouseup={(e) => e.stopPropagation()}
+             onmousemove={(e) => e.stopPropagation()}
+             onclick={(e) => e.stopPropagation()}
+             onwheel={(e) => e.stopPropagation()}>
+            <div class="popover-header flex items-center justify-between border-b border-[#1a1a24] pb-1.5">
+                <span class="popover-title font-bold text-gray-300">Configuración Global</span>
                 <button
-                    class="popover-close"
+                    class="popover-close text-gray-500 hover:text-gray-300"
                     onclick={() => (showSelector = false)}
                 >
                     <span class="material-symbols-outlined text-xs">close</span>
                 </button>
             </div>
 
-            <label class="popover-section-label"
-                >Métricas de Medición</label
-            >
-            <div class="metrics-checkbox-list">
-                {#each allMetrics as m}
-                    {@const disabled = isMetricDisabled(m.name)}
-                    {@const active = activeMetrics.includes(m.name)}
-                    <!-- svelte-ignore a11y_click_events_have_key_events -->
-                    <div
-                        class="metric-checkbox-item flex flex-col gap-1"
-                        class:disabled
-                        class:active
-                        style="--metric-color: {metricStyles[m.name]?.color || m.color}"
-                    >
-                        <div class="flex items-center w-full">
-                            <label class="flex items-center flex-1 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={active}
-                                    {disabled}
-                                    onclick={() => toggleMetric(m.name)}
-                                />
-                                <span
-                                    class="checkbox-custom"
-                                    style="background-color: {active
-                                        ? (metricStyles[m.name]?.color || m.color)
-                                        : 'transparent'}; border-color: {active
-                                        ? (metricStyles[m.name]?.color || m.color)
-                                        : 'rgba(255,255,255,0.2)'}"
-                                ></span>
-                                <span class="metric-name-text">{m.label}</span>
-                            </label>
-                            {#if metricStyles[m.name]}
-                                <button
-                                    type="button"
-                                    class="mini-style-edit-btn"
-                                    onclick={(e) => {
-                                        e.stopPropagation();
-                                        e.preventDefault();
-                                        editingStyleMetric = editingStyleMetric === m.name ? null : m.name;
-                                    }}
-                                    title="Personalizar Estilo"
-                                >
-                                    <span class="material-symbols-outlined text-[12px]">tune</span>
-                                </button>
-                            {/if}
-                            {#if disabled}
-                                <span class="disabled-badge ml-1">
-                                    {hasTimeDomainActive
-                                        ? "Frec."
-                                        : hasFreqDomainActive
-                                          ? "Temp."
-                                          : "Excl."}
-                                </span>
-                            {/if}
-                        </div>
-
-                        {#if editingStyleMetric === m.name && metricStyles[m.name]}
-                            <!-- svelte-ignore a11y_click_events_have_key_events -->
-                            <!-- svelte-ignore a11y_no_static_element_interactions -->
-                            <div class="style-customizer-panel w-full" onclick={(e) => e.stopPropagation()}>
-                                <div class="customizer-row">
-                                    <span class="customizer-label">Color</span>
-                                    <input
-                                        type="color"
-                                        value={metricStyles[m.name].color}
-                                        oninput={(e) => {
-                                            metricStyles[m.name].color = (e.target as HTMLInputElement).value;
-                                        }}
-                                        class="color-picker-input"
-                                    />
-                                </div>
-                                <div class="customizer-row">
-                                    <span class="customizer-label">Ancho ({metricStyles[m.name].lineWidth}px)</span>
-                                    <input
-                                        type="range"
-                                        min="1"
-                                        max="5"
-                                        step="0.5"
-                                        value={metricStyles[m.name].lineWidth}
-                                        oninput={(e) => {
-                                            metricStyles[m.name].lineWidth = parseFloat((e.target as HTMLInputElement).value);
-                                        }}
-                                        class="width-slider"
-                                    />
-                                </div>
-                                <div class="customizer-row">
-                                    <span class="customizer-label">Línea</span>
-                                    <div class="style-toggle-buttons">
-                                        <button
-                                            type="button"
-                                            class="style-toggle-btn"
-                                            class:active={metricStyles[m.name].lineDash.length === 0}
-                                            onclick={() => {
-                                                metricStyles[m.name].lineDash = [];
-                                            }}
-                                        >
-                                            Solid
-                                        </button>
-                                        <button
-                                            type="button"
-                                            class="style-toggle-btn"
-                                            class:active={metricStyles[m.name].lineDash.length > 0}
-                                            onclick={() => {
-                                                metricStyles[m.name].lineDash = [4, 4];
-                                            }}
-                                        >
-                                            Dash
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        {/if}
-                    </div>
-                {/each}
+            <!-- FPS de Visualización -->
+            <div class="flex flex-col gap-1">
+                <span class="text-gray-400 font-medium">FPS de Visualización ({uiStore.targetFps})</span>
+                <input
+                    type="range"
+                    min="0.5"
+                    max="60"
+                    step="1"
+                    class="accent-[#00ff88]"
+                    value={uiStore.targetFps}
+                    oninput={(e) => {
+                        uiStore.targetFps = parseFloat(e.currentTarget.value);
+                    }}
+                />
             </div>
 
-            <div class="divider"></div>
-
-            <div class="popover-controls-group">
-                <div>
-                    <label class="popover-section-label">Suavizado</label>
-                    <div class="smoothing-options">
-                        {#each [0, 1 / 3, 1 / 12, 1 / 48] as s}
-                            <button
-                                class="smoothing-btn"
-                                class:active={smoothing === s}
-                                onclick={() => (smoothing = s)}
-                            >
-                                {s === 0 ? "Off" : `1/${Math.round(1 / s)}`}
-                            </button>
-                        {/each}
-                    </div>
+            <!-- Suavizado Global -->
+            <div class="flex flex-col gap-1">
+                <span class="text-gray-400 font-medium">Suavizado Temporal</span>
+                <div class="smoothing-options flex gap-1 bg-[#121216] p-0.5 rounded border border-[#222]">
+                    {#each [0, 1 / 3, 1 / 12, 1 / 48] as s}
+                        <button
+                            class="smoothing-btn flex-1 py-1 rounded text-[10px] font-semibold text-center transition-all cursor-pointer
+                                   {smoothing === s ? 'bg-[#00ff88]/15 text-[#00ff88]' : 'text-gray-400 hover:text-white'}"
+                            onclick={() => (smoothing = s)}
+                        >
+                            {s === 0 ? "Off" : `1/${Math.round(1 / s)}`}
+                        </button>
+                    {/each}
                 </div>
+            </div>
 
+            <!-- Límites de Zoom y Reinicio -->
+            <div class="divider border-t border-[#1a1a24] my-0.5"></div>
+
+            <div class="flex flex-col gap-1.5">
+                <div class="flex justify-between items-center text-gray-400">
+                    <span>Límite Zoom In</span>
+                    <span class="font-mono text-gray-300">80x</span>
+                </div>
+                <div class="flex justify-between items-center text-gray-400">
+                    <span>Límite Zoom Out</span>
+                    <span class="font-mono text-gray-300">0.1x</span>
+                </div>
+                
                 <button
-                    class="action-btn w-full flex items-center justify-center gap-1.5 mt-2"
+                    class="action-btn w-full flex items-center justify-center gap-1.5 mt-2 py-1.5 rounded-lg bg-[#121216] border border-[#222] hover:border-gray-500 text-gray-300 hover:text-white font-bold transition-all cursor-pointer"
                     onclick={handleDoubleClick}
                 >
-                    <span class="material-symbols-outlined text-xs"
-                        >restart_alt</span
-                    > Reiniciar Vista
+                    <span class="material-symbols-outlined text-xs">restart_alt</span> Reiniciar Vista
                 </button>
             </div>
+        </div>
+    {/if}
+
+    <!-- POPOVER DE CONFIGURACIÓN POR MÉTRICA (OSM PARIDAD) -->
+    {#if activeConfigMetric}
+        <!-- Backdrop para cerrar con un click fuera -->
+        <div class="fixed inset-0 z-40" onclick={() => activeConfigMetric = null}></div>
+        
+        <div class="absolute top-[46px] left-[16px] bg-[#0c0c0e] border border-[#1a1a24] rounded-xl p-4 shadow-[0_10px_30px_#000000] z-50 min-w-[240px] flex flex-col gap-3 select-none text-[11px] text-gray-200"
+             onmousedown={(e) => e.stopPropagation()}
+             onmouseup={(e) => e.stopPropagation()}
+             onmousemove={(e) => e.stopPropagation()}
+             onclick={(e) => e.stopPropagation()}
+             onwheel={(e) => e.stopPropagation()}>
+            <div class="flex items-center justify-between border-b border-[#1a1a24] pb-1.5 mb-1">
+                <span class="font-bold text-[#00ff88] uppercase tracking-wide">Config. {activeConfigMetric}</span>
+                <button onclick={() => activeConfigMetric = null} class="text-gray-500 hover:text-gray-300">
+                    <span class="material-symbols-outlined text-xs">close</span>
+                </button>
+            </div>
+            
+            {#if activeConfigMetric === "Magnitude" || activeConfigMetric === "Spectrum" || activeConfigMetric === "Simulated Magnitude"}
+                <!-- Modo Y -->
+                <div class="flex flex-col gap-1">
+                    <span class="text-gray-400 font-medium">Modo Eje Y</span>
+                    <select class="bg-[#121216] border border-[#222] rounded px-2 py-1 text-xs text-white focus:outline-none"
+                            bind:value={metricConfigs[activeConfigMetric].modeY}>
+                        <option value="dB">dB</option>
+                        <option value="Linear">Linear</option>
+                        <option value="Impedance">Impedance</option>
+                    </select>
+                </div>
+                
+                {#if metricConfigs[activeConfigMetric].modeY === "Impedance"}
+                    <!-- Resistencia del sensor -->
+                    <div class="flex flex-col gap-1">
+                        <span class="text-gray-400 font-medium">Resistencia Sensor (Ω)</span>
+                        <input type="number" class="bg-[#121216] border border-[#222] rounded px-2 py-1 text-xs text-white"
+                               bind:value={metricConfigs[activeConfigMetric].sensorResistance} />
+                    </div>
+                {/if}
+                
+                <!-- Suavizado PPO -->
+                <div class="flex flex-col gap-1">
+                    <span class="text-gray-400 font-medium">Suavizado PPO (1/Oct)</span>
+                    <select class="bg-[#121216] border border-[#222] rounded px-2 py-1 text-xs text-white focus:outline-none"
+                            bind:value={metricConfigs[activeConfigMetric].smoothingPPO}>
+                        <option value="1">1/1 Octava</option>
+                        <option value="3">1/3 Octava</option>
+                        <option value="6">1/6 Octava</option>
+                        <option value="12">1/12 Octava</option>
+                        <option value="24">1/24 Octava</option>
+                        <option value="48">1/48 Octava</option>
+                    </select>
+                </div>
+                
+                <!-- Invertir Y / Activar coherencia -->
+                <div class="flex flex-col gap-1.5 py-1">
+                    <label class="flex items-center gap-2 cursor-pointer text-gray-300">
+                        <input type="checkbox" bind:checked={metricConfigs[activeConfigMetric].invertY} />
+                        <span>Invertir Eje Y</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer text-gray-300">
+                        <input type="checkbox" bind:checked={metricConfigs[activeConfigMetric].enableCoherence} />
+                        <span>Activar Coherencia</span>
+                    </label>
+                </div>
+                
+                {#if metricConfigs[activeConfigMetric].enableCoherence}
+                    <div class="flex flex-col gap-1">
+                        <span class="text-gray-400 font-medium">Umbral Coherencia ({metricConfigs[activeConfigMetric].coherenceThreshold})</span>
+                        <input type="range" min="0" max="1" step="0.05" class="accent-[#00ff88]"
+                               bind:value={metricConfigs[activeConfigMetric].coherenceThreshold} />
+                    </div>
+                {/if}
+                
+                <!-- Desplazamiento Y -->
+                <div class="flex flex-col gap-1">
+                    <span class="text-gray-400 font-medium">Desplazamiento Eje Y ({metricConfigs[activeConfigMetric].yShift}px)</span>
+                    <input type="range" min="-300" max="300" step="5" class="accent-[#00ff88]"
+                           bind:value={metricConfigs[activeConfigMetric].yShift} />
+                </div>
+            {/if}
+            
+            {#if activeConfigMetric === "Phase"}
+                <!-- Envoltura -->
+                <div class="flex flex-col gap-1">
+                    <span class="text-gray-400 font-medium">Rango / Envoltura</span>
+                    <select class="bg-[#121216] border border-[#222] rounded px-2 py-1 text-xs text-white focus:outline-none"
+                            bind:value={metricConfigs["Phase"].unwrapMode}>
+                        <option value="±180">±180º</option>
+                        <option value="360">0..360º</option>
+                    </select>
+                </div>
+                
+                <!-- Rotación de Fase -->
+                <div class="flex flex-col gap-1">
+                    <span class="text-gray-400 font-medium">Ángulo de Rotación ({metricConfigs["Phase"].rotate}º)</span>
+                    <input type="range" min="-360" max="360" step="5" class="accent-[#00ff88]"
+                           bind:value={metricConfigs["Phase"].rotate} />
+                </div>
+                
+                <!-- Rango angular -->
+                <div class="flex flex-col gap-1">
+                    <span class="text-gray-400 font-medium">Rango Angular ({metricConfigs["Phase"].range}º)</span>
+                    <input type="range" min="90" max="720" step="30" class="accent-[#00ff88]"
+                           bind:value={metricConfigs["Phase"].range} />
+                </div>
+                
+                <!-- Desplazamiento Y -->
+                <div class="flex flex-col gap-1">
+                    <span class="text-gray-400 font-medium">Desplazamiento Eje Y ({metricConfigs["Phase"].yShift}px)</span>
+                    <input type="range" min="-300" max="300" step="5" class="accent-[#00ff88]"
+                           bind:value={metricConfigs["Phase"].yShift} />
+                </div>
+            {/if}
+            
+            {#if activeConfigMetric === "Coherence"}
+                <!-- Tipo de Coherencia -->
+                <div class="flex flex-col gap-1">
+                    <span class="text-gray-400 font-medium">Tipo de Coherencia</span>
+                    <select class="bg-[#121216] border border-[#222] rounded px-2 py-1 text-xs text-white focus:outline-none"
+                            bind:value={metricConfigs["Coherence"].cohType}>
+                        <option value="normal">Normal</option>
+                        <option value="squared">Al Cuadrado (r²)</option>
+                        <option value="SNR">Estimación SNR</option>
+                    </select>
+                </div>
+                
+                <!-- Línea de umbral -->
+                <div class="flex flex-col gap-1.5 py-1">
+                    <label class="flex items-center gap-2 cursor-pointer text-gray-300">
+                        <input type="checkbox" bind:checked={metricConfigs["Coherence"].showThresholdLine} />
+                        <span>Mostrar línea de umbral</span>
+                    </label>
+                </div>
+                
+                {#if metricConfigs["Coherence"].showThresholdLine}
+                    <div class="flex flex-col gap-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-400">Color Umbral</span>
+                            <input type="color" bind:value={metricConfigs["Coherence"].thresholdColor} class="w-6 h-6 border-none cursor-pointer rounded bg-transparent" />
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <span class="text-gray-400 font-medium">Valor Umbral ({metricConfigs["Coherence"].thresholdValue})</span>
+                            <input type="range" min="0.05" max="0.95" step="0.05" class="accent-[#eab308]"
+                                   bind:value={metricConfigs["Coherence"].thresholdValue} />
+                        </div>
+                    </div>
+                {/if}
+                
+                <!-- Desplazamiento Y -->
+                <div class="flex flex-col gap-1">
+                    <span class="text-gray-400 font-medium">Desplazamiento Eje Y ({metricConfigs["Coherence"].yShift}px)</span>
+                    <input type="range" min="-300" max="300" step="5" class="accent-[#00ff88]"
+                           bind:value={metricConfigs["Coherence"].yShift} />
+                </div>
+            {/if}
         </div>
     {/if}
 </div>

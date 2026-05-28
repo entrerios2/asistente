@@ -21,7 +21,7 @@ class UIStore {
     isMeasuring = $state(false);
 
     // Configuración de Rendimiento y DSP (Fase 2)
-    targetFps = $state(30);
+    targetFps = $state(10);
     dspUpdateRate = $state(2); // Hz
     fftSize = $state(8192);
 
