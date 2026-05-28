@@ -735,31 +735,31 @@
                     const logMin = Math.log10(freqMin);
                     const logMax = Math.log10(freqMax);
 
-                        const dbRow = new Float32Array(w);
-                        for (let x = 0; x < w; x++) {
-                            const logFreq = (x / w) * (logMax - logMin) + logMin;
-                            const freq = Math.pow(10, logFreq);
-                            const val = getMetricValueInterpolated(freq, data);
-                            dbRow[x] = val;
+                    const dbRow = new Float32Array(w);
+                    for (let x = 0; x < w; x++) {
+                        const logFreq = (x / w) * (logMax - logMin) + logMin;
+                        const freq = Math.pow(10, logFreq);
+                        const val = getMetricValueInterpolated(freq, data);
+                        dbRow[x] = val;
 
-                            const db = Math.max(-60, Math.min(15, val));
-                            const norm = (db + 60) / 75;
-                            const lutIdx = Math.max(
-                                0,
-                                Math.min(255, Math.floor(norm * 255)),
-                            );
+                        const db = Math.max(-60, Math.min(15, val));
+                        const norm = (db + 60) / 75;
+                        const lutIdx = Math.max(
+                            0,
+                            Math.min(255, Math.floor(norm * 255)),
+                        );
 
-                            offscreenCtx.fillStyle = spectrogramLUT[lutIdx];
-                            offscreenCtx.fillRect(x, yRow, 1, 1);
-                        }
+                        offscreenCtx.fillStyle = spectrogramLUT[lutIdx];
+                        offscreenCtx.fillRect(x, yRow, 1, 1);
+                    }
 
-                        spectrogramDbHistory.push(dbRow);
-                        if (spectrogramDbHistory.length > maxHistory) {
-                            spectrogramDbHistory.shift();
-                        }
+                    spectrogramDbHistory.push(dbRow);
+                    if (spectrogramDbHistory.length > maxHistory) {
+                        spectrogramDbHistory.shift();
                     }
                 }
             }
+        }
 
         // 3. Renderizar cada métrica seleccionada con zero-allocation helpers usando los buffers interpolados
         if (activeMetrics.includes("Magnitude") && !hasTimeDomainActive) {
@@ -889,7 +889,6 @@
                 style.lineWidth,
                 style.lineDash,
                 "Coherence",
-                1.04,
             );
         }
 
@@ -904,7 +903,6 @@
                 style.lineWidth,
                 style.lineDash,
                 "Group Delay",
-                1.04,
             );
         }
 
