@@ -82,6 +82,8 @@
     let mouseY = $state(0);
     let showCrosshair = $state(false);
 
+    let localLastVersion = 0;
+
     // Control de recalculo y throttling
     let dirty = $state(true);
     let lastMathTime = 0;
@@ -154,6 +156,9 @@
     const BINS = 4096;
     const FFT_SIZE = 8192;
 
+    // Factor de suavizado temporal (0.15 = ~100ms de tiempo de asentamiento para transiciones ultra-suaves)
+    const SMOOTHING_FACTOR = 0.15;
+
     // Buffers de interpolación temporal (Exponential Smoothing) para renderizado a 60+ FPS
     const interpMagnitude = new Float32Array(BINS);
     const interpPhase = new Float32Array(BINS);
@@ -162,8 +167,11 @@
     const interpImpulse = new Float32Array(FFT_SIZE);
     const interpStep = new Float32Array(FFT_SIZE);
 
-    // Factor de suavizado temporal (0.15 = ~100ms de tiempo de asentamiento para transiciones ultra-suaves)
-    const SMOOTHING_FACTOR = 0.15;
+    // Buffers históricos para transición lineal continua
+    const prevMagnitude = new Float32Array(BINS);
+    const prevPhase = new Float32Array(BINS);
+    const prevCoherence = new Float32Array(BINS);
+    const prevGroupDelay = new Float32Array(BINS);
 
     // Inicializar buffers de interpolación con valores por defecto razonables
     for (let i = 0; i < BINS; i++) {
@@ -171,6 +179,11 @@
         interpPhase[i] = 0;
         interpCoherence[i] = 0.98;
         interpGroupDelay[i] = 0;
+
+        prevMagnitude[i] = -50;
+        prevPhase[i] = 0;
+        prevCoherence[i] = 0.98;
+        prevGroupDelay[i] = 0;
     }
     for (let i = 0; i < FFT_SIZE; i++) {
         interpImpulse[i] = 0;
@@ -218,23 +231,19 @@
      * Si snap es true, copia directamente los valores para una respuesta instantánea.
      */
     function interpolateBuffers(snap: boolean) {
-        const factor = snap ? 1.0 : SMOOTHING_FACTOR;
+        const now = performance.now();
+        const throttleMs = mathOrchestrator.throttleMs;
+        const timeElapsed = now - mathOrchestrator.lastMathTime;
+        const t = snap ? 1.0 : Math.max(0, Math.min(1.0, timeElapsed / throttleMs));
 
-        // Interpolación de buffers de frecuencia (BINS)
         for (let i = 0; i < BINS; i++) {
-            interpMagnitude[i] +=
-                (mathOrchestrator.outputMagnitude[i] - interpMagnitude[i]) *
-                factor;
-            interpPhase[i] +=
-                (mathOrchestrator.outputPhase[i] - interpPhase[i]) * factor;
-            interpCoherence[i] +=
-                (mathOrchestrator.outputCoherence[i] - interpCoherence[i]) *
-                factor;
-            interpGroupDelay[i] +=
-                (mathOrchestrator.outputGroupDelay[i] - interpGroupDelay[i]) *
-                factor;
+            interpMagnitude[i] = prevMagnitude[i] * (1 - t) + mathOrchestrator.outputMagnitude[i] * t;
+            interpPhase[i] = prevPhase[i] * (1 - t) + mathOrchestrator.outputPhase[i] * t;
+            interpCoherence[i] = prevCoherence[i] * (1 - t) + mathOrchestrator.outputCoherence[i] * t;
+            interpGroupDelay[i] = prevGroupDelay[i] * (1 - t) + mathOrchestrator.outputGroupDelay[i] * t;
         }
 
+        const factor = snap ? 1.0 : SMOOTHING_FACTOR;
         // Interpolación de buffers de tiempo (FFT_SIZE)
         for (let i = 0; i < FFT_SIZE; i++) {
             interpImpulse[i] +=
@@ -575,6 +584,15 @@
         // Ejecutar el pipeline matemático centralizado en el MathOrchestrator
         // El MathOrchestrator se encarga de aplicar el throttling adaptativo y EQ caching
         mathOrchestrator.run(liveTrace);
+
+        const currentVersion = mathOrchestrator.version;
+        if (currentVersion !== localLastVersion) {
+            localLastVersion = currentVersion;
+            prevMagnitude.set(interpMagnitude);
+            prevPhase.set(interpPhase);
+            prevCoherence.set(interpCoherence);
+            prevGroupDelay.set(interpGroupDelay);
+        }
 
         // Realizar la interpolación temporal (Exponential Smoothing) a 60+ FPS
         // Si dirty es true, forzamos un snap instantáneo para que la UI responda de inmediato
