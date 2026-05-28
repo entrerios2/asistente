@@ -14,56 +14,101 @@ import {
     calculateGroupDelay,
 } from '../dsp/osmMetrics';
 
-const BINS = 4096;
-const FFT_SIZE = 8192;
-
 class MathOrchestrator {
     // Reactive version to notify subscribers of new calculations
     version = $state(0);
     dirty = $state(true);
     lastMathTime = 0;
 
-    // Shared calculation buffers
-    fftInputReal = new Float32Array(BINS);
-    fftInputImag = new Float32Array(BINS);
-    fftRefReal = new Float32Array(BINS);
-    fftRefImag = new Float32Array(BINS);
-    hReal = new Float32Array(BINS);
-    hImag = new Float32Array(BINS);
+    activeMetricsByQuadrant = $state<Record<string, string[]>>({});
+    private BINS = 4096;
+    private FFT_SIZE = 8192;
 
-    tempFullReal = new Float32Array(FFT_SIZE);
-    tempFullImag = new Float32Array(FFT_SIZE);
+    // Shared calculation buffers
+    fftInputReal = new Float32Array(this.BINS);
+    fftInputImag = new Float32Array(this.BINS);
+    fftRefReal = new Float32Array(this.BINS);
+    fftRefImag = new Float32Array(this.BINS);
+    hReal = new Float32Array(this.BINS);
+    hImag = new Float32Array(this.BINS);
+
+    tempFullReal = new Float32Array(this.FFT_SIZE);
+    tempFullImag = new Float32Array(this.FFT_SIZE);
 
     // Shared output buffers
-    outputMagnitude = new Float32Array(BINS);
-    outputPhase = new Float32Array(BINS);
-    outputCoherence = new Float32Array(BINS);
-    outputGroupDelay = new Float32Array(BINS);
-    outputImpulse = new Float32Array(FFT_SIZE);
-    outputStep = new Float32Array(FFT_SIZE);
-    tempPhaseRadians = new Float32Array(BINS);
+    outputMagnitude = new Float32Array(this.BINS);
+    outputPhase = new Float32Array(this.BINS);
+    outputCoherence = new Float32Array(this.BINS);
+    outputGroupDelay = new Float32Array(this.BINS);
+    outputImpulse = new Float32Array(this.FFT_SIZE);
+    outputStep = new Float32Array(this.FFT_SIZE);
+    tempPhaseRadians = new Float32Array(this.BINS);
 
     // Cache for EQ response
-    eqResponseCache = new Float32Array(BINS);
+    eqResponseCache = new Float32Array(this.BINS);
     private lastBandsStr = "";
     private lastMeasuring = false;
     private lastSimulating = false;
 
     constructor() {
         this.updateEQCache();
+        $effect.root(() => {
+            $effect(() => {
+                this.reallocateBuffers(uiStore.fftSize);
+            });
+        });
+    }
+
+    registerQuadrantMetrics(id: string, metrics: string[]) {
+        this.activeMetricsByQuadrant[id] = metrics;
+    }
+
+    unregisterQuadrant(id: string) {
+        delete this.activeMetricsByQuadrant[id];
+    }
+
+    get globalActiveMetrics(): Set<string> {
+        const active = new Set<string>();
+        for (const id in this.activeMetricsByQuadrant) {
+            for (const metric of this.activeMetricsByQuadrant[id]) {
+                active.add(metric);
+            }
+        }
+        return active;
+    }
+
+    reallocateBuffers(newFftSize: number) {
+        this.FFT_SIZE = newFftSize;
+        this.BINS = newFftSize / 2;
+
+        this.fftInputReal = new Float32Array(this.BINS);
+        this.fftInputImag = new Float32Array(this.BINS);
+        this.fftRefReal = new Float32Array(this.BINS);
+        this.fftRefImag = new Float32Array(this.BINS);
+        this.hReal = new Float32Array(this.BINS);
+        this.hImag = new Float32Array(this.BINS);
+
+        this.tempFullReal = new Float32Array(this.FFT_SIZE);
+        this.tempFullImag = new Float32Array(this.FFT_SIZE);
+
+        this.outputMagnitude = new Float32Array(this.BINS);
+        this.outputPhase = new Float32Array(this.BINS);
+        this.outputCoherence = new Float32Array(this.BINS);
+        this.outputGroupDelay = new Float32Array(this.BINS);
+        this.outputImpulse = new Float32Array(this.FFT_SIZE);
+        this.outputStep = new Float32Array(this.FFT_SIZE);
+        this.tempPhaseRadians = new Float32Array(this.BINS);
+
+        this.eqResponseCache = new Float32Array(this.BINS);
+        this.updateEQCache();
+        this.dirty = true;
     }
 
     /**
      * Dynamically calculates the throttle interval based on the active layout grid.
      */
     get throttleMs(): number {
-        switch (uiStore.layout) {
-            case '1x1': return 100; // 10 FPS
-            case '1x2':
-            case '2x1': return 142; // ~7 FPS
-            case '2x2': return 200; // 5 FPS
-            default: return 333;    // 3 FPS (3x2, etc.)
-        }
+        return 1000 / uiStore.dspUpdateRate;
     }
 
     /**
@@ -88,8 +133,8 @@ class MathOrchestrator {
      */
     private updateEQCache() {
         const sr = 48000;
-        for (let i = 0; i < BINS; i++) {
-            const freq = (i * sr) / 2 / BINS;
+        for (let i = 0; i < this.BINS; i++) {
+            const freq = (i * sr) / 2 / this.BINS;
             let totalGain = 0;
             for (let b = 0; b < traceManager.eqBands.length; b++) {
                 const band = traceManager.eqBands[b];
@@ -108,10 +153,10 @@ class MathOrchestrator {
     }
 
     getEQResponseCached(f: number): number {
-        const binWidth = 24000 / BINS;
+        const binWidth = 24000 / this.BINS;
         const idx = Math.round(f / binWidth);
         if (idx < 0) return this.eqResponseCache[0];
-        if (idx >= BINS) return this.eqResponseCache[BINS - 1];
+        if (idx >= this.BINS) return this.eqResponseCache[this.BINS - 1];
         return this.eqResponseCache[idx];
     }
 
@@ -172,8 +217,8 @@ class MathOrchestrator {
 
         this.lastMathTime = now;
 
-        for (let k = 0; k < BINS; k++) {
-            const f_k = k * (24000 / BINS) || 1e-6;
+        for (let k = 0; k < this.BINS; k++) {
+            const f_k = k * (24000 / this.BINS) || 1e-6;
 
             // Simulated pink noise reference
             const refDb = -50 + Math.sin(k * 0.05) * 0.5;
@@ -183,7 +228,7 @@ class MathOrchestrator {
             // Measurement
             let liveDb = -50;
             if (liveTrace && liveTrace.data && liveTrace.data.length > 0) {
-                const mapIdx = Math.floor((k * liveTrace.data.length) / BINS);
+                const mapIdx = Math.floor((k * liveTrace.data.length) / this.BINS);
                 liveDb = liveTrace.data[mapIdx] || -120;
             } else {
                 liveDb = -50 + this.getEQResponseCached(f_k) + Math.sin(k * 0.08) * 0.3;
@@ -200,43 +245,49 @@ class MathOrchestrator {
             this.outputCoherence[k] = this.getCoherenceValue(f_k, isMeasuring);
         }
 
-        // 1. Magnitude
-        calculateMagnitude(
-            this.fftInputReal,
-            this.fftInputImag,
-            this.fftRefReal,
-            this.fftRefImag,
-            this.outputMagnitude,
-            this.hReal,
-            this.hImag,
-        );
+        const metrics = this.globalActiveMetrics;
+        const needMagnitude = metrics.has("Magnitude") || metrics.has("Spectrum") || metrics.has("Spectrogram") || metrics.has("Impulse") || metrics.has("Step");
+        const needPhase = metrics.has("Phase") || metrics.has("Group Delay");
+        const needImpulse = metrics.has("Impulse") || metrics.has("Step");
 
-        // 2. Phase
-        calculatePhase(
-            this.fftInputReal,
-            this.fftInputImag,
-            this.fftRefReal,
-            this.fftRefImag,
-            this.outputPhase,
-        );
-
-        // 3. Impulse Response (IFFT)
-        calculateImpulseResponse(
-            this.hReal,
-            this.hImag,
-            this.outputImpulse,
-            this.tempFullReal,
-            this.tempFullImag,
-        );
-
-        // 4. Step Response (integral)
-        calculateStepResponse(this.outputImpulse, this.outputStep);
-
-        // 5. Group Delay (derivative of phase)
-        for (let k = 0; k < BINS; k++) {
-            this.tempPhaseRadians[k] = (this.outputPhase[k] * Math.PI) / 180;
+        if (needMagnitude) {
+            calculateMagnitude(
+                this.fftInputReal,
+                this.fftInputImag,
+                this.fftRefReal,
+                this.fftRefImag,
+                this.outputMagnitude,
+                this.hReal,
+                this.hImag,
+            );
         }
-        calculateGroupDelay(this.tempPhaseRadians, 24000 / BINS, this.outputGroupDelay);
+        if (needPhase) {
+            calculatePhase(
+                this.fftInputReal,
+                this.fftInputImag,
+                this.fftRefReal,
+                this.fftRefImag,
+                this.outputPhase,
+            );
+        }
+        if (needImpulse) {
+            calculateImpulseResponse(
+                this.hReal,
+                this.hImag,
+                this.outputImpulse,
+                this.tempFullReal,
+                this.tempFullImag,
+            );
+        }
+        if (metrics.has("Step")) {
+            calculateStepResponse(this.outputImpulse, this.outputStep);
+        }
+        if (metrics.has("Group Delay")) {
+            for (let k = 0; k < this.BINS; k++) {
+                this.tempPhaseRadians[k] = (this.outputPhase[k] * Math.PI) / 180;
+            }
+            calculateGroupDelay(this.tempPhaseRadians, 24000 / this.BINS, this.outputGroupDelay);
+        }
 
         // Increment version to notify subscribers
         this.version++;

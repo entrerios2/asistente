@@ -20,6 +20,18 @@
     let smoothing = $state(1 / 48);
     let showSelector = $state(false);
 
+    let metricStyles = $state<Record<string, { color: string, lineWidth: number, lineDash: number[] }>>({
+        "Spectrum": { color: "#a855f7", lineWidth: 2, lineDash: [] },
+        "Magnitude": { color: "#ff4444", lineWidth: 2, lineDash: [] },
+        "Phase": { color: "#d946ef", lineWidth: 1.6, lineDash: [] },
+        "Coherence": { color: "#eab308", lineWidth: 1.8, lineDash: [] },
+        "Group Delay": { color: "#10b981", lineWidth: 1.8, lineDash: [] },
+        "Impulse": { color: "#3b82f6", lineWidth: 2, lineDash: [] },
+        "Step": { color: "#f97316", lineWidth: 2, lineDash: [] },
+    });
+
+    let editingStyleMetric = $state<string | null>(null);
+
     // Dimensiones reactivas del contenedor físico
     let containerWidth = $state(0);
     let containerHeight = $state(0);
@@ -94,12 +106,13 @@
     function initOffscreenCanvas() {
         if (typeof document === "undefined") return;
         offscreenCanvas = document.createElement("canvas");
-        offscreenCanvas.width = maxHistory;
-        offscreenCanvas.height = numFreqs;
+        const w = Math.round(containerWidth) || 800;
+        offscreenCanvas.width = w;
+        offscreenCanvas.height = maxHistory;
         offscreenCtx = offscreenCanvas.getContext("2d");
         if (offscreenCtx) {
             offscreenCtx.fillStyle = "#000000";
-            offscreenCtx.fillRect(0, 0, maxHistory, numFreqs);
+            offscreenCtx.fillRect(0, 0, w, maxHistory);
         }
     }
 
@@ -304,8 +317,6 @@
         if (["Impulse", "Step"].includes(name)) {
             if (hasFreqDomainActive) return true;
         }
-        if (name === "Spectrum" && hasMagnitudeActive) return true;
-        if (name === "Magnitude" && hasSpectrumActive) return true;
         return false;
     }
 
@@ -556,32 +567,34 @@
         ) {
             spectrogramFrameCount++;
             if (spectrogramFrameCount % 3 === 0) {
-                if (!offscreenCanvas) {
+                const w = Math.round(width) || 800;
+                if (!offscreenCanvas || offscreenCanvas.width !== w) {
                     initOffscreenCanvas();
                 }
                 if (offscreenCtx && offscreenCanvas) {
-                    // Desplazar el espectrograma existente 1 píxel a la izquierda
+                    // Desplazar el espectrograma existente 1 píxel hacia arriba
                     offscreenCtx.drawImage(
                         offscreenCanvas,
+                        0,
                         1,
-                        0,
+                        w,
                         maxHistory - 1,
-                        numFreqs,
                         0,
                         0,
+                        w,
                         maxHistory - 1,
-                        numFreqs,
                     );
 
-                    // Dibujar la nueva columna en el extremo derecho
+                    // Dibujar la nueva fila en el extremo inferior
                     const data = liveTrace.data;
-                    const xCol = maxHistory - 1;
-                    for (let f = 0; f < numFreqs; f++) {
-                        const normF = f / (numFreqs - 1);
-                        const logIdx = Math.floor(
-                            Math.pow(normF, 2) * (data.length - 1),
-                        );
-                        const val = data[logIdx] || -60;
+                    const yRow = maxHistory - 1;
+                    const logMin = Math.log10(freqMin);
+                    const logMax = Math.log10(freqMax);
+
+                    for (let x = 0; x < w; x++) {
+                        const logFreq = (x / w) * (logMax - logMin) + logMin;
+                        const freq = Math.pow(10, logFreq);
+                        const val = getMetricValueInterpolated(freq, data);
 
                         const db = Math.max(-60, Math.min(15, val));
                         const norm = (db + 60) / 75;
@@ -591,7 +604,7 @@
                         );
 
                         offscreenCtx.fillStyle = spectrogramLUT[lutIdx];
-                        offscreenCtx.fillRect(xCol, numFreqs - 1 - f, 1, 1);
+                        offscreenCtx.fillRect(x, yRow, 1, 1);
                     }
                 }
             }
@@ -604,13 +617,15 @@
 
         // 3. Renderizar cada métrica seleccionada con zero-allocation helpers usando los buffers interpolados
         if (activeMetrics.includes("Magnitude") && !hasTimeDomainActive) {
+            const style = metricStyles["Magnitude"];
             drawMetricPath(
                 ctx,
                 interpMagnitude,
                 width,
                 height,
-                "#ff4444",
-                2,
+                style.color,
+                style.lineWidth,
+                style.lineDash,
                 "Magnitude",
                 1.03,
             );
@@ -639,12 +654,15 @@
         }
 
         if (activeMetrics.includes("Spectrum") && !hasTimeDomainActive) {
-            drawSpectrumPath(ctx, liveTrace, width, height, "#a855f7", 2);
+            const style = metricStyles["Spectrum"];
+            drawSpectrumPath(ctx, liveTrace, width, height, style.color, style.lineWidth, style.lineDash);
         }
 
         if (activeMetrics.includes("Phase") && !hasTimeDomainActive) {
-            ctx.strokeStyle = "#d946ef";
-            ctx.lineWidth = 1.6;
+            const style = metricStyles["Phase"];
+            ctx.strokeStyle = style.color;
+            ctx.lineWidth = style.lineWidth;
+            ctx.setLineDash(style.lineDash || []);
             ctx.beginPath();
             let lastY = 0;
             let first = true;
@@ -666,54 +684,63 @@
                 lastY = y;
             }
             ctx.stroke();
+            ctx.setLineDash([]);
         }
 
         if (activeMetrics.includes("Coherence") && !hasTimeDomainActive) {
+            const style = metricStyles["Coherence"];
             drawMetricPath(
                 ctx,
                 interpCoherence,
                 width,
                 height,
-                "#eab308",
-                1.8,
+                style.color,
+                style.lineWidth,
+                style.lineDash,
                 "Coherence",
                 1.04,
             );
         }
 
         if (activeMetrics.includes("Group Delay") && !hasTimeDomainActive) {
+            const style = metricStyles["Group Delay"];
             drawMetricPath(
                 ctx,
                 interpGroupDelay,
                 width,
                 height,
-                "#10b981",
-                1.8,
+                style.color,
+                style.lineWidth,
+                style.lineDash,
                 "Group Delay",
                 1.04,
             );
         }
 
         if (activeMetrics.includes("Impulse") && hasTimeDomainActive) {
+            const style = metricStyles["Impulse"];
             drawTimeDomainPath(
                 ctx,
                 interpImpulse,
                 width,
                 height,
-                "#3b82f6",
-                2,
+                style.color,
+                style.lineWidth,
+                style.lineDash,
                 "Impulse",
             );
         }
 
         if (activeMetrics.includes("Step") && hasTimeDomainActive) {
+            const style = metricStyles["Step"];
             drawTimeDomainPath(
                 ctx,
                 interpStep,
                 width,
                 height,
-                "#f97316",
-                2,
+                style.color,
+                style.lineWidth,
+                style.lineDash,
                 "Step",
             );
         }
@@ -741,12 +768,13 @@
         height: number,
         color: string,
         lw: number,
+        lineDash: number[],
         metricType: string,
         stepFactor = 1.03,
     ) {
         ctx.strokeStyle = color;
         ctx.lineWidth = lw;
-        ctx.setLineDash([]);
+        ctx.setLineDash(lineDash || []);
         ctx.beginPath();
         let first = true;
         for (let f = freqMin; f <= freqMax; f *= stepFactor) {
@@ -764,6 +792,7 @@
             }
         }
         ctx.stroke();
+        ctx.setLineDash([]);
     }
 
     // Zero-allocation drawing helper for Spectrum metric (which has a fallback/offset logic)
@@ -774,10 +803,11 @@
         height: number,
         color: string,
         lw: number,
+        lineDash: number[],
     ) {
         ctx.strokeStyle = color;
         ctx.lineWidth = lw;
-        ctx.setLineDash([]);
+        ctx.setLineDash(lineDash || []);
         ctx.beginPath();
         let first = true;
         const hasLive =
@@ -800,6 +830,7 @@
             }
         }
         ctx.stroke();
+        ctx.setLineDash([]);
     }
 
     // Zero-allocation drawing helper for Time Domain metrics (Impulse, Step)
@@ -810,11 +841,12 @@
         height: number,
         color: string,
         lw: number,
+        lineDash: number[],
         metricType: string,
     ) {
         ctx.strokeStyle = color;
         ctx.lineWidth = lw;
-        ctx.setLineDash([]);
+        ctx.setLineDash(lineDash || []);
         ctx.beginPath();
         let first = true;
         const numPoints = 350;
@@ -834,6 +866,7 @@
             }
         }
         ctx.stroke();
+        ctx.setLineDash([]);
     }
 
     function drawGrid(
@@ -937,6 +970,22 @@
                     ctx.lineTo(width, y);
                     ctx.stroke();
                     ctx.fillText(`${val}°`, width - 35, y - 4);
+                }
+            }
+        }
+
+        // Horizontal ticks (Right secondary Y axis for Spectrum)
+        if (activeMetrics.includes("Spectrum") && !hasTimeDomainActive) {
+            ctx.fillStyle = "#a855f7";
+            for (let val = -120; val <= 10; val += 20) {
+                const y = valToY(val, height, "Spectrum");
+                if (y >= 0 && y <= height) {
+                    ctx.beginPath();
+                    ctx.strokeStyle = "rgba(168, 85, 247, 0.08)";
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(width, y);
+                    ctx.stroke();
+                    ctx.fillText(`${val} dBSPL`, width - 40, y - 4);
                 }
             }
         }
@@ -1340,18 +1389,31 @@
 
         if (container) observer.observe(container);
 
-        // Bucle continuo de animación
+        // Bucle continuo de animación con límite de FPS
         let animationId: number;
+        let lastDrawTime = performance.now();
         function renderLoop() {
-            draw();
             animationId = requestAnimationFrame(renderLoop);
+            const now = performance.now();
+            const interval = 1000 / uiStore.targetFps;
+            const elapsed = now - lastDrawTime;
+            
+            if (elapsed >= interval) {
+                lastDrawTime = now - (elapsed % interval);
+                draw();
+            }
         }
         renderLoop();
 
         return () => {
             observer.disconnect();
             cancelAnimationFrame(animationId);
+            mathOrchestrator.unregisterQuadrant(id);
         };
+    });
+
+    $effect(() => {
+        mathOrchestrator.registerQuadrantMetrics(id, activeMetrics);
     });
 
     // Ajustar canvas reactivamente multiplicándolo por dpr para nitidez absoluta
@@ -1444,37 +1506,112 @@
                     {@const disabled = isMetricDisabled(m.name)}
                     {@const active = activeMetrics.includes(m.name)}
                     <!-- svelte-ignore a11y_click_events_have_key_events -->
-                    <label
-                        class="metric-checkbox-item"
+                    <div
+                        class="metric-checkbox-item flex flex-col gap-1"
                         class:disabled
                         class:active
-                        style="--metric-color: {m.color}"
+                        style="--metric-color: {metricStyles[m.name]?.color || m.color}"
                     >
-                        <input
-                            type="checkbox"
-                            checked={active}
-                            {disabled}
-                            onclick={() => toggleMetric(m.name)}
-                        />
-                        <span
-                            class="checkbox-custom"
-                            style="background-color: {active
-                                ? m.color
-                                : 'transparent'}; border-color: {active
-                                ? m.color
-                                : 'rgba(255,255,255,0.2)'}"
-                        ></span>
-                        <span class="metric-name-text">{m.label}</span>
-                        {#if disabled}
-                            <span class="disabled-badge">
-                                {hasTimeDomainActive
-                                    ? "Frec."
-                                    : hasFreqDomainActive
-                                      ? "Temp."
-                                      : "Excl."}
-                            </span>
+                        <div class="flex items-center w-full">
+                            <label class="flex items-center flex-1 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={active}
+                                    {disabled}
+                                    onclick={() => toggleMetric(m.name)}
+                                />
+                                <span
+                                    class="checkbox-custom"
+                                    style="background-color: {active
+                                        ? (metricStyles[m.name]?.color || m.color)
+                                        : 'transparent'}; border-color: {active
+                                        ? (metricStyles[m.name]?.color || m.color)
+                                        : 'rgba(255,255,255,0.2)'}"
+                                ></span>
+                                <span class="metric-name-text">{m.label}</span>
+                            </label>
+                            {#if metricStyles[m.name]}
+                                <button
+                                    type="button"
+                                    class="mini-style-edit-btn"
+                                    onclick={(e) => {
+                                        e.stopPropagation();
+                                        e.preventDefault();
+                                        editingStyleMetric = editingStyleMetric === m.name ? null : m.name;
+                                    }}
+                                    title="Personalizar Estilo"
+                                >
+                                    <span class="material-symbols-outlined text-[12px]">tune</span>
+                                </button>
+                            {/if}
+                            {#if disabled}
+                                <span class="disabled-badge ml-1">
+                                    {hasTimeDomainActive
+                                        ? "Frec."
+                                        : hasFreqDomainActive
+                                          ? "Temp."
+                                          : "Excl."}
+                                </span>
+                            {/if}
+                        </div>
+
+                        {#if editingStyleMetric === m.name && metricStyles[m.name]}
+                            <!-- svelte-ignore a11y_click_events_have_key_events -->
+                            <!-- svelte-ignore a11y_no_static_element_interactions -->
+                            <div class="style-customizer-panel w-full" onclick={(e) => e.stopPropagation()}>
+                                <div class="customizer-row">
+                                    <span class="customizer-label">Color</span>
+                                    <input
+                                        type="color"
+                                        value={metricStyles[m.name].color}
+                                        oninput={(e) => {
+                                            metricStyles[m.name].color = (e.target as HTMLInputElement).value;
+                                        }}
+                                        class="color-picker-input"
+                                    />
+                                </div>
+                                <div class="customizer-row">
+                                    <span class="customizer-label">Ancho ({metricStyles[m.name].lineWidth}px)</span>
+                                    <input
+                                        type="range"
+                                        min="1"
+                                        max="5"
+                                        step="0.5"
+                                        value={metricStyles[m.name].lineWidth}
+                                        oninput={(e) => {
+                                            metricStyles[m.name].lineWidth = parseFloat((e.target as HTMLInputElement).value);
+                                        }}
+                                        class="width-slider"
+                                    />
+                                </div>
+                                <div class="customizer-row">
+                                    <span class="customizer-label">Línea</span>
+                                    <div class="style-toggle-buttons">
+                                        <button
+                                            type="button"
+                                            class="style-toggle-btn"
+                                            class:active={metricStyles[m.name].lineDash.length === 0}
+                                            onclick={() => {
+                                                metricStyles[m.name].lineDash = [];
+                                            }}
+                                        >
+                                            Solid
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="style-toggle-btn"
+                                            class:active={metricStyles[m.name].lineDash.length > 0}
+                                            onclick={() => {
+                                                metricStyles[m.name].lineDash = [4, 4];
+                                            }}
+                                        >
+                                            Dash
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                         {/if}
-                    </label>
+                    </div>
                 {/each}
             </div>
 
@@ -1864,5 +2001,93 @@
         border-color: rgba(255, 255, 255, 0.18);
         color: #fff;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .mini-style-edit-btn {
+        background: transparent;
+        border: none;
+        color: rgba(255, 255, 255, 0.4);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2px;
+        margin-left: auto;
+        border-radius: 4px;
+        transition: all 0.15s ease;
+    }
+
+    .mini-style-edit-btn:hover {
+        color: #fff;
+        background: rgba(255, 255, 255, 0.1);
+    }
+
+    .style-customizer-panel {
+        background: rgba(0, 0, 0, 0.35);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+        padding: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-top: 2px;
+        margin-bottom: 4px;
+        box-sizing: border-box;
+    }
+
+    .customizer-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+    .customizer-label {
+        font-family: "Outfit", sans-serif;
+        font-size: 8px;
+        color: rgba(255, 255, 255, 0.6);
+        text-transform: uppercase;
+        font-weight: 700;
+    }
+
+    .color-picker-input {
+        background: transparent;
+        border: none;
+        width: 24px;
+        height: 18px;
+        cursor: pointer;
+        padding: 0;
+    }
+
+    .width-slider {
+        flex: 1;
+        max-width: 90px;
+        accent-color: #00ff88;
+        height: 3px;
+        cursor: pointer;
+    }
+
+    .style-toggle-buttons {
+        display: flex;
+        gap: 4px;
+    }
+
+    .style-toggle-btn {
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        color: #888;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 7px;
+        font-family: "Inter", sans-serif;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+
+    .style-toggle-btn.active {
+        background: rgba(0, 255, 136, 0.12);
+        border-color: #00ff88;
+        color: #00ff88;
+        font-weight: 700;
     }
 </style>
