@@ -152,7 +152,6 @@
         background: rgba(0, 0, 0, 0.6);
         padding: 8px 12px;
         border-radius: 8px;
-        backdrop-filter: blur(4px);
         display: flex;
         align-items: center;
         gap: 12px;

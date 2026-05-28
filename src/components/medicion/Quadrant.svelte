@@ -1437,7 +1437,7 @@
             </div>
 
             <label class="popover-section-label"
-                >Métricas de Open Sound Meter</label
+                >Métricas de Medición</label
             >
             <div class="metrics-checkbox-list">
                 {#each allMetrics as m}
@@ -1538,10 +1538,8 @@
         left: 0;
         width: 100%;
         height: 38px;
-        background: rgba(8, 8, 11, 0.7);
+        background: #0c0c10;
         border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -1669,7 +1667,7 @@
         top: 44px;
         right: 12px;
         width: 236px;
-        background: rgba(12, 12, 17, 0.94);
+        background: #0e0e14;
         border: 1px solid rgba(255, 255, 255, 0.09);
         border-radius: 12px;
         padding: 12px;
@@ -1678,8 +1676,6 @@
         gap: 10px;
         box-shadow: 0 15px 40px rgba(0, 0, 0, 0.85);
         z-index: 50;
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
     }
 
     .popover-header {

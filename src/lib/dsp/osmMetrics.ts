@@ -3,7 +3,7 @@ import { ComplexMath } from './math';
 
 /**
  * osmMetrics.ts — Motor de procesamiento matemático de grado de ingeniería para
- * el cálculo en tiempo real de las 10 métricas de Open Sound Meter (OSM).
+ * el cálculo en tiempo real de las métricas acústicas.
  *
  * Sigue estrictamente la PARTE 2 de docs/documentacion_senales_y_metricas.md.
  * Diseñado con buffers reciclados para minimizar la recolección de basura (GC).

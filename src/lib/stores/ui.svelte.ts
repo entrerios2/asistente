@@ -20,6 +20,11 @@ class UIStore {
     measurementMode = $state('manual'); // 'manual' | 'secuencial'
     isMeasuring = $state(false);
 
+    // Configuración de Rendimiento y DSP (Fase 2)
+    targetFps = $state(30);
+    dspUpdateRate = $state(2); // Hz
+    fftSize = $state(8192);
+
     // Estado del Generador de Audio
     generatorType = $state('pink'); // 'pink' | 'white' | 'brown' | 'music-noise' | 'sine' | 'sweep' | 'burst' | 'sinburst' | 'mls'
     genActive = $state(false);
