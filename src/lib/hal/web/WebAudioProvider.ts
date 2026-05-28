@@ -69,15 +69,6 @@ export class WebAudioProvider implements AudioProvider {
 		const readData = () => {
 			if (this.sharedArray) {
 				listener.onAudioData(this.sharedArray);
-				
-				// Cálculo de niveles para Vúmetros IN
-				let maxIn = 0;
-				for (let i = 0; i < 128; i++) { // Revisamos solo el bloque actual aprox
-					const val = Math.abs(this.sharedArray[i]);
-					if (val > maxIn) maxIn = val;
-				}
-				const dbIn = 20 * Math.log10(maxIn || 1e-6);
-				meterStore.updateIn([dbIn, dbIn]); // Simulación stereo desde mono
 			}
 
 			if (this.analyserNode && this.freqDataArray && listener.onFrequencyData) {

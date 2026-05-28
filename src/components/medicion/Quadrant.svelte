@@ -32,6 +32,32 @@
 
     let editingStyleMetric = $state<string | null>(null);
 
+    let frequencyLUT = $state<Int32Array>(new Int32Array(0));
+
+    function rebuildFrequencyLUT(width: number) {
+        if (width <= 0) return;
+        const lut = new Int32Array(Math.round(width));
+        const logMin = Math.log10(freqMin);
+        const logMax = Math.log10(freqMax);
+        const binWidth = 24000 / BINS; // 48000 Hz / 2 / BINS
+
+        for (let x = 0; x < width; x++) {
+            // Calcular frecuencia logarítmica correspondiente al píxel X
+            const adjustedX = (x - offsetX) / scaleX;
+            const logFreq = (adjustedX / width) * (logMax - logMin) + logMin;
+            const freq = Math.pow(10, logFreq);
+            
+            // Mapear al bin FFT correspondiente
+            const binIndex = Math.max(0, Math.min(BINS - 1, Math.round(freq / binWidth)));
+            lut[x] = binIndex;
+        }
+        frequencyLUT = lut;
+    }
+
+    $effect(() => {
+        rebuildFrequencyLUT(containerWidth);
+    });
+
     // Dimensiones reactivas del contenedor físico
     let containerWidth = $state(0);
     let containerHeight = $state(0);
@@ -630,25 +656,32 @@
                 1.03,
             );
 
-            if (uiStore.isSimulating) {
+            if (uiStore.isSimulating && frequencyLUT.length > 0) {
                 ctx.setLineDash([4, 4]);
                 ctx.strokeStyle = "rgba(0, 255, 255, 0.8)";
                 ctx.lineWidth = 1.5;
-                ctx.beginPath();
-                let first = true;
-                for (let f = freqMin; f <= freqMax; f *= 1.03) {
-                    const x = valToX(f, width);
-                    const val = getMetricValueInterpolated(f, interpMagnitude);
+                const pathSim = new Path2D();
+                let firstSim = true;
+                const sr = 48000;
+                const binWidth = sr / 2 / BINS;
+
+                for (let x = 0; x < width; x++) {
+                    const binIndex = frequencyLUT[x];
+                    if (binIndex === undefined) continue;
+
+                    const val = interpMagnitude[binIndex];
+                    const f = binIndex * binWidth || 1e-6;
                     const eqGain = getEQResponseCached(f);
                     const y = valToY(val + eqGain, height, "Magnitude");
-                    if (first) {
-                        ctx.moveTo(x, y);
-                        first = false;
+
+                    if (firstSim) {
+                        pathSim.moveTo(x, y);
+                        firstSim = false;
                     } else {
-                        ctx.lineTo(x, y);
+                        pathSim.lineTo(x, y);
                     }
                 }
-                ctx.stroke();
+                ctx.stroke(pathSim);
                 ctx.setLineDash([]);
             }
         }
@@ -658,32 +691,36 @@
             drawSpectrumPath(ctx, liveTrace, width, height, style.color, style.lineWidth, style.lineDash);
         }
 
-        if (activeMetrics.includes("Phase") && !hasTimeDomainActive) {
+        if (activeMetrics.includes("Phase") && !hasTimeDomainActive && frequencyLUT.length > 0) {
             const style = metricStyles["Phase"];
             ctx.strokeStyle = style.color;
             ctx.lineWidth = style.lineWidth;
             ctx.setLineDash(style.lineDash || []);
-            ctx.beginPath();
+            
+            const path = new Path2D();
             let lastY = 0;
             let first = true;
-            for (let f = freqMin; f <= freqMax; f *= 1.03) {
-                const x = valToX(f, width);
-                const val = getMetricValueInterpolated(f, interpPhase);
+
+            for (let x = 0; x < width; x++) {
+                const binIndex = frequencyLUT[x];
+                if (binIndex === undefined) continue;
+
+                const val = interpPhase[binIndex];
                 const y = valToY(val, height, "Phase");
 
                 if (first) {
-                    ctx.moveTo(x, y);
+                    path.moveTo(x, y);
                     first = false;
                 } else {
-                    if (Math.abs(y - lastY) > height * 0.68) {
-                        ctx.moveTo(x, y);
+                    if (Math.abs(y - lastY) > height * 0.65) {
+                        path.moveTo(x, y); // Salto circular sin dibujar línea vertical de descarte
                     } else {
-                        ctx.lineTo(x, y);
+                        path.lineTo(x, y);
                     }
                 }
                 lastY = y;
             }
-            ctx.stroke();
+            ctx.stroke(path);
             ctx.setLineDash([]);
         }
 
@@ -769,29 +806,33 @@
         color: string,
         lw: number,
         lineDash: number[],
-        metricType: string,
-        stepFactor = 1.03,
+        metricType: string
     ) {
+        if (frequencyLUT.length === 0) return;
+
         ctx.strokeStyle = color;
         ctx.lineWidth = lw;
         ctx.setLineDash(lineDash || []);
-        ctx.beginPath();
+        
+        const path = new Path2D();
         let first = true;
-        for (let f = freqMin; f <= freqMax; f *= stepFactor) {
-            const x = valToX(f, width);
-            const val = getMetricValueInterpolated(f, dataArray);
+
+        for (let x = 0; x < width; x++) {
+            const binIndex = frequencyLUT[x];
+            if (binIndex === undefined) continue;
+
+            const val = dataArray[binIndex];
             const y = valToY(val, height, metricType);
 
-            if (x >= -50 && x <= width + 50 && y >= -50 && y <= height + 50) {
-                if (first) {
-                    ctx.moveTo(x, y);
-                    first = false;
-                } else {
-                    ctx.lineTo(x, y);
-                }
+            if (first) {
+                path.moveTo(x, y);
+                first = false;
+            } else {
+                path.lineTo(x, y);
             }
         }
-        ctx.stroke();
+
+        ctx.stroke(path);
         ctx.setLineDash([]);
     }
 
@@ -805,31 +846,40 @@
         lw: number,
         lineDash: number[],
     ) {
+        if (frequencyLUT.length === 0) return;
+
         ctx.strokeStyle = color;
         ctx.lineWidth = lw;
         ctx.setLineDash(lineDash || []);
-        ctx.beginPath();
+        
+        const path = new Path2D();
         let first = true;
         const hasLive =
             liveTrace && liveTrace.data && liveTrace.data.length > 0;
         const dataArray = hasLive ? liveTrace.data : interpMagnitude;
         const offset = hasLive ? 0 : 68;
 
-        for (let f = freqMin; f <= freqMax; f *= 1.03) {
-            const x = valToX(f, width);
-            const val = getMetricValueInterpolated(f, dataArray) + offset;
+        for (let x = 0; x < width; x++) {
+            const binIndex = frequencyLUT[x];
+            if (binIndex === undefined) continue;
+
+            let val = 0;
+            if (hasLive) {
+                const mapIdx = Math.floor((binIndex * dataArray.length) / BINS);
+                val = dataArray[mapIdx] || -120;
+            } else {
+                val = dataArray[binIndex] + offset;
+            }
             const y = valToY(val, height, "Spectrum");
 
-            if (x >= -50 && x <= width + 50 && y >= -50 && y <= height + 50) {
-                if (first) {
-                    ctx.moveTo(x, y);
-                    first = false;
-                } else {
-                    ctx.lineTo(x, y);
-                }
+            if (first) {
+                path.moveTo(x, y);
+                first = false;
+            } else {
+                path.lineTo(x, y);
             }
         }
-        ctx.stroke();
+        ctx.stroke(path);
         ctx.setLineDash([]);
     }
 

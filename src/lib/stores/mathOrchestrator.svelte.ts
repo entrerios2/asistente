@@ -6,6 +6,7 @@
 
 import { traceManager, type Trace } from './traceManager.svelte';
 import { uiStore } from './ui.svelte';
+import { meterStore } from './meterStore.svelte';
 import {
     calculateMagnitude,
     calculatePhase,
@@ -244,6 +245,17 @@ class MathOrchestrator {
 
             this.outputCoherence[k] = this.getCoherenceValue(f_k, isMeasuring);
         }
+
+        // Calcular el valor RMS o Peak del espectro
+        let peakSum = 0;
+        for (let k = 0; k < this.BINS; k++) {
+            const mag = Math.sqrt(this.fftInputReal[k] * this.fftInputReal[k] + this.fftInputImag[k] * this.fftInputImag[k]);
+            if (mag > peakSum) peakSum = mag;
+        }
+        const dbIn = 20 * Math.log10(peakSum || 1e-6);
+
+        // Actualizar el meterStore con los niveles del bloque actual procesado
+        meterStore.updateIn([dbIn, dbIn]);
 
         const metrics = this.globalActiveMetrics;
         const needMagnitude = metrics.has("Magnitude") || metrics.has("Spectrum") || metrics.has("Spectrogram") || metrics.has("Impulse") || metrics.has("Step");

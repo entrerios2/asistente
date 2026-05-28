@@ -37,8 +37,8 @@
     });
 
     function getVuWidth(db: number) {
-        // Normalización: -60 a 0 dB -> 0 a 100%
-        return Math.max(0, Math.min(100, (db + 60) * (100 / 60)));
+        // Escala de -60 dB a +10 dB: 0% a 100% de la barra
+        return Math.max(0, Math.min(100, (db + 60) * (100 / 70)));
     }
 
     function toggleGenerator() {
@@ -97,7 +97,7 @@
     <div class="header-right">
         <!-- ACCESOS RÁPIDOS DE CONTROL -->
         <div
-            class="flex items-center gap-3 bg-[#121216]/50 border border-[#1a1a24]/30 p-1.5 px-3 rounded-xl backdrop-blur-md"
+            class="flex items-center gap-3 bg-[#121216] border border-[#1a1a24] p-1.5 px-3 rounded-xl"
         >
             <!-- CONTROL GENERADOR RÁPIDO -->
             <div
@@ -171,7 +171,7 @@
         <!-- SELECTOR DE GRILLA VISUAL (ESTILO WORD) -->
         <div class="relative">
             <button
-                class="flex items-center gap-1.5 bg-[#121216]/50 border border-[#1a1a24]/30 hover:border-[#1a1a24] p-1.5 px-3 rounded-xl transition-all text-xs font-semibold cursor-pointer min-h-[40px] text-gray-400 hover:text-gray-200"
+                class="flex items-center gap-1.5 bg-[#121216] border border-[#1a1a24] hover:border-[#1b1b26] p-1.5 px-3 rounded-xl transition-all text-xs font-semibold cursor-pointer min-h-[40px] text-gray-400 hover:text-gray-200"
                 onclick={() => (showGridDropdown = !showGridDropdown)}
                 title="Configurar visualización multi-cuadrante"
             >
@@ -192,7 +192,7 @@
                 ></div>
 
                 <div
-                    class="absolute right-0 mt-2 bg-[#0c0c0e]/95 border border-[#1a1a24]/80 rounded-xl p-3 shadow-[0_10px_30px_rgba(0,0,0,0.8)] z-50 min-w-[140px] flex flex-col gap-2 backdrop-blur-lg"
+                    class="absolute right-0 mt-2 bg-[#0c0c0e] border border-[#1a1a24] rounded-xl p-3 shadow-[0_10px_30px_#000000] z-50 min-w-[140px] flex flex-col gap-2"
                 >
                     <div
                         class="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1 select-none"
@@ -202,7 +202,7 @@
 
                     <!-- Matriz interactiva de cuadrados de 2x3 (2 col, 3 filas) -->
                     <div
-                        class="grid grid-cols-2 gap-1.5 p-2 bg-[#121216]/80 border border-[#1a1a24]/50 rounded-lg cursor-pointer transition-colors"
+                        class="grid grid-cols-2 gap-1.5 p-2 bg-[#121216] border border-[#1a1a24] rounded-lg cursor-pointer transition-colors"
                         onmouseleave={() => {
                             hoverCol = 0;
                             hoverRow = 0;
@@ -229,7 +229,7 @@
 
                     <!-- Etiqueta informativa del layout -->
                     <div
-                        class="text-[9px] font-mono text-center font-bold text-[#00ff88] mt-1 bg-[#00ff88]/5 py-1.5 rounded border border-[#00ff88]/15 tracking-wide select-none"
+                        class="text-[9px] font-mono text-center font-bold text-[#00ff88] mt-1 bg-[#001a0e] py-1.5 rounded border border-[#004d29] tracking-wide select-none"
                     >
                         {getLayoutLabel()}
                     </div>
@@ -332,8 +332,8 @@
         display: flex;
         align-items: center;
         gap: 12px;
-        background: #121216/40;
-        border: 1px solid #1a1a24/30;
+        background: #121216;
+        border: 1px solid #1a1a24;
         padding: 6px 12px;
         border-radius: 12px;
         transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
@@ -341,9 +341,9 @@
     }
 
     .vu-outer-container:hover {
-        background: rgba(18, 18, 22, 0.7);
-        border-color: rgba(26, 26, 36, 0.8);
-        box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
+        background: #181822;
+        border-color: #262636;
+        box-shadow: 0 0 15px #000000;
     }
 
     .vu-container {
@@ -389,11 +389,23 @@
     }
 
     .vu-fill.in {
-        background: linear-gradient(90deg, #00ff88, #3b82f6);
+        background: linear-gradient(90deg, 
+            #004411 0%, 
+            #00ff88 85.7%,   /* 85.7% representa exactamente 0 dB en el rango de 70 dB */
+            #facc15 87%, 
+            #ef4444 100%
+        );
+        background-size: 110px 100%;
     }
 
     .vu-fill.out {
-        background: linear-gradient(90deg, #facc15, #ef4444);
+        background: linear-gradient(90deg, 
+            #004411 0%, 
+            #00ff88 85.7%, 
+            #facc15 87%, 
+            #ef4444 100%
+        );
+        background-size: 110px 100%;
     }
 
     /* Contenedor del LED de Calibración */
@@ -401,7 +413,7 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        border-left: 1px solid rgba(26, 26, 36, 0.5);
+        border-left: 1px solid #262636;
         padding-left: 10px;
         height: 24px;
     }
