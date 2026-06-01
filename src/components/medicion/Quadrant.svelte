@@ -410,10 +410,6 @@
 
         const liveTrace = traceManager.traces.find((t) => t.id === "live-1");
 
-        // Ejecutar el pipeline matemático centralizado en el MathOrchestrator
-        // El MathOrchestrator se encarga de aplicar el throttling adaptativo y EQ caching
-        mathOrchestrator.run(liveTrace);
-
         const currentVersion = mathOrchestrator.version;
         if (currentVersion !== localLastVersion) {
             localLastVersion = currentVersion;

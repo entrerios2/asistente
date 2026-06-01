@@ -25,7 +25,7 @@ class MathOrchestrator {
     private BINS = 4096;
     private FFT_SIZE = 8192;
 
-    // Shared calculation buffers
+    // Shared calculation buffers (for fallback synchronous execution)
     fftInputReal = new Float32Array(this.BINS);
     fftInputImag = new Float32Array(this.BINS);
     fftRefReal = new Float32Array(this.BINS);
@@ -35,29 +35,78 @@ class MathOrchestrator {
 
     tempFullReal = new Float32Array(this.FFT_SIZE);
     tempFullImag = new Float32Array(this.FFT_SIZE);
+    tempPhaseRadians = new Float32Array(this.BINS);
 
     // Shared output buffers
-    outputMagnitude = new Float32Array(this.BINS);
-    outputPhase = new Float32Array(this.BINS);
-    outputCoherence = new Float32Array(this.BINS);
-    outputGroupDelay = new Float32Array(this.BINS);
-    outputImpulse = new Float32Array(this.FFT_SIZE);
-    outputStep = new Float32Array(this.FFT_SIZE);
-    tempPhaseRadians = new Float32Array(this.BINS);
+    outputMagnitude = $state(new Float32Array(this.BINS));
+    outputPhase = $state(new Float32Array(this.BINS));
+    outputCoherence = $state(new Float32Array(this.BINS));
+    outputGroupDelay = $state(new Float32Array(this.BINS));
+    outputImpulse = $state(new Float32Array(this.FFT_SIZE));
+    outputStep = $state(new Float32Array(this.FFT_SIZE));
 
     // Cache for EQ response
     eqResponseCache = new Float32Array(this.BINS);
-    private lastBandsStr = "";
+    private lastBandsHash = 0;
     private lastMeasuring = false;
     private lastSimulating = false;
 
+    // Worker & autonomous timer
+    private worker: Worker | null = null;
+    private timerId: any = null;
+
     constructor() {
         this.updateEQCache();
+
+        if (typeof window !== 'undefined') {
+            try {
+                // Initialize Web Worker with Vite URL loader
+                this.worker = new Worker(
+                    new URL('../dsp/dspWorker.ts', import.meta.url),
+                    { type: 'module' }
+                );
+                this.worker.onmessage = (event) => {
+                    this.handleWorkerMessage(event.data);
+                };
+            } catch (e) {
+                console.error('[MathOrchestrator] Error initializing dspWorker:', e);
+            }
+        }
+
         $effect.root(() => {
             $effect(() => {
                 this.reallocateBuffers(uiStore.fftSize);
             });
+            $effect(() => {
+                this.startTimer(uiStore.dspUpdateRate);
+            });
         });
+    }
+
+    private startTimer(rate: number) {
+        if (this.timerId) {
+            clearInterval(this.timerId);
+        }
+        const intervalMs = 1000 / rate;
+        this.timerId = setInterval(() => {
+            const liveTrace = traceManager.traces.find((t) => t.id === "live-1");
+            this.run(liveTrace);
+        }, intervalMs);
+    }
+
+    private handleWorkerMessage(data: any) {
+        if (data.type === 'dsp-results') {
+            this.outputMagnitude = new Float32Array(data.outputMagnitude);
+            this.outputPhase = new Float32Array(data.outputPhase);
+            this.outputCoherence = new Float32Array(data.outputCoherence);
+            this.outputGroupDelay = new Float32Array(data.outputGroupDelay);
+            this.outputImpulse = new Float32Array(data.outputImpulse);
+            this.outputStep = new Float32Array(data.outputStep);
+            
+            meterStore.updateIn([data.dbIn, data.dbIn]);
+            
+            this.version++;
+        }
     }
 
     registerQuadrantMetrics(id: string, metrics: string[]) {
@@ -68,7 +117,7 @@ class MathOrchestrator {
         delete this.activeMetricsByQuadrant[id];
     }
 
-    get globalActiveMetrics(): Set<string> {
+    globalActiveMetrics = $derived.by(() => {
         const active = new Set<string>();
         for (const id in this.activeMetricsByQuadrant) {
             for (const metric of this.activeMetricsByQuadrant[id]) {
@@ -76,7 +125,7 @@ class MathOrchestrator {
             }
         }
         return active;
-    }
+    });
 
     reallocateBuffers(newFftSize: number) {
         this.FFT_SIZE = newFftSize;
@@ -105,23 +154,21 @@ class MathOrchestrator {
         this.dirty = true;
     }
 
-    /**
-     * Dynamically calculates the throttle interval based on the active layout grid.
-     */
     get throttleMs(): number {
         return 1000 / uiStore.dspUpdateRate;
     }
 
-    /**
-     * Checks if any parameters have changed to trigger an immediate recalculation.
-     */
     private checkDirty() {
-        const bandsStr = JSON.stringify(traceManager.eqBands);
+        let bandsHash = 0;
+        for (let b = 0; b < traceManager.eqBands.length; b++) {
+            const band = traceManager.eqBands[b];
+            bandsHash += band.freq * 1e6 + band.gain * 1e3 + band.q;
+        }
         const measuring = uiStore.isMeasuring;
         const simulating = uiStore.isSimulating;
 
-        if (bandsStr !== this.lastBandsStr || measuring !== this.lastMeasuring || simulating !== this.lastSimulating) {
-            this.lastBandsStr = bandsStr;
+        if (bandsHash !== this.lastBandsHash || measuring !== this.lastMeasuring || simulating !== this.lastSimulating) {
+            this.lastBandsHash = bandsHash;
             this.lastMeasuring = measuring;
             this.lastSimulating = simulating;
             this.dirty = true;
@@ -129,9 +176,6 @@ class MathOrchestrator {
         }
     }
 
-    /**
-     * Precomputes the EQ response curve.
-     */
     private updateEQCache() {
         const sr = 48000;
         for (let i = 0; i < this.BINS; i++) {
@@ -195,13 +239,9 @@ class MathOrchestrator {
         return Math.max(0.01, Math.min(1, coh));
     }
 
-    /**
-     * Runs the centralized math pipeline.
-     */
     run(liveTrace: Trace | undefined) {
         this.checkDirty();
 
-        const now = performance.now();
         const isMeasuring = uiStore.isMeasuring;
 
         // If not measuring and not dirty, skip calculation
@@ -209,24 +249,42 @@ class MathOrchestrator {
             return;
         }
 
-        // Apply adaptive throttling when measuring and not forced (dirty)
-        if (isMeasuring && !this.dirty) {
-            if (now - this.lastMathTime < this.throttleMs) {
-                return;
+        this.lastMathTime = performance.now();
+
+        if (this.worker) {
+            // Web Worker asynchronous calculation (main path)
+            const liveData = liveTrace && liveTrace.data && liveTrace.data.length > 0 ? liveTrace.data : null;
+            let liveDataTransfer: ArrayBuffer | undefined = undefined;
+            if (liveData) {
+                const copy = new Float32Array(liveData);
+                liveDataTransfer = copy.buffer;
             }
+
+            this.worker.postMessage({
+                type: 'run-dsp',
+                liveData: liveDataTransfer,
+                BINS: this.BINS,
+                FFT_SIZE: this.FFT_SIZE,
+                eqResponseCache: this.eqResponseCache,
+                eqBands: $state.snapshot(traceManager.eqBands),
+                isMeasuring,
+                metrics: Array.from(this.globalActiveMetrics)
+            }, liveDataTransfer ? [liveDataTransfer] : []);
+
+            if (this.dirty) {
+                this.dirty = false;
+            }
+            return;
         }
 
-        this.lastMathTime = now;
-
+        // Fallback synchronous calculations inside Main Thread (SSR or Worker fail)
         for (let k = 0; k < this.BINS; k++) {
             const f_k = k * (24000 / this.BINS) || 1e-6;
 
-            // Simulated pink noise reference
             const refDb = -50 + Math.sin(k * 0.05) * 0.5;
             const refMag = Math.pow(10, refDb / 20);
             const refPhase = 0;
 
-            // Measurement
             let liveDb = -50;
             if (liveTrace && liveTrace.data && liveTrace.data.length > 0) {
                 const mapIdx = Math.floor((k * liveTrace.data.length) / this.BINS);
@@ -246,7 +304,6 @@ class MathOrchestrator {
             this.outputCoherence[k] = this.getCoherenceValue(f_k, isMeasuring);
         }
 
-        // Calcular el valor RMS o Peak del espectro
         let peakSum = 0;
         for (let k = 0; k < this.BINS; k++) {
             const mag = Math.sqrt(this.fftInputReal[k] * this.fftInputReal[k] + this.fftInputImag[k] * this.fftInputImag[k]);
@@ -254,7 +311,6 @@ class MathOrchestrator {
         }
         const dbIn = 20 * Math.log10(peakSum || 1e-6);
 
-        // Actualizar el meterStore con los niveles del bloque actual procesado
         meterStore.updateIn([dbIn, dbIn]);
 
         const metrics = this.globalActiveMetrics;
@@ -301,10 +357,8 @@ class MathOrchestrator {
             calculateGroupDelay(this.tempPhaseRadians, 24000 / this.BINS, this.outputGroupDelay);
         }
 
-        // Increment version to notify subscribers
         this.version++;
 
-        // Reset dirty flag after successful run
         if (this.dirty) {
             this.dirty = false;
         }
