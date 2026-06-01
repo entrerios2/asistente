@@ -5,6 +5,38 @@
     import { meterStore } from "$lib/stores/meterStore.svelte";
     import { mathOrchestrator } from "$lib/stores/mathOrchestrator.svelte";
 
+    import { InterpolationEngine } from "$lib/dsp/interpolationEngine";
+    import {
+        valToX,
+        valToY,
+        xToVal,
+        yToVal,
+        handleWheel as interactionHandleWheel,
+        handleMouseMove as interactionHandleMouseMove,
+        handleMouseDown as interactionHandleMouseDown,
+        handleTouchStart as interactionHandleTouchStart,
+        handleTouchMove as interactionHandleTouchMove,
+        handleTouchEnd as interactionHandleTouchEnd,
+        handleDoubleClick as interactionHandleDoubleClick,
+        rebuildFrequencyLUT,
+        freqMin,
+        freqMax,
+        type InteractionState
+    } from "$lib/dsp/canvasInteraction";
+
+    import {
+        drawGrid,
+        drawSpectrogram,
+        drawLevelOverlay,
+        drawNumericOverlay,
+        drawCrosshair,
+        drawMetricPath,
+        drawSpectrumPath,
+        drawTimeDomainPath,
+        drawSimulatedMagnitudePath,
+        drawPhasePath
+    } from "$lib/dsp/canvasRenderers";
+
     interface Props {
         id: string;
     }
@@ -45,53 +77,34 @@
 
     let frequencyLUT = $state<Int32Array>(new Int32Array(0));
 
-    function rebuildFrequencyLUT(width: number) {
-        if (width <= 0) return;
-        const lut = new Int32Array(Math.round(width));
-        const logMin = Math.log10(freqMin);
-        const logMax = Math.log10(freqMax);
-        const binWidth = 24000 / BINS; // 48000 Hz / 2 / BINS
-
-        for (let x = 0; x < width; x++) {
-            // Calcular frecuencia logarítmica correspondiente al píxel X
-            const adjustedX = (x - offsetX) / scaleX;
-            const logFreq = (adjustedX / width) * (logMax - logMin) + logMin;
-            const freq = Math.pow(10, logFreq);
-            
-            // Mapear al bin FFT correspondiente
-            const binIndex = Math.max(0, Math.min(BINS - 1, Math.round(freq / binWidth)));
-            lut[x] = binIndex;
-        }
-        frequencyLUT = lut;
-    }
-
-    $effect(() => {
-        rebuildFrequencyLUT(containerWidth);
-    });
-
     // Dimensiones reactivas del contenedor físico
     let containerWidth = $state(0);
     let containerHeight = $state(0);
 
     // Zoom & Pan state
-    let scaleX = $state(1);
-    let scaleY = $state(1);
-    let offsetX = $state(0);
-    let offsetY = $state(0);
-    let isDragging = $state(false);
-    let lastMouseX = 0;
-    let lastMouseY = 0;
+    let interactionState = $state<InteractionState>({
+        scaleX: 1,
+        scaleY: 1,
+        offsetX: 0,
+        offsetY: 0,
+        isDragging: false,
+        lastMouseX: 0,
+        lastMouseY: 0,
+        touchStartDist: 0,
+        touchStartScaleX: 1,
+        touchStartScaleY: 1,
+        isPinching: false,
+        mouseX: 0,
+        mouseY: 0,
+        showCrosshair: false
+    });
 
-    // Mobile gesture zoom
-    let touchStartDist = 0;
-    let touchStartScaleX = 1;
-    let touchStartScaleY = 1;
-    let isPinching = false;
+    // Motor de interpolación
+    const interpEngine = new InterpolationEngine();
 
-    // Crosshair state
-    let mouseX = $state(0);
-    let mouseY = $state(0);
-    let showCrosshair = $state(false);
+    $effect(() => {
+        frequencyLUT = rebuildFrequencyLUT(containerWidth, interactionState, interpEngine.BINS);
+    });
 
     let localLastVersion = 0;
 
@@ -133,7 +146,6 @@
 
     // Caché e historial del espectrograma optimizado
     const maxHistory = 100;
-    const numFreqs = 70;
     let spectrogramFrameCount = 0;
     let offscreenCanvas: HTMLCanvasElement | null = null;
     let offscreenCtx: CanvasRenderingContext2D | null = null;
@@ -179,64 +191,14 @@
         spectrogramDbHistory = [];
     }
 
-    // Configuración de rangos acústicos estándar
-    const freqMin = 20; // Hz
-    const freqMax = 20000; // Hz
-    const timeMin = -10; // ms
-    const timeMax = 100; // ms
-    const dbMin = -30; // dB
-    const dbMax = 30; // dB
-
-    // === PIPELINE MATEMÁTICO CENTRALIZADO Y SUAVIZADO ===
-    const BINS = 4096;
-    const FFT_SIZE = 8192;
-
-    // Factor de suavizado temporal (0.15 = ~100ms de tiempo de asentamiento para transiciones ultra-suaves)
-    const SMOOTHING_FACTOR = 0.15;
-
-    // Buffers de interpolación temporal (Exponential Smoothing) para renderizado a 60+ FPS
-    const interpMagnitude = new Float32Array(BINS);
-    const interpPhase = new Float32Array(BINS);
-    const interpCoherence = new Float32Array(BINS);
-    const interpGroupDelay = new Float32Array(BINS);
-    const interpImpulse = new Float32Array(FFT_SIZE);
-    const interpStep = new Float32Array(FFT_SIZE);
-
-    // Buffers históricos para transición lineal continua
-    const prevMagnitude = new Float32Array(BINS);
-    const prevPhase = new Float32Array(BINS);
-    const prevCoherence = new Float32Array(BINS);
-    const prevGroupDelay = new Float32Array(BINS);
-
-    // Inicializar buffers de interpolación con valores por defecto razonables
-    for (let i = 0; i < BINS; i++) {
-        interpMagnitude[i] = -50;
-        interpPhase[i] = 0;
-        interpCoherence[i] = 0.98;
-        interpGroupDelay[i] = 0;
-
-        prevMagnitude[i] = -50;
-        prevPhase[i] = 0;
-        prevCoherence[i] = 0.98;
-        prevGroupDelay[i] = 0;
-    }
-    for (let i = 0; i < FFT_SIZE; i++) {
-        interpImpulse[i] = 0;
-        interpStep[i] = 0;
-    }
+    const BINS = interpEngine.BINS;
 
     // Ayudante de interpolación de frecuencia logarítmica para los buffers de bins
     function getMetricValueInterpolated(
         freq: number,
         dataArray: Float32Array,
     ): number {
-        const sr = 48000;
-        const bins = dataArray.length;
-        const idx = (freq * bins) / (sr / 2);
-        const i0 = Math.max(0, Math.min(bins - 1, Math.floor(idx)));
-        const i1 = Math.max(0, Math.min(bins - 1, Math.ceil(idx)));
-        const frac = idx - i0;
-        return dataArray[i0] * (1 - frac) + dataArray[i1] * frac;
+        return interpEngine.getMetricValueInterpolated(freq, dataArray);
     }
 
     // Ayudante de interpolación circular para el dominio del tiempo
@@ -244,48 +206,7 @@
         timeMs: number,
         impulseArray: Float32Array,
     ): number {
-        const size = impulseArray.length;
-        const sampleRate = 48000;
-        const sampleIdx = (timeMs / 1000) * sampleRate;
-
-        let idx = sampleIdx;
-        if (idx < 0) {
-            idx += size;
-        }
-        idx = Math.max(0, Math.min(size - 1, idx));
-
-        const i0 = Math.floor(idx);
-        const i1 = (i0 + 1) % size;
-        const frac = idx - i0;
-        return impulseArray[i0] * (1 - frac) + impulseArray[i1] * frac;
-    }
-
-    /**
-     * Realiza la interpolación temporal (Exponential Smoothing) de los buffers de salida
-     * del MathOrchestrator hacia los buffers locales de renderizado.
-     * Si snap es true, copia directamente los valores para una respuesta instantánea.
-     */
-    function interpolateBuffers(snap: boolean) {
-        const now = performance.now();
-        const throttleMs = mathOrchestrator.throttleMs;
-        const timeElapsed = now - mathOrchestrator.lastMathTime;
-        const t = snap ? 1.0 : Math.max(0, Math.min(1.0, timeElapsed / throttleMs));
-
-        for (let i = 0; i < BINS; i++) {
-            interpMagnitude[i] = prevMagnitude[i] * (1 - t) + mathOrchestrator.outputMagnitude[i] * t;
-            interpPhase[i] = prevPhase[i] * (1 - t) + mathOrchestrator.outputPhase[i] * t;
-            interpCoherence[i] = prevCoherence[i] * (1 - t) + mathOrchestrator.outputCoherence[i] * t;
-            interpGroupDelay[i] = prevGroupDelay[i] * (1 - t) + mathOrchestrator.outputGroupDelay[i] * t;
-        }
-
-        const factor = snap ? 1.0 : SMOOTHING_FACTOR;
-        // Interpolación de buffers de tiempo (FFT_SIZE)
-        for (let i = 0; i < FFT_SIZE; i++) {
-            interpImpulse[i] +=
-                (mathOrchestrator.outputImpulse[i] - interpImpulse[i]) * factor;
-            interpStep[i] +=
-                (mathOrchestrator.outputStep[i] - interpStep[i]) * factor;
-        }
+        return interpEngine.getImpulseValueInterpolated(timeMs, impulseArray);
     }
 
     // Definición de las 10 métricas de OSM
@@ -434,113 +355,6 @@
         return count > 0 ? sum / count : dataArray[binIndex];
     }
 
-    // Conversiones de coordenadas cartesianas integrando escala y offset
-    function valToX(val: number, width: number): number {
-        if (hasTimeDomainActive) {
-            // Eje X Lineal (Tiempo en milisegundos: -10ms a 100ms)
-            const range = timeMax - timeMin;
-            const normalized = (val - timeMin) / range;
-            return normalized * width * scaleX + offsetX;
-        } else {
-            // Eje X Logarítmico (Frecuencia en hercios: 20Hz a 20kHz)
-            if (val < freqMin) val = freqMin;
-            const logMin = Math.log10(freqMin);
-            const logMax = Math.log10(freqMax);
-            const logFreq = Math.log10(val);
-            const normalized = (logFreq - logMin) / (logMax - logMin);
-            return normalized * width * scaleX + offsetX;
-        }
-    }
-
-    function xToVal(x: number, width: number): number {
-        const adjustedX = (x - offsetX) / scaleX;
-        if (hasTimeDomainActive) {
-            const range = timeMax - timeMin;
-            return timeMin + (adjustedX / width) * range;
-        } else {
-            const logMin = Math.log10(freqMin);
-            const logMax = Math.log10(freqMax);
-            const logFreq = (adjustedX / width) * (logMax - logMin) + logMin;
-            return Math.pow(10, logFreq);
-        }
-    }
-
-    function valToY(val: number, height: number, metricType: string): number {
-        let min = dbMin,
-            max = dbMax;
-
-        const cfg = metricConfigs[metricType];
-
-        if (metricType === "Spectrum" || metricType === "Magnitude" || metricType === "Simulated Magnitude") {
-            const currentCfg = metricConfigs[metricType] || { modeY: "dB" };
-            if (currentCfg.modeY === "Linear") {
-                min = 0;
-                max = 1;
-            } else if (currentCfg.modeY === "Impedance") {
-                min = 0;
-                max = 100;
-            } else {
-                min = metricType === "Spectrum" ? -120 : dbMin;
-                max = metricType === "Spectrum" ? 10 : dbMax;
-            }
-        } else if (metricType === "Phase") {
-            const phaseCfg = metricConfigs["Phase"] || { range: 360 };
-            min = -phaseCfg.range / 2;
-            max = phaseCfg.range / 2;
-        } else if (metricType === "Coherence") {
-            const cohCfg = metricConfigs["Coherence"] || { cohType: "normal" };
-            if (cohCfg.cohType === "SNR") {
-                min = -20;
-                max = 40;
-            } else {
-                min = 0;
-                max = 1;
-            }
-        } else if (metricType === "Group Delay") {
-            min = -5;
-            max = 25;
-        } else if (metricType === "Impulse" || metricType === "Step") {
-            min = -1;
-            max = 1;
-        }
-
-        if (cfg && cfg.invertY) {
-            const temp = min;
-            min = max;
-            max = temp;
-        }
-
-        const range = max - min;
-        const normalized = (val - min) / range;
-        const base = height - normalized * height;
-        return base * scaleY + offsetY;
-    }
-
-    function yToVal(y: number, height: number, metricType: string): number {
-        const adjustedY = (y - offsetY) / scaleY;
-        let min = dbMin,
-            max = dbMax;
-        if (metricType === "Spectrum") {
-            min = -120;
-            max = 10;
-        } else if (metricType === "Phase") {
-            min = -180;
-            max = 180;
-        } else if (metricType === "Coherence") {
-            min = 0;
-            max = 1;
-        } else if (metricType === "Group Delay") {
-            min = -5;
-            max = 25;
-        } else if (metricType === "Impulse" || metricType === "Step") {
-            min = -1;
-            max = 1;
-        }
-
-        const range = max - min;
-        return min + (1 - adjustedY / height) * range;
-    }
-
     // Caché reactivo de EQ (Playground)
     const eqResponseCache = $derived.by(() => {
         const size = 4096;
@@ -574,91 +388,6 @@
         return eqResponseCache[idx];
     }
 
-    interface DataPoint {
-        freq: number;
-        val: number;
-    }
-
-    // Reducción logarítmica de bins de frecuencia
-    function smoothDataLog(
-        data: Float32Array,
-        octaveFraction: number,
-    ): DataPoint[] {
-        const sr = 48000;
-        const numPoints = 400;
-        const points: DataPoint[] = [];
-
-        if (!data || data.length === 0) {
-            for (let i = 0; i < numPoints; i++) {
-                const logFreq =
-                    Math.log10(freqMin) +
-                    (i / (numPoints - 1)) *
-                        (Math.log10(freqMax) - Math.log10(freqMin));
-                points.push({ freq: Math.pow(10, logFreq), val: -60 });
-            }
-            return points;
-        }
-
-        const prefixSums = new Float32Array(data.length + 1);
-        for (let i = 0; i < data.length; i++) {
-            prefixSums[i + 1] = prefixSums[i] + data[i];
-        }
-
-        const logMin = Math.log10(freqMin);
-        const logMax = Math.log10(freqMax);
-        const binWidth = sr / 2 / data.length;
-
-        for (let i = 0; i < numPoints; i++) {
-            const logFreq = logMin + (i / (numPoints - 1)) * (logMax - logMin);
-            const freq = Math.pow(10, logFreq);
-
-            const frac = octaveFraction > 0 ? octaveFraction : 1 / 48;
-            const f_start = freq * Math.pow(2, -frac / 2);
-            const f_end = freq * Math.pow(2, frac / 2);
-
-            const startBin = Math.max(0, Math.round(f_start / binWidth));
-            const endBin = Math.min(
-                data.length - 1,
-                Math.round(f_end / binWidth),
-            );
-
-            let val = 0;
-            if (endBin >= startBin) {
-                const sum = prefixSums[endBin + 1] - prefixSums[startBin];
-                val = sum / (endBin - startBin + 1);
-            } else {
-                const binIdx = Math.min(
-                    data.length - 1,
-                    Math.round(freq / binWidth),
-                );
-                val = data[binIdx];
-            }
-
-            points.push({ freq, val });
-        }
-
-        return points;
-    }
-
-    // SIMULACIÓN DE MÉTRICAS ACÚSTICAS PROFESIONALES (DSP)
-    function getCoherenceValue(freq: number, isMeasuring: boolean): number {
-        let coh = 0.98;
-        if (freq < 45) coh -= 0.35 * (1 - freq / 45);
-        if (freq > 16000) coh -= (0.12 * (freq - 16000)) / 4000;
-
-        for (let b = 0; b < traceManager.eqBands.length; b++) {
-            const band = traceManager.eqBands[b];
-            if (band.gain < -5) {
-                const dist = Math.abs(Math.log2(freq / band.freq));
-                if (dist < 0.25) coh -= 0.18 * (1 - dist / 0.25);
-            }
-        }
-        if (isMeasuring) {
-            coh += (Math.random() - 0.5) * 0.015;
-        }
-        return Math.max(0.01, Math.min(1, coh));
-    }
-
     // CORE DRAW ENGINE
     function draw() {
         if (!canvas) return;
@@ -673,11 +402,11 @@
 
         // 1. Renderizado de Espectrograma 2D (Fondo)
         if (activeMetrics.includes("Spectrogram") && !hasTimeDomainActive) {
-            drawSpectrogram(ctx, width, height);
+            drawSpectrogram(ctx, offscreenCanvas, width, height);
         }
 
         // 2. Dibujar Grilla de Fondo (encima)
-        drawGrid(ctx, width, height);
+        drawGrid(ctx, width, height, hasTimeDomainActive, activeMetrics, metricConfigs, interactionState);
 
         const liveTrace = traceManager.traces.find((t) => t.id === "live-1");
 
@@ -688,15 +417,12 @@
         const currentVersion = mathOrchestrator.version;
         if (currentVersion !== localLastVersion) {
             localLastVersion = currentVersion;
-            prevMagnitude.set(interpMagnitude);
-            prevPhase.set(interpPhase);
-            prevCoherence.set(interpCoherence);
-            prevGroupDelay.set(interpGroupDelay);
+            interpEngine.updateHistory();
         }
 
         // Realizar la interpolación temporal (Exponential Smoothing) a 60+ FPS
         // Si dirty es true, forzamos un snap instantáneo para que la UI responda de inmediato
-        interpolateBuffers(dirty);
+        interpEngine.interpolateBuffers(dirty, mathOrchestrator);
         if (dirty) {
             dirty = false;
         }
@@ -766,129 +492,89 @@
             const style = metricStyles["Magnitude"];
             drawMetricPath(
                 ctx,
-                interpMagnitude,
+                interpEngine.interpMagnitude,
                 width,
                 height,
                 style.color,
                 style.lineWidth,
                 style.lineDash,
                 "Magnitude",
+                frequencyLUT,
+                interpEngine.interpCoherence,
+                metricConfigs,
+                interactionState,
+                getPPOSmoothedValue
             );
         }
 
         if (activeMetrics.includes("Simulated Magnitude") && !hasTimeDomainActive && frequencyLUT.length > 0) {
             const style = metricStyles["Simulated Magnitude"] || { color: "#00ffff", lineWidth: 1.5, lineDash: [4, 4] };
-            ctx.setLineDash(style.lineDash);
-            ctx.strokeStyle = style.color;
-            ctx.lineWidth = style.lineWidth;
-            
-            const cfg = metricConfigs["Simulated Magnitude"] || { modeY: "dB", smoothingPPO: 48, enableCoherence: false, coherenceThreshold: 0.5 };
-            
-            const pathSim = new Path2D();
-            let firstSim = true;
-            const sr = 48000;
-            const binWidth = sr / 2 / BINS;
-
-            for (let x = 0; x < width; x++) {
-                const binIndex = frequencyLUT[x];
-                if (binIndex === undefined) continue;
-
-                // Coherence masking
-                if (cfg.enableCoherence && interpCoherence[binIndex] < cfg.coherenceThreshold) {
-                    firstSim = true;
-                    continue;
-                }
-
-                // Smooth data log based on PPO config
-                let val = getPPOSmoothedValue(binIndex, interpMagnitude, cfg.smoothingPPO);
-                const f = binIndex * binWidth || 1e-6;
-                const eqGain = getEQResponseCached(f);
-                
-                val = val + eqGain;
-
-                // Mode Y transformations
-                if (cfg.modeY === "Linear") {
-                    val = Math.pow(10, val / 20);
-                } else if (cfg.modeY === "Impedance") {
-                    val = Math.pow(10, val / 20) * (cfg.sensorResistance || 10);
-                }
-
-                const y = valToY(val, height, "Simulated Magnitude") + (cfg.yShift || 0);
-
-                if (firstSim) {
-                    pathSim.moveTo(x, y);
-                    firstSim = false;
-                } else {
-                    pathSim.lineTo(x, y);
-                }
-            }
-            ctx.stroke(pathSim);
-            ctx.setLineDash([]);
+            drawSimulatedMagnitudePath(
+                ctx,
+                width,
+                height,
+                style,
+                frequencyLUT,
+                interpEngine.interpCoherence,
+                interpEngine.interpMagnitude,
+                metricConfigs,
+                interactionState,
+                getPPOSmoothedValue,
+                getEQResponseCached,
+                BINS
+            );
         }
 
         if (activeMetrics.includes("Spectrum") && !hasTimeDomainActive) {
             const style = metricStyles["Spectrum"];
-            drawSpectrumPath(ctx, liveTrace, width, height, style.color, style.lineWidth, style.lineDash);
+            drawSpectrumPath(
+                ctx,
+                liveTrace,
+                width,
+                height,
+                style.color,
+                style.lineWidth,
+                style.lineDash,
+                frequencyLUT,
+                interpEngine.interpCoherence,
+                interpEngine.interpMagnitude,
+                metricConfigs,
+                interactionState,
+                getPPOSmoothedValue,
+                BINS
+            );
         }
 
         if (activeMetrics.includes("Phase") && !hasTimeDomainActive && frequencyLUT.length > 0) {
             const style = metricStyles["Phase"];
-            ctx.strokeStyle = style.color;
-            ctx.lineWidth = style.lineWidth;
-            ctx.setLineDash(style.lineDash || []);
-            
-            const cfg = metricConfigs["Phase"] || { rotate: 0, unwrapMode: "±180", yShift: 0 };
-            const path = new Path2D();
-            let lastY = 0;
-            let first = true;
-
-            for (let x = 0; x < width; x++) {
-                const binIndex = frequencyLUT[x];
-                if (binIndex === undefined) continue;
-
-                let val = interpPhase[binIndex];
-                
-                // Rotar fase
-                val = val + (cfg.rotate || 0);
-                
-                // Envoltura/Unwrap mode
-                if (cfg.unwrapMode === "360") {
-                    val = ((val % 360) + 360) % 360;
-                } else {
-                    val = (val + 180) % 360;
-                    if (val < 0) val += 360;
-                    val -= 180;
-                }
-
-                const y = valToY(val, height, "Phase") + (cfg.yShift || 0);
-
-                if (first) {
-                    path.moveTo(x, y);
-                    first = false;
-                } else {
-                    if (Math.abs(y - lastY) > height * 0.65) {
-                        path.moveTo(x, y); // Salto circular sin dibujar línea vertical de descarte
-                    } else {
-                        path.lineTo(x, y);
-                    }
-                }
-                lastY = y;
-            }
-            ctx.stroke(path);
-            ctx.setLineDash([]);
+            drawPhasePath(
+                ctx,
+                width,
+                height,
+                style,
+                frequencyLUT,
+                interpEngine.interpPhase,
+                metricConfigs,
+                interactionState
+            );
         }
 
         if (activeMetrics.includes("Coherence") && !hasTimeDomainActive) {
             const style = metricStyles["Coherence"];
             drawMetricPath(
                 ctx,
-                interpCoherence,
+                interpEngine.interpCoherence,
                 width,
                 height,
                 style.color,
                 style.lineWidth,
                 style.lineDash,
                 "Coherence",
+                frequencyLUT,
+                interpEngine.interpCoherence,
+                metricConfigs,
+                interactionState,
+                getPPOSmoothedValue
             );
         }
 
@@ -896,13 +582,18 @@
             const style = metricStyles["Group Delay"];
             drawMetricPath(
                 ctx,
-                interpGroupDelay,
+                interpEngine.interpGroupDelay,
                 width,
                 height,
                 style.color,
                 style.lineWidth,
                 style.lineDash,
                 "Group Delay",
+                frequencyLUT,
+                interpEngine.interpCoherence,
+                metricConfigs,
+                interactionState,
+                getPPOSmoothedValue
             );
         }
 
@@ -910,13 +601,16 @@
             const style = metricStyles["Impulse"];
             drawTimeDomainPath(
                 ctx,
-                interpImpulse,
+                interpEngine.interpImpulse,
                 width,
                 height,
                 style.color,
                 style.lineWidth,
                 style.lineDash,
                 "Impulse",
+                interactionState,
+                getImpulseValueInterpolated,
+                hasTimeDomainActive
             );
         }
 
@@ -924,775 +618,77 @@
             const style = metricStyles["Step"];
             drawTimeDomainPath(
                 ctx,
-                interpStep,
+                interpEngine.interpStep,
                 width,
                 height,
                 style.color,
                 style.lineWidth,
                 style.lineDash,
                 "Step",
+                interactionState,
+                getImpulseValueInterpolated,
+                hasTimeDomainActive
             );
         }
 
         // 4. Overlays Especiales
         if (activeMetrics.includes("Level")) {
-            drawLevelOverlay(ctx, width, height);
+            drawLevelOverlay(ctx, width, height, meterStore);
         }
 
         if (activeMetrics.includes("Numeric")) {
-            drawNumericOverlay(ctx, width, height);
+            drawNumericOverlay(ctx, width, height, meterStore, hasTimeDomainActive);
         }
 
         // 5. Retícula Crosshair Interactiva
-        if (showCrosshair) {
-            drawCrosshair(ctx, width, height);
-        }
-    }
-
-    // Zero-allocation drawing helper for standard frequency metrics (Magnitude, Coherence, Group Delay)
-    function drawMetricPath(
-        ctx: CanvasRenderingContext2D,
-        dataArray: Float32Array,
-        width: number,
-        height: number,
-        color: string,
-        lw: number,
-        lineDash: number[],
-        metricType: string
-    ) {
-        if (frequencyLUT.length === 0) return;
-
-        ctx.strokeStyle = color;
-        ctx.lineWidth = lw;
-        ctx.setLineDash(lineDash || []);
-        
-        const cfg = metricConfigs[metricType];
-        
-        const path = new Path2D();
-        let first = true;
-
-        for (let x = 0; x < width; x++) {
-            const binIndex = frequencyLUT[x];
-            if (binIndex === undefined) continue;
-
-            // Coherence threshold masking for standard Magnitude
-            if (cfg && cfg.enableCoherence && interpCoherence[binIndex] < cfg.coherenceThreshold) {
-                first = true;
-                continue;
-            }
-
-            // PPO smoothing if applicable
-            let val = (cfg && cfg.smoothingPPO) ? getPPOSmoothedValue(binIndex, dataArray, cfg.smoothingPPO) : dataArray[binIndex];
-
-            // Coherence transformations
-            if (metricType === "Coherence") {
-                const cohCfg = metricConfigs["Coherence"] || { cohType: "normal" };
-                if (cohCfg.cohType === "squared") {
-                    val = val * val;
-                } else if (cohCfg.cohType === "SNR") {
-                    val = 10 * Math.log10(val / (1 - val + 1e-6));
-                }
-            }
-
-            // Mode Y transformations for Magnitude/Spectrum
-            if (cfg && (metricType === "Magnitude" || metricType === "Spectrum")) {
-                if (cfg.modeY === "Linear") {
-                    val = Math.pow(10, val / 20);
-                } else if (cfg.modeY === "Impedance") {
-                    val = Math.pow(10, val / 20) * (cfg.sensorResistance || 10);
-                }
-            }
-
-            const y = valToY(val, height, metricType) + (cfg?.yShift || 0);
-
-            if (first) {
-                path.moveTo(x, y);
-                first = false;
-            } else {
-                path.lineTo(x, y);
-            }
-        }
-
-        ctx.stroke(path);
-        ctx.setLineDash([]);
-
-        // Coherence horizontal threshold line
-        if (metricType === "Coherence") {
-            const cohCfg = metricConfigs["Coherence"];
-            if (cohCfg && cohCfg.showThresholdLine) {
-                const thY = valToY(cohCfg.thresholdValue, height, "Coherence");
-                ctx.strokeStyle = cohCfg.thresholdColor || "#eab308";
-                ctx.lineWidth = 1;
-                ctx.setLineDash([2, 4]);
-                ctx.beginPath();
-                ctx.moveTo(0, thY);
-                ctx.lineTo(width, thY);
-                ctx.stroke();
-                ctx.setLineDash([]);
-            }
-        }
-    }
-
-    // Zero-allocation drawing helper for Spectrum metric (which has a fallback/offset logic)
-    function drawSpectrumPath(
-        ctx: CanvasRenderingContext2D,
-        liveTrace: Trace | undefined,
-        width: number,
-        height: number,
-        color: string,
-        lw: number,
-        lineDash: number[],
-    ) {
-        if (frequencyLUT.length === 0) return;
-
-        ctx.strokeStyle = color;
-        ctx.lineWidth = lw;
-        ctx.setLineDash(lineDash || []);
-        
-        const cfg = metricConfigs["Spectrum"] || { modeY: "dB", smoothingPPO: 48 };
-        const path = new Path2D();
-        let first = true;
-        const hasLive =
-            liveTrace && liveTrace.data && liveTrace.data.length > 0;
-        const dataArray = hasLive ? liveTrace.data : interpMagnitude;
-        const offset = hasLive ? 0 : 68;
-
-        for (let x = 0; x < width; x++) {
-            const binIndex = frequencyLUT[x];
-            if (binIndex === undefined) continue;
-
-            // Coherence threshold masking for Spectrum
-            if (cfg.enableCoherence && interpCoherence[binIndex] < cfg.coherenceThreshold) {
-                first = true;
-                continue;
-            }
-
-            let val = 0;
-            if (hasLive) {
-                const mapIdx = Math.floor((binIndex * dataArray.length) / BINS);
-                val = dataArray[mapIdx] || -120;
-            } else {
-                val = dataArray[binIndex] + offset;
-            }
-
-            // Smooth using PPO
-            val = getPPOSmoothedValue(binIndex, hasLive ? dataArray : interpMagnitude, cfg.smoothingPPO) + (hasLive ? 0 : offset);
-
-            // Mode Y transformations
-            if (cfg.modeY === "Linear") {
-                val = Math.pow(10, val / 20);
-            } else if (cfg.modeY === "Impedance") {
-                val = Math.pow(10, val / 20) * (cfg.sensorResistance || 10);
-            }
-
-            const y = valToY(val, height, "Spectrum") + (cfg.yShift || 0);
-
-            if (first) {
-                path.moveTo(x, y);
-                first = false;
-            } else {
-                path.lineTo(x, y);
-            }
-        }
-        ctx.stroke(path);
-        ctx.setLineDash([]);
-    }
-
-    // Zero-allocation drawing helper for Time Domain metrics (Impulse, Step)
-    function drawTimeDomainPath(
-        ctx: CanvasRenderingContext2D,
-        dataArray: Float32Array,
-        width: number,
-        height: number,
-        color: string,
-        lw: number,
-        lineDash: number[],
-        metricType: string,
-    ) {
-        ctx.strokeStyle = color;
-        ctx.lineWidth = lw;
-        ctx.setLineDash(lineDash || []);
-        ctx.beginPath();
-        let first = true;
-        const numPoints = 350;
-        for (let i = 0; i < numPoints; i++) {
-            const t = timeMin + (i / (numPoints - 1)) * (timeMax - timeMin);
-            const x = valToX(t, width);
-            const val = getImpulseValueInterpolated(t, dataArray);
-            const y = valToY(val, height, metricType);
-
-            if (x >= -50 && x <= width + 50 && y >= -50 && y <= height + 50) {
-                if (first) {
-                    ctx.moveTo(x, y);
-                    first = false;
-                } else {
-                    ctx.lineTo(x, y);
-                }
-            }
-        }
-        ctx.stroke();
-        ctx.setLineDash([]);
-    }
-
-    function drawGrid(
-        ctx: CanvasRenderingContext2D,
-        width: number,
-        height: number,
-    ) {
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
-        ctx.fillStyle = "rgba(156, 163, 175, 0.6)";
-        ctx.font = "9px monospace";
-
-        // Vertical ticks (X axis)
-        if (hasTimeDomainActive) {
-            for (let t = -10; t <= 100; t += 10) {
-                const x = valToX(t, width);
-                if (x >= 0 && x <= width) {
-                    ctx.beginPath();
-                    ctx.moveTo(x, 0);
-                    ctx.lineTo(x, height);
-                    ctx.stroke();
-                    ctx.fillText(`${t}ms`, x + 3, height - 6);
-                }
-            }
-        } else {
-            const freqs = [
-                20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000,
-            ];
-            freqs.forEach((f) => {
-                const x = valToX(f, width);
-                if (x >= 0 && x <= width) {
-                    ctx.beginPath();
-                    ctx.moveTo(x, 0);
-                    ctx.lineTo(x, height);
-                    ctx.stroke();
-                    ctx.fillText(
-                        f >= 1000 ? `${f / 1000}kHz` : `${f}Hz`,
-                        x + 3,
-                        height - 6,
-                    );
-                }
-            });
-        }
-
-        // Horizontal ticks (Left Y axis)
-        const mainMetric =
-            activeMetrics.find(
-                (m) => m !== "Phase" && m !== "Level" && m !== "Numeric",
-            ) || activeMetrics[0];
-        if (mainMetric && mainMetric !== "Spectrogram") {
-            let min = dbMin,
-                max = dbMax,
-                step = 10,
-                unit = "dB";
-            if (mainMetric === "Spectrum") {
-                min = 20;
-                max = 100;
-                step = 10;
-                unit = "dBSPL";
-            } else if (mainMetric === "Coherence") {
-                min = 0;
-                max = 1;
-                step = 0.2;
-                unit = "";
-            } else if (mainMetric === "Group Delay") {
-                min = -5;
-                max = 25;
-                step = 5;
-                unit = "ms";
-            } else if (mainMetric === "Impulse" || mainMetric === "Step") {
-                min = -1;
-                max = 1;
-                step = 0.5;
-                unit = "";
-            }
-
-            for (let val = min; val <= max; val += step) {
-                const y = valToY(val, height, mainMetric);
-                if (y >= 0 && y <= height) {
-                    ctx.beginPath();
-                    ctx.moveTo(0, y);
-                    ctx.lineTo(width, y);
-                    ctx.stroke();
-                    ctx.fillText(
-                        `${val.toFixed(mainMetric === "Coherence" ? 1 : 0)}${unit}`,
-                        8,
-                        y - 4,
-                    );
-                }
-            }
-        }
-
-        // Horizontal ticks (Right secondary Y axis for Phase)
-        if (activeMetrics.includes("Phase") && !hasTimeDomainActive) {
-            ctx.fillStyle = "rgba(217, 70, 239, 0.75)";
-            for (let val = -180; val <= 180; val += 60) {
-                const y = valToY(val, height, "Phase");
-                if (y >= 0 && y <= height) {
-                    ctx.beginPath();
-                    ctx.strokeStyle = "rgba(217, 70, 239, 0.08)";
-                    ctx.moveTo(0, y);
-                    ctx.lineTo(width, y);
-                    ctx.stroke();
-                    ctx.fillText(`${val}°`, width - 35, y - 4);
-                }
-            }
-        }
-
-        // Horizontal ticks (Right secondary Y axis for Spectrum)
-        if (activeMetrics.includes("Spectrum") && !hasTimeDomainActive) {
-            ctx.fillStyle = "#a855f7";
-            for (let val = -120; val <= 10; val += 20) {
-                const y = valToY(val, height, "Spectrum");
-                if (y >= 0 && y <= height) {
-                    ctx.beginPath();
-                    ctx.strokeStyle = "rgba(168, 85, 247, 0.08)";
-                    ctx.moveTo(0, y);
-                    ctx.lineTo(width, y);
-                    ctx.stroke();
-                    ctx.fillText(`${val} dBSPL`, width - 40, y - 4);
-                }
-            }
-        }
-
-        // Eje Y Secundario (Historial de Tiempo para Espectrograma)
-        if (activeMetrics.includes("Spectrogram") && !hasTimeDomainActive) {
-            ctx.fillStyle = "#888";
-            ctx.font = "9px monospace";
-            const timeLabels = [
-                { yPct: 1.0, text: "0s" },
-                { yPct: 0.75, text: "-2.5s" },
-                { yPct: 0.5, text: "-5s" },
-                { yPct: 0.25, text: "-7.5s" },
-                { yPct: 0.0, text: "-10s" }
-            ];
-            timeLabels.forEach((lbl) => {
-                let yPos = lbl.yPct * height;
-                if (lbl.yPct === 1.0) yPos -= 6;
-                if (lbl.yPct === 0.0) yPos += 12;
-                ctx.fillText(lbl.text, width - 42, yPos);
-            });
-        }
-    }
-
-    function drawSpectrogram(
-        ctx: CanvasRenderingContext2D,
-        width: number,
-        height: number,
-    ) {
-        if (!offscreenCanvas) return;
-        ctx.drawImage(offscreenCanvas, 0, 0, width, height);
-    }
-
-    function drawLevelOverlay(
-        ctx: CanvasRenderingContext2D,
-        width: number,
-        height: number,
-    ) {
-        const barWidth = 14;
-        const barHeight = height * 0.55;
-        const xStart = width - 48;
-        const yStart = (height - barHeight) / 2 + 10;
-
-        ctx.fillStyle = "rgba(6, 10, 15, 0.85)";
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.roundRect(
-            xStart - 10,
-            yStart - 15,
-            barWidth * 2 + 25,
-            barHeight + 30,
-            8,
-        );
-        ctx.fill();
-        ctx.stroke();
-
-        const inVal = meterStore.inLevels[0] || -60;
-        const outVal = meterStore.outLevels[0] || -60;
-
-        ctx.fillStyle = "#bbb";
-        ctx.font = "8px monospace";
-        const dbTicks = [0, -10, -20, -30, -45, -60];
-        dbTicks.forEach((db) => {
-            const pct = (db + 60) / 60;
-            const y = yStart + barHeight - pct * barHeight;
-            ctx.fillText(`${db}`, xStart + barWidth * 2 + 8, y + 3);
-            ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
-            ctx.beginPath();
-            ctx.moveTo(xStart - 5, y);
-            ctx.lineTo(xStart + barWidth * 2 + 5, y);
-            ctx.stroke();
-        });
-
-        const drawBar = (dbValue: number, xPos: number, isInput: boolean) => {
-            ctx.fillStyle = "#060608";
-            ctx.fillRect(xPos, yStart, barWidth, barHeight);
-
-            const pct = Math.max(0, Math.min(1, (dbValue + 60) / 60));
-            const fillHeight = pct * barHeight;
-            const yFill = yStart + barHeight - fillHeight;
-
-            const grad = ctx.createLinearGradient(
-                xPos,
-                yStart + barHeight,
-                xPos,
-                yStart,
+        if (interactionState.showCrosshair) {
+            drawCrosshair(
+                ctx,
+                width,
+                height,
+                interactionState,
+                hasTimeDomainActive,
+                activeMetrics,
+                interpEngine.interpMagnitude,
+                interpEngine.interpPhase,
+                interpEngine.interpCoherence,
+                interpEngine.interpImpulse,
+                interpEngine.interpStep,
+                spectrogramDbHistory,
+                liveTrace,
+                getMetricValueInterpolated,
+                getImpulseValueInterpolated
             );
-            grad.addColorStop(0, "#00ff88");
-            grad.addColorStop(0.7, "#eab308");
-            grad.addColorStop(1, "#ef4444");
-
-            ctx.fillStyle = grad;
-            ctx.fillRect(xPos, yFill, barWidth, fillHeight);
-
-            ctx.fillStyle = "#999";
-            ctx.fillText(
-                isInput ? "IN" : "OUT",
-                xPos + 1,
-                yStart + barHeight + 11,
-            );
-        };
-
-        drawBar(inVal, xStart, true);
-        drawBar(outVal, xStart + barWidth + 5, false);
-    }
-
-    function drawNumericOverlay(
-        ctx: CanvasRenderingContext2D,
-        width: number,
-        height: number,
-    ) {
-        const panelWidth = 170;
-        const panelHeight = 115;
-        const xPos = 16;
-        const yPos = 46;
-
-        ctx.fillStyle = "rgba(8, 8, 12, 0.85)";
-        ctx.strokeStyle = "rgba(20, 184, 166, 0.25)";
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.roundRect(xPos, yPos, panelWidth, panelHeight, 10);
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.fillStyle = "#14b8a6";
-        ctx.font = 'bold 9px "Outfit", sans-serif';
-        ctx.fillText("ANÁLISIS ACÚSTICO HUD", xPos + 12, yPos + 18);
-
-        ctx.strokeStyle = "rgba(20, 184, 166, 0.12)";
-        ctx.beginPath();
-        ctx.moveTo(xPos + 10, yPos + 24);
-        ctx.lineTo(xPos + panelWidth - 10, yPos + 24);
-        ctx.stroke();
-
-        const inVal = meterStore.inLevels[0] || -60;
-        const outVal = meterStore.outLevels[0] || -60;
-        const snr = inVal - -65;
-
-        const rows = [
-            {
-                label: "RMS Entrada:",
-                val: `${inVal.toFixed(1)} dB`,
-                color: "#fff",
-            },
-            {
-                label: "RMS Salida:",
-                val: `${outVal.toFixed(1)} dB`,
-                color: "#fff",
-            },
-            {
-                label: "SNR Estimado:",
-                val: `${snr.toFixed(1)} dB`,
-                color: "#eab308",
-            },
-            {
-                label: "Distancia Alt.:",
-                val: hasTimeDomainActive ? "4.82 m" : "N/A",
-                color: "#3b82f6",
-            },
-            {
-                label: "RT60 Sala:",
-                val: hasTimeDomainActive ? "0.36 s" : "N/A",
-                color: "#10b981",
-            },
-        ];
-
-        rows.forEach((r, idx) => {
-            const y = yPos + 38 + idx * 14;
-            ctx.fillStyle = "#9ca3af";
-            ctx.font = '8px "Inter", sans-serif';
-            ctx.fillText(r.label, xPos + 12, y);
-
-            ctx.fillStyle = r.color;
-            ctx.font = "bold 8px monospace";
-            ctx.fillText(r.val, xPos + panelWidth - 55, y);
-        });
-    }
-
-    function drawCrosshair(
-        ctx: CanvasRenderingContext2D,
-        width: number,
-        height: number,
-    ) {
-        const liveTrace = traceManager.traces.find((t) => t.id === "live-1");
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
-        ctx.setLineDash([3, 3]);
-        ctx.beginPath();
-        ctx.moveTo(mouseX, 0);
-        ctx.lineTo(mouseX, height);
-        ctx.moveTo(0, mouseY);
-        ctx.lineTo(width, mouseY);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        const xVal = xToVal(mouseX, width);
-
-        // Calcular cantidad de filas dinámicas
-        let numRows = 0;
-        let showSpectrogramHover = false;
-        let spectrogramTime = 0;
-        let spectrogramVal = -120;
-
-        if (hasTimeDomainActive) {
-            if (activeMetrics.includes("Impulse")) numRows++;
-            if (activeMetrics.includes("Step")) numRows++;
-        } else {
-            if (activeMetrics.includes("Magnitude")) numRows++;
-            if (activeMetrics.includes("Spectrum")) numRows++;
-            if (activeMetrics.includes("Phase")) numRows++;
-            if (activeMetrics.includes("Coherence")) numRows++;
-            if (activeMetrics.includes("Spectrogram") && spectrogramDbHistory.length > 0) {
-                showSpectrogramHover = true;
-                numRows += 2; // Añadimos tiempo e intensidad del espectrograma
-                const historyLine = Math.max(0, Math.min(spectrogramDbHistory.length - 1, Math.floor((mouseY / height) * spectrogramDbHistory.length)));
-                const pixelX = Math.max(0, Math.min(width - 1, Math.round(mouseX)));
-                spectrogramVal = spectrogramDbHistory[historyLine]?.[pixelX] ?? -120;
-                spectrogramTime = -10 + (mouseY / height) * 10;
-            }
-        }
-
-        ctx.fillStyle = "rgba(8, 8, 12, 0.95)";
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
-
-        const labelWidth = 145;
-        const labelHeight = 22 + numRows * 12;
-        let lx = mouseX + 12;
-        let ly = mouseY - labelHeight - 12;
-
-        if (lx + labelWidth > width) lx = mouseX - labelWidth - 12;
-        if (ly < 0) ly = mouseY + 12;
-
-        ctx.beginPath();
-        ctx.roundRect(lx, ly, labelWidth, labelHeight, 6);
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.fillStyle = "#fff";
-        ctx.font = 'bold 8px "Outfit", sans-serif';
-
-        if (hasTimeDomainActive) {
-            ctx.fillText(`Tiempo: ${xVal.toFixed(2)} ms`, lx + 8, ly + 14);
-            ctx.fillStyle = "#9ca3af";
-            ctx.font = "8px monospace";
-
-            let rowIdx = 0;
-            if (activeMetrics.includes("Impulse")) {
-                const val = getImpulseValueInterpolated(xVal, interpImpulse);
-                ctx.fillText(
-                    `Impulso: ${val.toFixed(3)}`,
-                    lx + 8,
-                    ly + 28 + rowIdx * 12,
-                );
-                rowIdx++;
-            }
-            if (activeMetrics.includes("Step")) {
-                const val = getImpulseValueInterpolated(xVal, interpStep);
-                ctx.fillText(
-                    `Escalón: ${val.toFixed(3)}`,
-                    lx + 8,
-                    ly + 28 + rowIdx * 12,
-                );
-            }
-        } else {
-            ctx.fillText(`Frec: ${xVal.toFixed(1)} Hz`, lx + 8, ly + 14);
-            ctx.font = "8px monospace";
-
-            let rowIdx = 0;
-            if (activeMetrics.includes("Magnitude")) {
-                const val = getMetricValueInterpolated(xVal, interpMagnitude);
-                ctx.fillStyle = "#ff4444";
-                ctx.fillText(
-                    `Magnitud: ${val.toFixed(1)} dB`,
-                    lx + 8,
-                    ly + 28 + rowIdx * 12,
-                );
-                rowIdx++;
-            }
-            if (activeMetrics.includes("Spectrum")) {
-                const val = getMetricValueInterpolated(
-                    xVal,
-                    liveTrace && liveTrace.data && liveTrace.data.length > 0
-                        ? liveTrace.data
-                        : interpMagnitude,
-                );
-                const offset =
-                    liveTrace && liveTrace.data && liveTrace.data.length > 0
-                        ? 0
-                        : 68;
-                ctx.fillStyle = "#a855f7";
-                ctx.fillText(
-                    `Espectro: ${(val + offset).toFixed(1)} dBSPL`,
-                    lx + 8,
-                    ly + 28 + rowIdx * 12,
-                );
-                rowIdx++;
-            }
-            if (activeMetrics.includes("Phase")) {
-                const val = getMetricValueInterpolated(xVal, interpPhase);
-                ctx.fillStyle = "#d946ef";
-                ctx.fillText(
-                    `Fase: ${val.toFixed(0)}°`,
-                    lx + 8,
-                    ly + 28 + rowIdx * 12,
-                );
-                rowIdx++;
-            }
-            if (activeMetrics.includes("Coherence")) {
-                const val = getMetricValueInterpolated(xVal, interpCoherence);
-                ctx.fillStyle = "#eab308";
-                ctx.fillText(
-                    `Coherencia: ${val.toFixed(2)}`,
-                    lx + 8,
-                    ly + 28 + rowIdx * 12,
-                );
-                rowIdx++;
-            }
-            if (showSpectrogramHover) {
-                ctx.fillStyle = "#ec4899";
-                ctx.fillText(
-                    `Tiempo: ${spectrogramTime.toFixed(1)} s`,
-                    lx + 8,
-                    ly + 28 + rowIdx * 12,
-                );
-                rowIdx++;
-                ctx.fillText(
-                    `Espectrog.: ${spectrogramVal.toFixed(1)} dB`,
-                    lx + 8,
-                    ly + 28 + rowIdx * 12,
-                );
-                rowIdx++;
-            }
         }
     }
 
-    // GESTORES DE EVENTOS (PAN & ZOOM)
+    // GESTORES DE EVENTOS DELEGADOS (PAN & ZOOM)
     function handleWheel(e: WheelEvent) {
-        e.preventDefault();
-        const rect = canvas.getBoundingClientRect();
-        const mX = e.clientX - rect.left;
-        const mY = e.clientY - rect.top;
-
-        const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
-
-        const zoomX = !e.ctrlKey;
-        const zoomY = !e.shiftKey;
-
-        if (zoomX) {
-            const valBefore = xToVal(mX, containerWidth);
-            scaleX = Math.max(0.1, Math.min(80, scaleX * zoomFactor));
-            const xAfter = valToX(valBefore, containerWidth);
-            offsetX += mX - xAfter;
-        }
-
-        if (zoomY) {
-            const refMetric =
-                activeMetrics.find((m) => m !== "Phase") || "Magnitude";
-            const valBefore = yToVal(mY, containerHeight, refMetric);
-            scaleY = Math.max(0.1, Math.min(80, scaleY * zoomFactor));
-            const yAfter = valToY(valBefore, containerHeight, refMetric);
-            offsetY += mY - yAfter;
-        }
+        interactionHandleWheel(e, interactionState, canvas, containerWidth, containerHeight, activeMetrics, metricConfigs, hasTimeDomainActive);
     }
 
     function handleMouseMove(e: MouseEvent) {
-        const rect = canvas.getBoundingClientRect();
-        mouseX = e.clientX - rect.left;
-        mouseY = e.clientY - rect.top;
-        showCrosshair = true;
-
-        if (isDragging) {
-            offsetX += e.clientX - lastMouseX;
-            offsetY += e.clientY - lastMouseY;
-            lastMouseX = e.clientX;
-            lastMouseY = e.clientY;
-        }
+        interactionHandleMouseMove(e, interactionState, canvas);
     }
 
     function handleMouseDown(e: MouseEvent) {
-        if (
-            showSelector &&
-            settingsBtn &&
-            settingsBtn.contains(e.target as Node)
-        )
-            return;
-        isDragging = true;
-        lastMouseX = e.clientX;
-        lastMouseY = e.clientY;
+        interactionHandleMouseDown(e, interactionState, showSelector, settingsBtn);
     }
 
     function handleTouchStart(e: TouchEvent) {
-        if (e.touches.length === 1) {
-            isDragging = true;
-            lastMouseX = e.touches[0].clientX;
-            lastMouseY = e.touches[0].clientY;
-            isPinching = false;
-        } else if (e.touches.length === 2) {
-            isDragging = false;
-            isPinching = true;
-            const dx = e.touches[0].clientX - e.touches[1].clientX;
-            const dy = e.touches[0].clientY - e.touches[1].clientY;
-            touchStartDist = Math.sqrt(dx * dx + dy * dy);
-            touchStartScaleX = scaleX;
-            touchStartScaleY = scaleY;
-        }
+        interactionHandleTouchStart(e, interactionState);
     }
 
     function handleTouchMove(e: TouchEvent) {
-        const rect = canvas.getBoundingClientRect();
-        if (e.touches.length === 1 && isDragging) {
-            const touch = e.touches[0];
-            offsetX += touch.clientX - lastMouseX;
-            offsetY += touch.clientY - lastMouseY;
-            lastMouseX = touch.clientX;
-            lastMouseY = touch.clientY;
-
-            mouseX = touch.clientX - rect.left;
-            mouseY = touch.clientY - rect.top;
-            showCrosshair = true;
-        } else if (e.touches.length === 2 && isPinching) {
-            const dx = e.touches[0].clientX - e.touches[1].clientX;
-            const dy = e.touches[0].clientY - e.touches[1].clientY;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist > 0 && touchStartDist > 0) {
-                const factor = dist / touchStartDist;
-                scaleX = Math.max(0.1, Math.min(80, touchStartScaleX * factor));
-                scaleY = Math.max(0.1, Math.min(80, touchStartScaleY * factor));
-            }
-        }
+        interactionHandleTouchMove(e, interactionState, canvas);
     }
 
     function handleTouchEnd() {
-        isDragging = false;
-        isPinching = false;
-        showCrosshair = false;
+        interactionHandleTouchEnd(interactionState);
     }
 
     function handleDoubleClick() {
-        scaleX = 1;
-        scaleY = 1;
-        offsetX = 0;
-        offsetY = 0;
+        interactionHandleDoubleClick(interactionState);
     }
 
     function toggleSelector(e: MouseEvent) {
@@ -1763,10 +759,10 @@
     bind:this={container}
     onmousemove={handleMouseMove}
     onmousedown={handleMouseDown}
-    onmouseup={() => (isDragging = false)}
+    onmouseup={() => (interactionState.isDragging = false)}
     onmouseleave={() => {
-        showCrosshair = false;
-        isDragging = false;
+        interactionState.showCrosshair = false;
+        interactionState.isDragging = false;
     }}
     onwheel={handleWheel}
     ondblclick={handleDoubleClick}

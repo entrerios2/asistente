@@ -1,4 +1,4 @@
-# Auditoría de Performance y Paridad con OSM — Plan Integral
+# Plan de Implementación Maestro: Fase 2A.4 Mejoras de Performance y Paridad con competencia — Plan Integral
 
 Auditoría completa del codebase de la herramienta de medición de audio con dos ejes:
 1. **Performance:** Identificar y priorizar bottlenecks de rendimiento que afectan la experiencia en tiempo real.
