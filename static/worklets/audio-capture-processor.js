@@ -56,17 +56,25 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
 
     process(inputs) {
         const input = inputs[0];
-        if (!input || !input[0] || !this.sharedBuffer) return true;
+        if (!input || !input[0]) return true;
 
         const channelData = input[0];
         const length = channelData.length;
 
-        // 1. Lógica de Ring Buffer para el hilo principal
-        for (let i = 0; i < length; i++) {
-            const sample = channelData[i];
-            this.sharedBuffer[this.writeIndex] = sample;
-            this.writeIndex = (this.writeIndex + 1) % this.bufferSize;
+        if (this.sharedBuffer) {
+            // 1. Lógica de Ring Buffer para el hilo principal
+            for (let i = 0; i < length; i++) {
+                const sample = channelData[i];
+                this.sharedBuffer[this.writeIndex] = sample;
+                this.writeIndex = (this.writeIndex + 1) % this.bufferSize;
+            }
+        } else {
+            // Fallback: postMessage del canal síncronamente o ArrayBuffer
+            const rawCopy = new Float32Array(channelData);
+            this.port.postMessage({ type: 'AUDIO_CHUNK', buffer: rawCopy.buffer }, [rawCopy.buffer]);
+        }
 
+        for (let i = 0; i < length; i++) {
             // 2. Lógica de Demodulación FSK (Procesamiento por bloques para Goertzel)
             this.samplesCount++;
             

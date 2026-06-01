@@ -58,11 +58,36 @@ export class WebAudioProvider implements AudioProvider {
 		source.connect(this.analyserNode);
 
 		const bufferSize = 48000;
-		this.sab = new SharedArrayBuffer(bufferSize * Float32Array.BYTES_PER_ELEMENT);
-		this.sharedArray = new Float32Array(this.sab);
+		let writeIndex = 0;
+		const hasSAB = typeof SharedArrayBuffer !== 'undefined';
+
+		if (hasSAB) {
+			this.sab = new SharedArrayBuffer(bufferSize * Float32Array.BYTES_PER_ELEMENT);
+			this.sharedArray = new Float32Array(this.sab);
+		} else {
+			console.warn('[AudioProvider] SharedArrayBuffer no disponible. Usando fallback ArrayBuffer.');
+			this.sab = null;
+			this.sharedArray = new Float32Array(bufferSize);
+		}
 
 		this.workletNode = new AudioWorkletNode(this.audioContext, 'audio-capture-processor');
-		this.workletNode.port.postMessage({ sab: this.sab });
+		
+		if (hasSAB) {
+			this.workletNode.port.postMessage({ sab: this.sab });
+		} else {
+			this.workletNode.port.addEventListener('message', (event) => {
+				if (event.data && event.data.type === 'AUDIO_CHUNK' && event.data.buffer) {
+					const chunk = new Float32Array(event.data.buffer);
+					if (this.sharedArray) {
+						for (let i = 0; i < chunk.length; i++) {
+							this.sharedArray[writeIndex] = chunk[i];
+							writeIndex = (writeIndex + 1) % bufferSize;
+						}
+					}
+				}
+			});
+			this.workletNode.port.start();
+		}
 
 		source.connect(this.workletNode);
 
