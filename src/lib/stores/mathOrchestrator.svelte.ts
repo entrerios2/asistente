@@ -107,6 +107,23 @@ class MathOrchestrator {
             
             meterStore.updateIn([data.dbIn, data.dbIn]);
             
+            // ESCRIBIR EN LA CAPA ACTIVA BAJO MEDICIÓN (PROMPT 6)
+            const activeLayer = traceManager.layers.find(l => l.isMeasuring && l.id === uiStore.activeLayerId);
+            if (activeLayer) {
+                const qMetrics = this.activeMetricsByQuadrant[activeLayer.quadrantId] || ["Magnitude"];
+                const mainMetric = qMetrics.find(m => ["Magnitude", "Phase", "Coherence", "Spectrum", "Group Delay"].includes(m)) || "Magnitude";
+                
+                let sourceBuffer = this.outputMagnitude;
+                if (mainMetric === "Phase") sourceBuffer = this.outputPhase;
+                else if (mainMetric === "Coherence") sourceBuffer = this.outputCoherence;
+                else if (mainMetric === "Group Delay") sourceBuffer = this.outputGroupDelay;
+
+                if (activeLayer.data.length !== sourceBuffer.length) {
+                    activeLayer.data = new Float32Array(sourceBuffer.length);
+                }
+                activeLayer.data.set(sourceBuffer);
+            }
+
             this.version++;
         }
     }
@@ -361,6 +378,23 @@ class MathOrchestrator {
                 this.tempPhaseRadians[k] = (this.outputPhase[k] * Math.PI) / 180;
             }
             calculateGroupDelay(this.tempPhaseRadians, 24000 / this.BINS, this.outputGroupDelay);
+        }
+
+        // Guardar en la capa activa bajo medición
+        const activeLayer = traceManager.layers.find(l => l.isMeasuring && l.id === uiStore.activeLayerId);
+        if (activeLayer) {
+            const qMetrics = this.activeMetricsByQuadrant[activeLayer.quadrantId] || ["Magnitude"];
+            const mainMetric = qMetrics.find(m => ["Magnitude", "Phase", "Coherence", "Spectrum", "Group Delay"].includes(m)) || "Magnitude";
+            
+            let sourceBuffer = this.outputMagnitude;
+            if (mainMetric === "Phase") sourceBuffer = this.outputPhase;
+            else if (mainMetric === "Coherence") sourceBuffer = this.outputCoherence;
+            else if (mainMetric === "Group Delay") sourceBuffer = this.outputGroupDelay;
+
+            if (activeLayer.data.length !== sourceBuffer.length) {
+                activeLayer.data = new Float32Array(sourceBuffer.length);
+            }
+            activeLayer.data.set(sourceBuffer);
         }
 
         this.version++;

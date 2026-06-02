@@ -32,6 +32,12 @@ class UIStore {
     genLevel = $state(0);
     genRouting = $state<'L' | 'R' | 'Stereo'>('Stereo');
 
+    // ESTADOS AVANZADOS COMPORTAMIENTO HAL Y CAPAS
+    autoSaveSnapshotOnStop = $state(false);
+    linkGeneratorToMeasurement = $state(false);
+    activeLayerId = $state('');
+    eqType = $state('graphic'); // 'graphic' | 'parametric' | 'tone'
+
     toggleSnapshots() {
         this.showSnapshots = !this.showSnapshots;
     }
@@ -42,7 +48,9 @@ class UIStore {
 
     toggleTheme() {
         this.isDarkMode = !this.isDarkMode;
-        document.documentElement.classList.toggle('dark', this.isDarkMode);
+        if (typeof document !== 'undefined') {
+            document.documentElement.classList.toggle('dark', this.isDarkMode);
+        }
     }
 }
 

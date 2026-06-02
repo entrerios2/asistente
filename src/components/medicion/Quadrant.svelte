@@ -102,6 +102,8 @@
     // Motor de interpolación
     const interpEngine = new InterpolationEngine();
 
+    const quadrantLayers = $derived(traceManager.layers.filter(l => l.quadrantId === id));
+
     $effect(() => {
         frequencyLUT = rebuildFrequencyLUT(containerWidth, interactionState, interpEngine.BINS);
     });
@@ -487,23 +489,141 @@
             }
         }
 
-        // 3. Renderizar cada métrica seleccionada con zero-allocation helpers usando los buffers interpolados y pre-suavizados
-        if (activeMetrics.includes("Magnitude") && !hasTimeDomainActive) {
-            const style = metricStyles["Magnitude"];
-            drawMetricPath(
+        // 3. Renderizar las curvas de todas las capas de medición de este cuadrante (Prompt 6)
+        quadrantLayers.forEach((layer, index) => {
+            if (!layer.visible) return;
+
+            // Determinar estilos visuales basados en la posición de la capa
+            const isActive = layer.id === uiStore.activeLayerId;
+            const lw = isActive ? 2.8 : 1.3;
+            const op = isActive ? 1.0 : 0.75;
+            
+            // Estilo de línea (lineDash) según el índice de capa secundaria
+            let lineDash: number[] = [];
+            if (!isActive) {
+                if (index === 1) lineDash = [8, 4]; // Capa 2 discontinua
+                else if (index === 2) lineDash = [2, 3]; // Capa 3 punteada
+                else lineDash = [6, 3, 2, 3]; // Capa 4+ alternada
+            }
+
+            ctx.globalAlpha = op;
+
+            // Para cada métrica activa en este cuadrante, dibujamos los datos de la capa
+            activeMetrics.forEach((metric) => {
+                if (hasTimeDomainActive && !["Impulse", "Step"].includes(metric)) return;
+                if (!hasTimeDomainActive && ["Impulse", "Step"].includes(metric)) return;
+
+                // Color reservado para la métrica
+                let color = "#ff4444"; // Magnitud por defecto
+                if (metric === "Phase") color = "#d946ef";
+                else if (metric === "Coherence") color = "#eab308";
+                else if (metric === "Spectrum") color = "#a855f7";
+                else if (metric === "Group Delay") color = "#10b981";
+                else if (metric === "Simulated Magnitude") color = "#00ffff";
+
+                const isLive = layer.isMeasuring;
+                
+                if (metric === "Magnitude" || metric === "Spectrum" || metric === "Coherence" || metric === "Group Delay") {
+                    let bufferToDraw = layer.data;
+                    let customPPOSmooth = (idx: number, arr: Float32Array) => arr[idx];
+
+                    if (isLive) {
+                        if (metric === "Magnitude") {
+                            bufferToDraw = smoothedMagnitude;
+                        } else if (metric === "Spectrum") {
+                            bufferToDraw = smoothedSpectrum;
+                        } else if (metric === "Coherence") {
+                            bufferToDraw = interpEngine.interpCoherence;
+                        } else if (metric === "Group Delay") {
+                            bufferToDraw = interpEngine.interpGroupDelay;
+                        }
+                    }
+
+                    drawMetricPath(
+                        ctx,
+                        bufferToDraw,
+                        width,
+                        height,
+                        color,
+                        lw,
+                        lineDash,
+                        metric,
+                        frequencyLUT,
+                        interpEngine.interpCoherence,
+                        metricConfigs,
+                        interactionState,
+                        customPPOSmooth
+                    );
+                }
+
+                if (metric === "Simulated Magnitude") {
+                    const rawBuffer = isLive ? smoothedMagnitude : layer.data;
+                    drawSimulatedMagnitudePath(
+                        ctx,
+                        width,
+                        height,
+                        { color, lineWidth: lw, lineDash },
+                        frequencyLUT,
+                        interpEngine.interpCoherence,
+                        rawBuffer,
+                        metricConfigs,
+                        interactionState,
+                        (idx, arr) => arr[idx],
+                        mathOrchestrator.getEQResponseCached.bind(mathOrchestrator),
+                        BINS
+                    );
+                }
+
+                if (metric === "Phase") {
+                    const rawBuffer = isLive ? interpEngine.interpPhase : layer.data;
+                    drawPhasePath(
+                        ctx,
+                        width,
+                        height,
+                        { color, lineWidth: lw, lineDash },
+                        frequencyLUT,
+                        rawBuffer,
+                        metricConfigs,
+                        interactionState
+                    );
+                }
+            });
+
+            ctx.globalAlpha = 1.0; // Restablecer opacidad
+        });
+
+        // 4. Renderizar métricas que no son capas o son globales (Impulse, Step)
+        if (activeMetrics.includes("Impulse") && hasTimeDomainActive) {
+            const style = metricStyles["Impulse"];
+            drawTimeDomainPath(
                 ctx,
-                smoothedMagnitude,
+                interpEngine.interpImpulse,
                 width,
                 height,
                 style.color,
                 style.lineWidth,
                 style.lineDash,
-                "Magnitude",
-                frequencyLUT,
-                interpEngine.interpCoherence,
-                metricConfigs,
+                "Impulse",
                 interactionState,
-                (idx, arr) => arr[idx]
+                getImpulseValueInterpolated,
+                hasTimeDomainActive
+            );
+        }
+
+        if (activeMetrics.includes("Step") && hasTimeDomainActive) {
+            const style = metricStyles["Step"];
+            drawTimeDomainPath(
+                ctx,
+                interpEngine.interpStep,
+                width,
+                height,
+                style.color,
+                style.lineWidth,
+                style.lineDash,
+                "Step",
+                interactionState,
+                getImpulseValueInterpolated,
+                hasTimeDomainActive
             );
         }
 
@@ -696,7 +816,28 @@
         showSelector = !showSelector;
     }
 
+    function onLayerDrop(e: DragEvent) {
+        e.preventDefault();
+        if (e.dataTransfer) {
+            const layerId = e.dataTransfer.getData("text/plain");
+            if (layerId) {
+                traceManager.moveLayer(layerId, id);
+            }
+        }
+    }
+
+    function onLayerDragStart(e: DragEvent, layerId: string) {
+        if (e.dataTransfer) {
+            e.dataTransfer.setData("text/plain", layerId);
+        }
+    }
+
     onMount(() => {
+        // Inicializar con una capa por defecto si no existen capas para este cuadrante
+        if (traceManager.layers.filter(l => l.quadrantId === id).length === 0) {
+            traceManager.addLayer(`Capa ${traceManager.layers.length + 1}`, id, 'live');
+        }
+
         // Observer del redimensionamiento físico del cuadrante
         const observer = new ResizeObserver((entries) => {
             for (const entry of entries) {
@@ -769,6 +910,8 @@
     ontouchstart={handleTouchStart}
     ontouchmove={handleTouchMove}
     ontouchend={handleTouchEnd}
+    ondragover={(e) => e.preventDefault()}
+    ondrop={onLayerDrop}
 >
     <!-- CABECERA PREMIUM DE CADA CUADRANTE -->
     <div class="quadrant-header flex items-center justify-between bg-[#08080a] border-b border-[#1a1a24] px-3 py-1.5 min-h-[40px]"
@@ -851,6 +994,75 @@
                         </button>
                     </div>
                 {/each}
+            </div>
+
+            <!-- Pills de Capas con soporte Drag & Drop (Prompt 6) -->
+            <div class="active-layers-badges flex items-center gap-2 border-l border-[#1a1a24] pl-2">
+                {#each quadrantLayers as layer}
+                    <div 
+                        class="layer-badge-pill flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-[11px] font-semibold transition-all border cursor-grab select-none
+                               {layer.id === uiStore.activeLayerId ? 'bg-[#00ff88]/10 border-[#00ff88] text-[#00ff88]' : 'bg-[#121216] border-[#222] text-gray-300'}"
+                        draggable="true"
+                        ondragstart={(e) => onLayerDragStart(e, layer.id)}
+                        onclick={() => {
+                            uiStore.activeLayerId = layer.id;
+                        }}
+                    >
+                        <span class="material-symbols-outlined text-[11px]">layers</span>
+                        <span>{layer.name}</span>
+                        
+                        <!-- Toggle visibilidad rápido -->
+                        <button
+                            class="layer-pill-btn text-gray-500 hover:text-white flex items-center"
+                            onclick={(e) => {
+                                e.stopPropagation();
+                                layer.visible = !layer.visible;
+                            }}
+                        >
+                            <span class="material-symbols-outlined text-[13px]">
+                                {layer.visible ? 'visibility' : 'visibility_off'}
+                            </span>
+                        </button>
+
+                        <!-- Botón duplicar -->
+                        <button
+                            class="layer-pill-btn text-gray-500 hover:text-emerald-400 flex items-center"
+                            onclick={(e) => {
+                                e.stopPropagation();
+                                traceManager.duplicateLayer(layer.id);
+                            }}
+                            title="Duplicar Capa"
+                        >
+                            <span class="material-symbols-outlined text-[13px]">content_copy</span>
+                        </button>
+
+                        <!-- Botón eliminar -->
+                        <button
+                            class="layer-pill-btn text-gray-500 hover:text-red-400 flex items-center"
+                            onclick={(e) => {
+                                e.stopPropagation();
+                                traceManager.deleteLayer(layer.id);
+                            }}
+                            title="Eliminar Capa"
+                        >
+                            <span class="material-symbols-outlined text-[13px]">delete</span>
+                        </button>
+                    </div>
+                {/each}
+
+                <!-- Botón Añadir Capa -->
+                <button
+                    class="add-layer-btn text-[#00ff88] hover:text-[#00ffbb] flex items-center"
+                    onclick={() => {
+                        const name = prompt("Nombre de la nueva capa:", `Capa ${traceManager.layers.length + 1}`);
+                        if (name) {
+                            traceManager.addLayer(name, id, 'live');
+                        }
+                    }}
+                    title="Añadir Nueva Capa"
+                >
+                    <span class="material-symbols-outlined text-[16px]">add_circle</span>
+                </button>
             </div>
         </div>
 
@@ -1164,6 +1376,31 @@
         display: flex;
         gap: 5px;
         flex-wrap: wrap;
+    }
+
+    .active-layers-badges {
+        display: flex;
+        gap: 6px;
+    }
+
+    .layer-badge-pill {
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+
+    .layer-badge-pill:hover {
+        background: rgba(255, 255, 255, 0.05);
+        border-color: #444;
+    }
+
+    .layer-pill-btn {
+        opacity: 0.6;
+        transition: all 0.2s ease;
+    }
+
+    .layer-pill-btn:hover {
+        opacity: 1;
+        transform: scale(1.1);
     }
 
     .metric-badge {

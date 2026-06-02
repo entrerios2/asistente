@@ -30,7 +30,13 @@
     let downloadFormat = $state("wav");
 
     // --- ESTADOS DE ECUALIZACIÓN ---
-    let eqType = $state("grafico"); // 'grafico' | 'parametrico' | 'tono'
+    let eqType = $state(uiStore.eqType); // 'grafico' | 'parametrico' | 'tono'
+    $effect(() => {
+        uiStore.eqType = eqType;
+    });
+    $effect(() => {
+        eqType = uiStore.eqType;
+    });
     let showEQ = $state(true); // Switch Mostrar Ecualización
     let numGraphicBands = $state(10); // 5 | 10 | 15
     let isCalculatingAutoEQ = $state(false);
