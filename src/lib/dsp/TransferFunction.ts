@@ -22,7 +22,7 @@ export class TransferFunction {
     }
 
     /**
-     * Añade un snapshot (FFT) de la señal de referencia y la señal medida.
+     * Añade un snapshot (FFT) de la señal de referencia y la señal medida (Zero-allocation).
      */
     addSnapshot(refReal: Float32Array, refImag: Float32Array, measReal: Float32Array, measImag: Float32Array) {
         for (let i = 0; i < this.bins; i++) {
@@ -37,8 +37,9 @@ export class TransferFunction {
             // Gyy: Y * conj(Y) = |Y|²
             this.gyy[i] += mR * mR + mI * mI;
 
-            // Gxy: Y * conj(X)
-            const [crossR, crossI] = ComplexMath.mulConjugate(mR, mI, rR, rI);
+            // Gxy: Y * conj(X) — Inlined complex multiplication conjugate for extreme speed
+            const crossR = mR * rR + mI * rI;
+            const crossI = mI * rR - mR * rI;
             this.gxyReal[i] += crossR;
             this.gxyImag[i] += crossI;
         }
@@ -48,15 +49,18 @@ export class TransferFunction {
     /**
      * Calcula la Magnitud (dB) y Fase (rad) de la Función de Transferencia H(f).
      * H(f) = E[Gxy] / E[Gxx]
+     * Escribe directamente en los Float32Arrays pre-asignados si se proporcionan.
+     * De lo contrario, retorna nuevos arrays para retrocompatibilidad.
      */
-    calculateH(): { magnitude: Float32Array; phase: Float32Array } {
-        const magnitude = new Float32Array(this.bins);
-        const phase = new Float32Array(this.bins);
+    calculateH(outMagnitude?: Float32Array, outPhase?: Float32Array): { magnitude: Float32Array; phase: Float32Array } {
+        const magnitude = outMagnitude || new Float32Array(this.bins);
+        const phase = outPhase || new Float32Array(this.bins);
+        const snapshotsCount = this.snapshots || 1e-12;
 
         for (let i = 0; i < this.bins; i++) {
-            const avgGxx = this.gxx[i] / this.snapshots;
-            const avgGxyR = this.gxyReal[i] / this.snapshots;
-            const avgGxyI = this.gxyImag[i] / this.snapshots;
+            const avgGxx = this.gxx[i] / snapshotsCount;
+            const avgGxyR = this.gxyReal[i] / snapshotsCount;
+            const avgGxyI = this.gxyImag[i] / snapshotsCount;
 
             // H = Gxy / Gxx
             const hReal = avgGxyR / (avgGxx + 1e-12);
@@ -73,15 +77,17 @@ export class TransferFunction {
     /**
      * Calcula la Coherencia γ²(f).
      * γ² = |E[Gxy]|² / (E[Gxx] * E[Gyy])
+     * Escribe en el Float32Array 'outCoherence' si se proporciona, de lo contrario retorna uno nuevo para retrocompatibilidad.
      */
-    calculateCoherence(): Float32Array {
-        const coherence = new Float32Array(this.bins);
+    calculateCoherence(outCoherence?: Float32Array): Float32Array {
+        const coherence = outCoherence || new Float32Array(this.bins);
+        const snapshotsCount = this.snapshots || 1e-12;
 
         for (let i = 0; i < this.bins; i++) {
-            const avgGxx = this.gxx[i] / this.snapshots;
-            const avgGyy = this.gyy[i] / this.snapshots;
-            const avgGxyR = this.gxyReal[i] / this.snapshots;
-            const avgGxyI = this.gxyImag[i] / this.snapshots;
+            const avgGxx = this.gxx[i] / snapshotsCount;
+            const avgGyy = this.gyy[i] / snapshotsCount;
+            const avgGxyR = this.gxyReal[i] / snapshotsCount;
+            const avgGxyI = this.gxyImag[i] / snapshotsCount;
 
             const crossMagSq = avgGxyR * avgGxyR + avgGxyI * avgGxyI;
             const den = avgGxx * avgGyy;

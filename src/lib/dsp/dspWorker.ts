@@ -66,6 +66,8 @@ self.onmessage = (event) => {
 
         const tempFullReal = new Float32Array(FFT_SIZE);
         const tempFullImag = new Float32Array(FFT_SIZE);
+        const tempFullRealOut = new Float32Array(FFT_SIZE);
+        const tempFullImagOut = new Float32Array(FFT_SIZE);
 
         const outputMagnitude = new Float32Array(BINS);
         const outputPhase = new Float32Array(BINS);
@@ -145,6 +147,8 @@ self.onmessage = (event) => {
                 outputImpulse,
                 tempFullReal,
                 tempFullImag,
+                tempFullRealOut,
+                tempFullImagOut,
             );
         }
         if (metricsSet.has("Step")) {

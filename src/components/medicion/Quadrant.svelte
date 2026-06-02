@@ -150,8 +150,8 @@
     let offscreenCanvas: HTMLCanvasElement | null = null;
     let offscreenCtx: CanvasRenderingContext2D | null = null;
 
-    // Precomputar LUT de colores para el espectrograma (256 colores)
-    const spectrogramLUT = new Array<string>(256);
+    // Precomputar LUT de colores en formato RGBA numérico para optimización extrema con ImageData
+    const spectrogramLUT_RGBA = new Uint8ClampedArray(256 * 3);
     for (let i = 0; i < 256; i++) {
         const norm = i / 255;
         let r = 0,
@@ -172,8 +172,14 @@
             g = 70 + Math.round(t * 185);
             b = 30 + Math.round(t * 180);
         }
-        spectrogramLUT[i] = `rgb(${r},${g},${b})`;
+        spectrogramLUT_RGBA[i * 3] = r;
+        spectrogramLUT_RGBA[i * 3 + 1] = g;
+        spectrogramLUT_RGBA[i * 3 + 2] = b;
     }
+
+    const smoothedMagnitude = new Float32Array(interpEngine.BINS);
+    const smoothedSpectrum = new Float32Array(interpEngine.BINS);
+    let sharedImageData: ImageData | null = null;
 
     let spectrogramDbHistory = $state<Float32Array[]>([]);
 
@@ -187,6 +193,9 @@
         if (offscreenCtx) {
             offscreenCtx.fillStyle = "#000000";
             offscreenCtx.fillRect(0, 0, w, maxHistory);
+            sharedImageData = offscreenCtx.createImageData(w, 1);
+        } else {
+            sharedImageData = null;
         }
         spectrogramDbHistory = [];
     }
@@ -355,38 +364,7 @@
         return count > 0 ? sum / count : dataArray[binIndex];
     }
 
-    // Caché reactivo de EQ (Playground)
-    const eqResponseCache = $derived.by(() => {
-        const size = 4096;
-        const cache = new Float32Array(size);
-        const sr = 48000;
-        for (let i = 0; i < size; i++) {
-            const freq = (i * sr) / 2 / size;
-            let totalGain = 0;
-            for (let b = 0; b < traceManager.eqBands.length; b++) {
-                const band = traceManager.eqBands[b];
-                const fo = band.freq;
-                const G = band.gain;
-                const Q = band.q;
 
-                const bw = fo / Q;
-                const dist = Math.abs(Math.log2(freq / fo || 1e-6));
-                const octBw = bw / fo;
-                const weight = Math.exp(-Math.pow(dist / (octBw * 1.2), 2));
-                totalGain += G * weight;
-            }
-            cache[i] = totalGain;
-        }
-        return cache;
-    });
-
-    function getEQResponseCached(f: number): number {
-        const binWidth = 24000 / 4096;
-        const idx = Math.round(f / binWidth);
-        if (idx < 0) return eqResponseCache[0];
-        if (idx >= 4096) return eqResponseCache[4095];
-        return eqResponseCache[idx];
-    }
 
     // CORE DRAW ENGINE
     function draw() {
@@ -423,11 +401,30 @@
             dirty = false;
         }
 
+        // Pre-suavizar las curvas para esta animación a 60FPS (incluyendo las transiciones de interpolación)
+        const magPPO = metricConfigs["Magnitude"]?.smoothingPPO || 48;
+        if (activeMetrics.includes("Magnitude") && magPPO < 48) {
+            for (let i = 0; i < BINS; i++) {
+                smoothedMagnitude[i] = getPPOSmoothedValue(i, interpEngine.interpMagnitude, magPPO);
+            }
+        } else {
+            smoothedMagnitude.set(interpEngine.interpMagnitude);
+        }
+
+        const specPPO = metricConfigs["Spectrum"]?.smoothingPPO || 48;
+        const hasLive = liveTrace && liveTrace.data && liveTrace.data.length > 0;
+        const rawSpec = hasLive ? liveTrace.data : interpEngine.interpMagnitude;
+        if (activeMetrics.includes("Spectrum") && specPPO < 48) {
+            for (let i = 0; i < BINS; i++) {
+                smoothedSpectrum[i] = getPPOSmoothedValue(i, rawSpec, specPPO);
+            }
+        } else {
+            smoothedSpectrum.set(rawSpec);
+        }
+
         // Alimentar buffer de Espectrograma en vivo optimizado con offscreen canvas
         if (
-            liveTrace &&
-            liveTrace.data &&
-            liveTrace.data.length > 0 &&
+            hasLive &&
             activeMetrics.includes("Spectrogram") &&
             !hasTimeDomainActive
         ) {
@@ -437,7 +434,7 @@
                 if (!offscreenCanvas || offscreenCanvas.width !== w) {
                     initOffscreenCanvas();
                 }
-                if (offscreenCtx && offscreenCanvas) {
+                if (offscreenCtx && offscreenCanvas && sharedImageData) {
                     // Desplazar el espectrograma existente 1 píxel hacia arriba
                     offscreenCtx.drawImage(
                         offscreenCanvas,
@@ -451,7 +448,8 @@
                         maxHistory - 1,
                     );
 
-                    // Dibujar la nueva fila en el extremo inferior
+                    // Dibujar la nueva fila en el extremo inferior usando ImageData pre-alocado para aceleración directa
+                    const pixels = sharedImageData.data;
                     const data = liveTrace.data;
                     const yRow = maxHistory - 1;
                     const logMin = Math.log10(freqMin);
@@ -471,9 +469,15 @@
                             Math.min(255, Math.floor(norm * 255)),
                         );
 
-                        offscreenCtx.fillStyle = spectrogramLUT[lutIdx];
-                        offscreenCtx.fillRect(x, yRow, 1, 1);
+                        const rIdx = lutIdx * 3;
+                        const pixelIdx = x * 4;
+                        pixels[pixelIdx] = spectrogramLUT_RGBA[rIdx];
+                        pixels[pixelIdx + 1] = spectrogramLUT_RGBA[rIdx + 1];
+                        pixels[pixelIdx + 2] = spectrogramLUT_RGBA[rIdx + 2];
+                        pixels[pixelIdx + 3] = 255; // Opacidad total
                     }
+
+                    offscreenCtx.putImageData(sharedImageData, 0, yRow);
 
                     spectrogramDbHistory.push(dbRow);
                     if (spectrogramDbHistory.length > maxHistory) {
@@ -483,12 +487,12 @@
             }
         }
 
-        // 3. Renderizar cada métrica seleccionada con zero-allocation helpers usando los buffers interpolados
+        // 3. Renderizar cada métrica seleccionada con zero-allocation helpers usando los buffers interpolados y pre-suavizados
         if (activeMetrics.includes("Magnitude") && !hasTimeDomainActive) {
             const style = metricStyles["Magnitude"];
             drawMetricPath(
                 ctx,
-                interpEngine.interpMagnitude,
+                smoothedMagnitude,
                 width,
                 height,
                 style.color,
@@ -499,7 +503,7 @@
                 interpEngine.interpCoherence,
                 metricConfigs,
                 interactionState,
-                getPPOSmoothedValue
+                (idx, arr) => arr[idx]
             );
         }
 
@@ -512,11 +516,11 @@
                 style,
                 frequencyLUT,
                 interpEngine.interpCoherence,
-                interpEngine.interpMagnitude,
+                smoothedMagnitude,
                 metricConfigs,
                 interactionState,
-                getPPOSmoothedValue,
-                getEQResponseCached,
+                (idx, arr) => arr[idx],
+                mathOrchestrator.getEQResponseCached.bind(mathOrchestrator),
                 BINS
             );
         }
@@ -533,10 +537,10 @@
                 style.lineDash,
                 frequencyLUT,
                 interpEngine.interpCoherence,
-                interpEngine.interpMagnitude,
+                smoothedSpectrum,
                 metricConfigs,
                 interactionState,
-                getPPOSmoothedValue,
+                (idx, arr) => arr[idx],
                 BINS
             );
         }

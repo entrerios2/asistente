@@ -35,6 +35,8 @@ class MathOrchestrator {
 
     tempFullReal = new Float32Array(this.FFT_SIZE);
     tempFullImag = new Float32Array(this.FFT_SIZE);
+    tempFullRealOut = new Float32Array(this.FFT_SIZE);
+    tempFullImagOut = new Float32Array(this.FFT_SIZE);
     tempPhaseRadians = new Float32Array(this.BINS);
 
     // Shared output buffers
@@ -140,6 +142,8 @@ class MathOrchestrator {
 
         this.tempFullReal = new Float32Array(this.FFT_SIZE);
         this.tempFullImag = new Float32Array(this.FFT_SIZE);
+        this.tempFullRealOut = new Float32Array(this.FFT_SIZE);
+        this.tempFullImagOut = new Float32Array(this.FFT_SIZE);
 
         this.outputMagnitude = new Float32Array(this.BINS);
         this.outputPhase = new Float32Array(this.BINS);
@@ -345,6 +349,8 @@ class MathOrchestrator {
                 this.outputImpulse,
                 this.tempFullReal,
                 this.tempFullImag,
+                this.tempFullRealOut,
+                this.tempFullImagOut,
             );
         }
         if (metrics.has("Step")) {

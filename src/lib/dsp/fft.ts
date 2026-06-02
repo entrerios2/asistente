@@ -3,30 +3,65 @@
  * Implementación pura Radix-2 DIT (Decimation-In-Time).
  */
 
+let webfftInstance: any = null;
+
+// Intento de carga dinámica de WebFFT para aceleración por hardware si está disponible
+if (typeof window !== 'undefined') {
+    // @ts-ignore
+    const webfftPkg = 'web' + 'fft';
+    import(/* @vite-ignore */ webfftPkg)
+        .then((module) => {
+            if (module && module.default) {
+                webfftInstance = new module.default(8192);
+            }
+        })
+        .catch(() => {
+            // WebFFT no disponible, se usará Radix-2 local
+        });
+}
+
+const windowLUTCache: Record<string, Float32Array> = {};
+
+function getWindowLUT(size: number, type: 'hanning' | 'blackman'): Float32Array {
+    const key = `${size}_${type}`;
+    if (!windowLUTCache[key]) {
+        const lut = new Float32Array(size);
+        for (let n = 0; n < size; n++) {
+            if (type === 'hanning') {
+                lut[n] = 0.5 * (1 - Math.cos((2 * Math.PI * n) / (size - 1)));
+            } else if (type === 'blackman') {
+                lut[n] = 0.42 - 0.5 * Math.cos((2 * Math.PI * n) / (size - 1)) + 0.08 * Math.cos((4 * Math.PI * n) / (size - 1));
+            } else {
+                lut[n] = 1.0;
+            }
+        }
+        windowLUTCache[key] = lut;
+    }
+    return windowLUTCache[key];
+}
+
 /**
- * Aplica una ventana de suavizado in-place para reducir el "spectral leakage".
+ * Aplica una ventana de suavizado in-place usando LUTs pre-calculadas para evitar Math.cos().
  */
 export function applyWindow(data: Float32Array, type: 'hanning' | 'blackman'): void {
     const N = data.length;
+    const lut = getWindowLUT(N, type);
     for (let n = 0; n < N; n++) {
-        if (type === 'hanning') {
-            data[n] *= 0.5 * (1 - Math.cos((2 * Math.PI * n) / (N - 1)));
-        } else if (type === 'blackman') {
-            data[n] *= 0.42 - 0.5 * Math.cos((2 * Math.PI * n) / (N - 1)) + 0.08 * Math.cos((4 * Math.PI * n) / (N - 1));
-        }
+        data[n] *= lut[n];
     }
 }
 
 /**
- * Calcula la magnitud de un espectro complejo.
+ * Calcula la magnitud de un espectro complejo y escribe directamente en el buffer de salida 'outMag' si se proporciona.
+ * De lo contrario, crea y retorna un nuevo array de magnitudes para retrocompatibilidad.
  */
-export function magnitude(real: Float32Array, imag: Float32Array): Float32Array {
+export function magnitude(real: Float32Array, imag: Float32Array, outMag?: Float32Array): Float32Array {
     const N = real.length;
-    const mag = new Float32Array(N);
+    const m = outMag || new Float32Array(N);
     for (let i = 0; i < N; i++) {
-        mag[i] = Math.sqrt(real[i] * real[i] + imag[i] * imag[i]);
+        m[i] = Math.sqrt(real[i] * real[i] + imag[i] * imag[i]);
     }
-    return mag;
+    return m;
 }
 
 /**
@@ -52,8 +87,12 @@ function coreFFT(real: Float32Array, imag: Float32Array, inverse: boolean): void
     for (let i = 0; i < N; i++) {
         const j = bitReverse(i, bits);
         if (j > i) {
-            [real[i], real[j]] = [real[j], real[i]];
-            [imag[i], imag[j]] = [imag[j], imag[i]];
+            const tempReal = real[i];
+            const tempImag = imag[i];
+            real[i] = real[j];
+            imag[i] = imag[j];
+            real[j] = tempReal;
+            imag[j] = tempImag;
         }
     }
 
@@ -97,23 +136,29 @@ function coreFFT(real: Float32Array, imag: Float32Array, inverse: boolean): void
 }
 
 /**
- * FFT Directa (Real to Complex).
+ * FFT Directa escribiendo directamente en buffers de salida pre-asignados si se proporcionan.
+ * De lo contrario, crea y retorna nuevos Float32Arrays para retrocompatibilidad.
  */
-export function fft(input: Float32Array): { real: Float32Array; imag: Float32Array } {
+export function fft(input: Float32Array, outReal?: Float32Array, outImag?: Float32Array): { real: Float32Array, imag: Float32Array } {
     const N = input.length;
-    const real = new Float32Array(input);
-    const imag = new Float32Array(N);
-    coreFFT(real, imag, false);
-    return { real, imag };
+    const r = outReal || new Float32Array(N);
+    const i = outImag || new Float32Array(N);
+    r.set(input);
+    i.fill(0);
+    coreFFT(r, i, false);
+    return { real: r, imag: i };
 }
 
 /**
- * FFT Inversa (Complex to Real).
- * Retorna solo la parte real ya que se usa para señales físicas IR.
+ * FFT Inversa escribiendo directamente en buffers de salida pre-asignados si se proporcionan.
+ * De lo contrario, crea y retorna nuevos Float32Arrays para retrocompatibilidad.
  */
-export function ifft(realInput: Float32Array, imagInput: Float32Array): Float32Array {
-    const real = new Float32Array(realInput);
-    const imag = new Float32Array(imagInput);
-    coreFFT(real, imag, true);
-    return real;
+export function ifft(realInput: Float32Array, imagInput: Float32Array, outReal?: Float32Array, outImag?: Float32Array): Float32Array {
+    const N = realInput.length;
+    const r = outReal || new Float32Array(N);
+    const i = outImag || new Float32Array(N);
+    r.set(realInput);
+    i.set(imagInput);
+    coreFFT(r, i, true);
+    return r;
 }
