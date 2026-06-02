@@ -346,7 +346,12 @@ class MathOrchestrator {
                 inputGain: uiStore.inputGain,
                 displayOffset: uiStore.displayOffset,
                 isMeasuring,
-                metrics: Array.from(this.globalActiveMetrics)
+                metrics: Array.from(this.globalActiveMetrics),
+                weightingType: uiStore.weightingType,
+                averagingType: uiStore.averagingType,
+                averagingDepth: uiStore.averagingDepth,
+                averagingAlpha: uiStore.averagingAlpha,
+                windowType: uiStore.windowType
             }, liveDataTransfer ? [liveDataTransfer] : []);
 
             if (this.dirty) {

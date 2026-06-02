@@ -42,6 +42,15 @@ class UIStore {
     inputGain = $state(0); // Ganancia de entrada en dB (-20 a +20)
     displayOffset = $state(0); // Offset de visualización en dB (-100 a +100)
 
+    // NUEVOS CONTROLES DSP AVANZADOS - PARIDAD OSM (PROMPT 9)
+    weightingType = $state<'A' | 'B' | 'C' | 'Z'>('Z');
+    averagingType = $state<'None' | 'FIFO' | 'LPF'>('None');
+    averagingDepth = $state(16);
+    averagingAlpha = $state(0.1);
+    windowType = $state<'Rectangular' | 'Hann' | 'Hamming' | 'FlatTop' | 'BlackmanHarris' | 'HFT223D' | 'Exponential'>('Hann');
+    enableLeq = $state(false);
+    leqWindowSeconds = $state(10);
+
     toggleSnapshots() {
         this.showSnapshots = !this.showSnapshots;
     }

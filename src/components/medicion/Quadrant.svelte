@@ -1,16 +1,12 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import { traceManager, type Trace } from "$lib/stores/traceManager.svelte";
+    import { traceManager } from "$lib/stores/traceManager.svelte";
     import { uiStore } from "$lib/stores/ui.svelte";
     import { meterStore } from "$lib/stores/meterStore.svelte";
     import { mathOrchestrator } from "$lib/stores/mathOrchestrator.svelte";
 
     import { InterpolationEngine } from "$lib/dsp/interpolationEngine";
     import {
-        valToX,
-        valToY,
-        xToVal,
-        yToVal,
         handleWheel as interactionHandleWheel,
         handleMouseMove as interactionHandleMouseMove,
         handleMouseDown as interactionHandleMouseDown,
@@ -31,8 +27,6 @@
         drawNumericOverlay,
         drawCrosshair,
         drawMetricPath,
-        drawSpectrumPath,
-        drawTimeDomainPath,
         drawSimulatedMagnitudePath,
         drawPhasePath
     } from "$lib/dsp/canvasRenderers";

@@ -5,6 +5,9 @@ import {
     calculateStepResponse,
     calculateGroupDelay,
 } from './osmMetrics';
+import { getWeightingGain } from './weighting';
+import { ComplexAveraging } from './averaging';
+import { deconvolve } from './deconvolution';
 
 interface EQBand {
     freq: number;
@@ -95,7 +98,7 @@ function getPhaseValueRadians(freq: number, isMeasuring: boolean, eqBands: EQBan
                     const sqrtA2alpha = 2 * Math.sqrt(A) * alpha;
                     b0 = A * ((A + 1) + (A - 1) * cosW0 + sqrtA2alpha);
                     b1 = -2 * A * ((A - 1) + (A + 1) * cosW0);
-                    b2 = A * ((A + 1) + (A - 1) * cosW0 - sqrtA2alpha);
+                    b2 = A * ((A + 1) - (A - 1) * cosW0 - sqrtA2alpha);
                     a0 = (A + 1) - (A - 1) * cosW0 + sqrtA2alpha;
                     a1 = 2 * ((A - 1) - (A + 1) * cosW0);
                     a2 = (A + 1) - (A - 1) * cosW0 - sqrtA2alpha;
@@ -191,8 +194,14 @@ let outputImpulse: Float32Array;
 let outputStep: Float32Array;
 let tempPhaseRadians: Float32Array;
 
+// Temp buffers for averaging
+let avgInputReal: Float32Array;
+let avgInputImag: Float32Array;
+
 let currentBins = 0;
 let currentFftSize = 0;
+
+let averagingProcessor: ComplexAveraging | null = null;
 
 self.onmessage = (event) => {
     if (event.data && event.data.type === 'run-dsp') {
@@ -207,7 +216,11 @@ self.onmessage = (event) => {
             inputGain,
             displayOffset,
             isMeasuring,
-            metrics
+            metrics,
+            weightingType,
+            averagingType,
+            averagingDepth,
+            averagingAlpha
         } = event.data;
 
         // Re-allocate only if dimensions changed
@@ -234,6 +247,15 @@ self.onmessage = (event) => {
             outputImpulse = new Float32Array(FFT_SIZE);
             outputStep = new Float32Array(FFT_SIZE);
             tempPhaseRadians = new Float32Array(BINS);
+
+            avgInputReal = new Float32Array(BINS);
+            avgInputImag = new Float32Array(BINS);
+
+            averagingProcessor = new ComplexAveraging(BINS, averagingDepth || 16);
+        }
+
+        if (averagingProcessor) {
+            averagingProcessor.setDepth(averagingDepth || 16);
         }
 
         const metricsSet = new Set<string>(metrics);
@@ -253,13 +275,16 @@ self.onmessage = (event) => {
                 const mapIdx = Math.floor((k * liveTraceData.length) / BINS);
                 liveDb = liveTraceData[mapIdx] || -120;
 
-                // 1. Aplicar ganancia de entrada (Prompt 7)
+                // 1. Aplicar ganancia de entrada
                 liveDb += inputGain || 0;
 
-                // 2. Compensar curva de calibración acústica (Prompt 7)
+                // 2. Compensar curva de calibración acústica
                 liveDb -= getCalibrationGainAt(f_k, calibrationPoints);
 
-                // 3. Aplicar offset absoluto de visualización (Prompt 7)
+                // 3. Aplicar ponderación de frecuencia ANSI (A, B, C, Z) (Prompt 9)
+                liveDb += getWeightingGain(f_k, weightingType || 'Z');
+
+                // 4. Aplicar offset absoluto de visualización
                 liveDb += displayOffset || 0;
             } else {
                 const binWidth = 24000 / BINS;
@@ -267,7 +292,8 @@ self.onmessage = (event) => {
                 const eqGain = eqResponseCache[idx] || 0;
                 liveDb = -50 + eqGain + Math.sin(k * 0.08) * 0.3;
 
-                // Aplicar offset de visualización al simulado también
+                // Aplicar ponderación también a la simulación si está calibrada
+                liveDb += getWeightingGain(f_k, weightingType || 'Z');
                 liveDb += displayOffset || 0;
             }
 
@@ -280,6 +306,19 @@ self.onmessage = (event) => {
             fftRefImag[k] = refMag * Math.sin(refPhase);
 
             outputCoherence[k] = getCoherenceValue(f_k, isMeasuring, eqBands);
+        }
+
+        // 5. Aplicar Promediado Complejo sobre el espectro de entrada (Prompt 9)
+        if (averagingProcessor && averagingType !== 'None') {
+            if (averagingType === 'FIFO') {
+                averagingProcessor.processFIFO(fftInputReal, fftInputImag, avgInputReal, avgInputImag);
+                fftInputReal.set(avgInputReal);
+                fftInputImag.set(avgInputImag);
+            } else if (averagingType === 'LPF') {
+                averagingProcessor.processLPF(fftInputReal, fftInputImag, avgInputReal, avgInputImag, averagingAlpha || 0.1);
+                fftInputReal.set(avgInputReal);
+                fftInputImag.set(avgInputImag);
+            }
         }
 
         // Calcular el valor RMS o Peak del espectro
@@ -314,17 +353,22 @@ self.onmessage = (event) => {
                 outputPhase,
             );
         }
+        
+        // 6. Deconvolución en Tiempo Real (Prompt 9)
         if (needImpulse) {
-            calculateImpulseResponse(
-                hReal,
-                hImag,
+            deconvolve(
+                fftInputReal,
+                fftInputImag,
+                fftRefReal,
+                fftRefImag,
                 outputImpulse,
                 tempFullReal,
                 tempFullImag,
                 tempFullRealOut,
-                tempFullImagOut,
+                tempFullImagOut
             );
         }
+
         if (metricsSet.has("Step")) {
             calculateStepResponse(outputImpulse, outputStep);
         }
