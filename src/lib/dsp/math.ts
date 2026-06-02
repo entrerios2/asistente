@@ -64,4 +64,28 @@ export class ComplexMath {
         }
         return [r, i];
     }
+
+    /**
+     * Valida y restringe un valor de frecuencia dentro del rango audible humano (20Hz - 20kHz).
+     */
+    static sanitizeFrequency(freq: number): number {
+        if (isNaN(freq) || typeof freq !== 'number') return 1000;
+        return Math.max(20, Math.min(20000, freq));
+    }
+
+    /**
+     * Valida y restringe un valor de ganancia (dB) dentro de un rango seguro (-100dB a +24dB).
+     */
+    static sanitizeGain(gain: number): number {
+        if (isNaN(gain) || typeof gain !== 'number') return 0;
+        return Math.max(-100, Math.min(24, gain));
+    }
+
+    /**
+     * Valida y restringe un valor de factor Q (calidad de filtro).
+     */
+    static sanitizeQ(q: number): number {
+        if (isNaN(q) || typeof q !== 'number') return 1.0;
+        return Math.max(0.1, Math.min(50, q));
+    }
 }

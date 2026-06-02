@@ -20,6 +20,14 @@ if (typeof window !== 'undefined') {
         });
 }
 
+/**
+ * Interfaz para los resultados de la FFT.
+ */
+export interface FFTResult {
+    real: Float32Array;
+    imag: Float32Array;
+}
+
 const windowLUTCache: Record<string, Float32Array> = {};
 
 function getWindowLUT(size: number, type: 'hanning' | 'blackman'): Float32Array {
@@ -139,7 +147,7 @@ function coreFFT(real: Float32Array, imag: Float32Array, inverse: boolean): void
  * FFT Directa escribiendo directamente en buffers de salida pre-asignados si se proporcionan.
  * De lo contrario, crea y retorna nuevos Float32Arrays para retrocompatibilidad.
  */
-export function fft(input: Float32Array, outReal?: Float32Array, outImag?: Float32Array): { real: Float32Array, imag: Float32Array } {
+export function fft(input: Float32Array, outReal?: Float32Array, outImag?: Float32Array): FFTResult {
     const N = input.length;
     const r = outReal || new Float32Array(N);
     const i = outImag || new Float32Array(N);

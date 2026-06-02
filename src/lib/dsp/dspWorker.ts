@@ -6,7 +6,27 @@ import {
     calculateGroupDelay,
 } from './osmMetrics';
 
-function getPhaseValueRadians(freq: number, isMeasuring: boolean, eqBands: any[], calibrationFilters: any[]): number {
+interface EQBand {
+    freq: number;
+    gain: number;
+    q: number;
+    type: string;
+}
+
+interface EQFilter {
+    frequency: number;
+    gain: number;
+    q: number;
+    type: 'peaking' | 'highshelf' | 'lowshelf';
+    enabled: boolean;
+}
+
+interface CalibrationPoint {
+    frequency: number;
+    gain: number;
+}
+
+function getPhaseValueRadians(freq: number, isMeasuring: boolean, eqBands: EQBand[], calibrationFilters: EQFilter[]): number {
     const delayMs = 1.4;
     let phase = -2 * Math.PI * freq * (delayMs / 1000);
 
@@ -103,7 +123,7 @@ function getPhaseValueRadians(freq: number, isMeasuring: boolean, eqBands: any[]
     return phase;
 }
 
-function getCoherenceValue(freq: number, isMeasuring: boolean, eqBands: any[]): number {
+function getCoherenceValue(freq: number, isMeasuring: boolean, eqBands: EQBand[]): number {
     let coh = 0.98;
     if (freq < 45) coh -= 0.35 * (1 - freq / 45);
     if (freq > 16000) coh -= (0.12 * (freq - 16000)) / 4000;
@@ -121,7 +141,7 @@ function getCoherenceValue(freq: number, isMeasuring: boolean, eqBands: any[]): 
     return Math.max(0.01, Math.min(1, coh));
 }
 
-function getCalibrationGainAt(freq: number, pts: any[]): number {
+function getCalibrationGainAt(freq: number, pts: CalibrationPoint[]): number {
     if (!pts || pts.length === 0) return 0;
     if (freq <= pts[0].frequency) return pts[0].gain;
     if (freq >= pts[pts.length - 1].frequency) return pts[pts.length - 1].gain;
@@ -150,6 +170,30 @@ function getCalibrationGainAt(freq: number, pts: any[]): number {
     return g0 * (1 - t) + g1 * t;
 }
 
+// Shared calculation buffers in worker scope to avoid GC pressure
+let fftInputReal: Float32Array;
+let fftInputImag: Float32Array;
+let fftRefReal: Float32Array;
+let fftRefImag: Float32Array;
+let hReal: Float32Array;
+let hImag: Float32Array;
+
+let tempFullReal: Float32Array;
+let tempFullImag: Float32Array;
+let tempFullRealOut: Float32Array;
+let tempFullImagOut: Float32Array;
+
+let outputMagnitude: Float32Array;
+let outputPhase: Float32Array;
+let outputCoherence: Float32Array;
+let outputGroupDelay: Float32Array;
+let outputImpulse: Float32Array;
+let outputStep: Float32Array;
+let tempPhaseRadians: Float32Array;
+
+let currentBins = 0;
+let currentFftSize = 0;
+
 self.onmessage = (event) => {
     if (event.data && event.data.type === 'run-dsp') {
         const {
@@ -166,30 +210,34 @@ self.onmessage = (event) => {
             metrics
         } = event.data;
 
+        // Re-allocate only if dimensions changed
+        if (BINS !== currentBins || FFT_SIZE !== currentFftSize) {
+            currentBins = BINS;
+            currentFftSize = FFT_SIZE;
+            
+            fftInputReal = new Float32Array(BINS);
+            fftInputImag = new Float32Array(BINS);
+            fftRefReal = new Float32Array(BINS);
+            fftRefImag = new Float32Array(BINS);
+            hReal = new Float32Array(BINS);
+            hImag = new Float32Array(BINS);
+
+            tempFullReal = new Float32Array(FFT_SIZE);
+            tempFullImag = new Float32Array(FFT_SIZE);
+            tempFullRealOut = new Float32Array(FFT_SIZE);
+            tempFullImagOut = new Float32Array(FFT_SIZE);
+
+            outputMagnitude = new Float32Array(BINS);
+            outputPhase = new Float32Array(BINS);
+            outputCoherence = new Float32Array(BINS);
+            outputGroupDelay = new Float32Array(BINS);
+            outputImpulse = new Float32Array(FFT_SIZE);
+            outputStep = new Float32Array(FFT_SIZE);
+            tempPhaseRadians = new Float32Array(BINS);
+        }
+
         const metricsSet = new Set<string>(metrics);
-
         const liveTraceData = liveData ? new Float32Array(liveData) : null;
-
-        // Shared calculation buffers in worker context
-        const fftInputReal = new Float32Array(BINS);
-        const fftInputImag = new Float32Array(BINS);
-        const fftRefReal = new Float32Array(BINS);
-        const fftRefImag = new Float32Array(BINS);
-        const hReal = new Float32Array(BINS);
-        const hImag = new Float32Array(BINS);
-
-        const tempFullReal = new Float32Array(FFT_SIZE);
-        const tempFullImag = new Float32Array(FFT_SIZE);
-        const tempFullRealOut = new Float32Array(FFT_SIZE);
-        const tempFullImagOut = new Float32Array(FFT_SIZE);
-
-        const outputMagnitude = new Float32Array(BINS);
-        const outputPhase = new Float32Array(BINS);
-        const outputCoherence = new Float32Array(BINS);
-        const outputGroupDelay = new Float32Array(BINS);
-        const outputImpulse = new Float32Array(FFT_SIZE);
-        const outputStep = new Float32Array(FFT_SIZE);
-        const tempPhaseRadians = new Float32Array(BINS);
 
         for (let k = 0; k < BINS; k++) {
             const f_k = k * (24000 / BINS) || 1e-6;
@@ -289,20 +337,13 @@ self.onmessage = (event) => {
 
         (self as any).postMessage({
             type: 'dsp-results',
-            outputMagnitude: outputMagnitude.buffer,
-            outputPhase: outputPhase.buffer,
-            outputCoherence: outputCoherence.buffer,
-            outputGroupDelay: outputGroupDelay.buffer,
-            outputImpulse: outputImpulse.buffer,
-            outputStep: outputStep.buffer,
+            outputMagnitude: outputMagnitude.slice().buffer,
+            outputPhase: outputPhase.slice().buffer,
+            outputCoherence: outputCoherence.slice().buffer,
+            outputGroupDelay: outputGroupDelay.slice().buffer,
+            outputImpulse: outputImpulse.slice().buffer,
+            outputStep: outputStep.slice().buffer,
             dbIn
-        }, [
-            outputMagnitude.buffer,
-            outputPhase.buffer,
-            outputCoherence.buffer,
-            outputGroupDelay.buffer,
-            outputImpulse.buffer,
-            outputStep.buffer
-        ]);
+        });
     }
 };
