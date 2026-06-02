@@ -1,5 +1,5 @@
 import { base } from '$app/paths';
-import type { AudioProvider, AudioListener, SignalType } from '../types';
+import type { AudioProvider, AudioListener, SignalType, AudioDevice } from '../types';
 import { meterStore } from '../../stores/meterStore.svelte';
 import {
 	generateWhiteNoise,
@@ -268,5 +268,33 @@ export class WebAudioProvider implements AudioProvider {
 
 	getSharedBuffer(): SharedArrayBuffer | null {
 		return this.sab;
+	}
+
+	async listDevices(): Promise<AudioDevice[]> {
+		try {
+			const devices = await navigator.mediaDevices.enumerateDevices();
+			const audioDevices: AudioDevice[] = [];
+			devices.forEach((d) => {
+				if (d.kind === 'audioinput' || d.kind === 'audiooutput') {
+					audioDevices.push({
+						id: d.deviceId,
+						name: d.label || (d.kind === 'audioinput' ? 'Micrófono Web' : 'Salida de Audio Web'),
+						backend: 'WebAudio',
+						direction: d.kind === 'audioinput' ? 'input' : 'output',
+						channels: 2, // Fallback estricto de 2 canales en la versión web
+					});
+				}
+			});
+			return audioDevices;
+		} catch (e) {
+			return [
+				{ id: 'default-in', name: 'Micrófono por Defecto', backend: 'WebAudio', direction: 'input', channels: 2 },
+				{ id: 'default-out', name: 'Salida por Defecto', backend: 'WebAudio', direction: 'output', channels: 2 }
+			];
+		}
+	}
+
+	async selectDevice(id: string, direction: 'input' | 'output'): Promise<void> {
+		console.info(`WebAudioProvider: Selección de dispositivo simulada [${direction}]: ${id}`);
 	}
 }

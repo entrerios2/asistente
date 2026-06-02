@@ -9,6 +9,7 @@ pub struct AudioDevice {
     name: String,
     backend: String,
     direction: String,
+    channels: u16,
 }
 
 pub struct AudioState {
@@ -29,11 +30,19 @@ fn list_audio_devices() -> Vec<AudioDevice> {
         if let Ok(input_devices) = host.input_devices() {
             for device in input_devices {
                 if let Ok(name) = device.name() {
+                    let mut channels = 2; // Fallback por defecto
+                    if let Ok(configs) = device.supported_input_configs() {
+                        if let Some(config) = configs.map(|c| c.channels()).max() {
+                            channels = config;
+                        }
+                    }
+
                     devices.push(AudioDevice {
                         id: name.clone(),
                         name,
                         backend: backend.clone(),
                         direction: "input".to_string(),
+                        channels,
                     });
                 }
             }
@@ -43,11 +52,19 @@ fn list_audio_devices() -> Vec<AudioDevice> {
         if let Ok(output_devices) = host.output_devices() {
             for device in output_devices {
                 if let Ok(name) = device.name() {
+                    let mut channels = 2; // Fallback por defecto
+                    if let Ok(configs) = device.supported_output_configs() {
+                        if let Some(config) = configs.map(|c| c.channels()).max() {
+                            channels = config;
+                        }
+                    }
+
                     devices.push(AudioDevice {
                         id: name.clone(),
                         name,
                         backend: backend.clone(),
                         direction: "output".to_string(),
+                        channels,
                     });
                 }
             }

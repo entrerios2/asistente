@@ -6,16 +6,97 @@ import {
     calculateGroupDelay,
 } from './osmMetrics';
 
-function getPhaseValueRadians(freq: number, isMeasuring: boolean, eqBands: any[]): number {
+function getPhaseValueRadians(freq: number, isMeasuring: boolean, eqBands: any[], calibrationFilters: any[]): number {
     const delayMs = 1.4;
     let phase = -2 * Math.PI * freq * (delayMs / 1000);
 
     for (let b = 0; b < eqBands.length; b++) {
         const band = eqBands[b];
-        const dist = Math.log2(freq / band.freq || 1e-6);
-        const weight = dist / (1 + dist * dist * band.q);
-        phase += band.gain * 0.04 * weight;
+        if (band.gain !== 0) {
+            const w0 = 2 * Math.PI * band.freq / 48000;
+            const sinW0 = Math.sin(w0);
+            const cosW0 = Math.cos(w0);
+            const alpha = sinW0 / (2 * band.q);
+            const A = Math.pow(10, band.gain / 40);
+
+            const b0 = 1 + alpha * A;
+            const b1 = -2 * cosW0;
+            const b2 = 1 - alpha * A;
+            const a0 = 1 + alpha / A;
+            const a1 = -2 * cosW0;
+            const a2 = 1 - alpha / A;
+
+            const w = 2 * Math.PI * freq / 48000;
+            const cosW = Math.cos(w);
+            const sinW = Math.sin(w);
+            const cos2W = Math.cos(2 * w);
+            const sin2W = Math.sin(2 * w);
+
+            const nI = -(b1 * sinW + b2 * sin2W);
+            const nR = b0 + b1 * cosW + b2 * cos2W;
+            const dI = -(a1 * sinW + a2 * sin2W);
+            const dR = a0 + a1 * cosW + a2 * cos2W;
+
+            phase += Math.atan2(nI, nR) - Math.atan2(dI, dR);
+        }
     }
+
+    if (calibrationFilters) {
+        for (const filter of calibrationFilters) {
+            if (filter.enabled) {
+                const fc = filter.frequency;
+                const G = filter.gain;
+                const Q = filter.q;
+                const A = Math.pow(10, G / 40);
+                const w0 = 2 * Math.PI * fc / 48000;
+                const sinW0 = Math.sin(w0);
+                const cosW0 = Math.cos(w0);
+                
+                let b0 = 0, b1 = 0, b2 = 0, a0 = 0, a1 = 0, a2 = 0;
+                if (filter.type === 'peaking') {
+                    const alpha = sinW0 / (2 * Q);
+                    b0 = 1 + alpha * A;
+                    b1 = -2 * cosW0;
+                    b2 = 1 - alpha * A;
+                    a0 = 1 + alpha / A;
+                    a1 = -2 * cosW0;
+                    a2 = 1 - alpha / A;
+                } else if (filter.type === 'lowshelf') {
+                    const alpha = sinW0 / 2 * Math.sqrt((A + 1/A) * (1/Q - 1) + 2);
+                    const sqrtA2alpha = 2 * Math.sqrt(A) * alpha;
+                    b0 = A * ((A + 1) - (A - 1) * cosW0 + sqrtA2alpha);
+                    b1 = 2 * A * ((A - 1) - (A + 1) * cosW0);
+                    b2 = A * ((A + 1) - (A - 1) * cosW0 - sqrtA2alpha);
+                    a0 = (A + 1) + (A - 1) * cosW0 + sqrtA2alpha;
+                    a1 = -2 * ((A - 1) + (A + 1) * cosW0);
+                    a2 = (A + 1) + (A - 1) * cosW0 - sqrtA2alpha;
+                } else if (filter.type === 'highshelf') {
+                    const alpha = sinW0 / 2 * Math.sqrt((A + 1/A) * (1/Q - 1) + 2);
+                    const sqrtA2alpha = 2 * Math.sqrt(A) * alpha;
+                    b0 = A * ((A + 1) + (A - 1) * cosW0 + sqrtA2alpha);
+                    b1 = -2 * A * ((A - 1) + (A + 1) * cosW0);
+                    b2 = A * ((A + 1) + (A - 1) * cosW0 - sqrtA2alpha);
+                    a0 = (A + 1) - (A - 1) * cosW0 + sqrtA2alpha;
+                    a1 = 2 * ((A - 1) - (A + 1) * cosW0);
+                    a2 = (A + 1) - (A - 1) * cosW0 - sqrtA2alpha;
+                }
+
+                const w = 2 * Math.PI * freq / 48000;
+                const cosW = Math.cos(w);
+                const sinW = Math.sin(w);
+                const cos2W = Math.cos(2 * w);
+                const sin2W = Math.sin(2 * w);
+
+                const nI = -(b1 * sinW + b2 * sin2W);
+                const nR = b0 + b1 * cosW + b2 * cos2W;
+                const dI = -(a1 * sinW + a2 * sin2W);
+                const dR = a0 + a1 * cosW + a2 * cos2W;
+
+                phase += Math.atan2(nI, nR) - Math.atan2(dI, dR);
+            }
+        }
+    }
+
     if (isMeasuring) {
         phase += (Math.random() - 0.5) * 0.04;
     }
@@ -40,6 +121,35 @@ function getCoherenceValue(freq: number, isMeasuring: boolean, eqBands: any[]): 
     return Math.max(0.01, Math.min(1, coh));
 }
 
+function getCalibrationGainAt(freq: number, pts: any[]): number {
+    if (!pts || pts.length === 0) return 0;
+    if (freq <= pts[0].frequency) return pts[0].gain;
+    if (freq >= pts[pts.length - 1].frequency) return pts[pts.length - 1].gain;
+
+    let low = 0;
+    let high = pts.length - 1;
+    while (high - low > 1) {
+        const mid = (low + high) >> 1;
+        if (pts[mid].frequency > freq) {
+            high = mid;
+        } else {
+            low = mid;
+        }
+    }
+
+    const f0 = pts[low].frequency;
+    const g0 = pts[low].gain;
+    const f1 = pts[high].frequency;
+    const g1 = pts[high].gain;
+
+    const logF = Math.log10(freq);
+    const logF0 = Math.log10(f0);
+    const logF1 = Math.log10(f1);
+
+    const t = (logF - logF0) / (logF1 - logF0 || 1);
+    return g0 * (1 - t) + g1 * t;
+}
+
 self.onmessage = (event) => {
     if (event.data && event.data.type === 'run-dsp') {
         const {
@@ -48,6 +158,10 @@ self.onmessage = (event) => {
             FFT_SIZE,
             eqResponseCache,
             eqBands,
+            calibrationFilters,
+            calibrationPoints,
+            inputGain,
+            displayOffset,
             isMeasuring,
             metrics
         } = event.data;
@@ -90,15 +204,27 @@ self.onmessage = (event) => {
             if (liveTraceData && liveTraceData.length > 0) {
                 const mapIdx = Math.floor((k * liveTraceData.length) / BINS);
                 liveDb = liveTraceData[mapIdx] || -120;
+
+                // 1. Aplicar ganancia de entrada (Prompt 7)
+                liveDb += inputGain || 0;
+
+                // 2. Compensar curva de calibración acústica (Prompt 7)
+                liveDb -= getCalibrationGainAt(f_k, calibrationPoints);
+
+                // 3. Aplicar offset absoluto de visualización (Prompt 7)
+                liveDb += displayOffset || 0;
             } else {
                 const binWidth = 24000 / BINS;
                 const idx = Math.max(0, Math.min(BINS - 1, Math.round(f_k / binWidth)));
                 const eqGain = eqResponseCache[idx] || 0;
                 liveDb = -50 + eqGain + Math.sin(k * 0.08) * 0.3;
+
+                // Aplicar offset de visualización al simulado también
+                liveDb += displayOffset || 0;
             }
 
             const liveMag = Math.pow(10, liveDb / 20);
-            const phaseTotal = getPhaseValueRadians(f_k, isMeasuring, eqBands) + refPhase;
+            const phaseTotal = getPhaseValueRadians(f_k, isMeasuring, eqBands, calibrationFilters) + refPhase;
 
             fftInputReal[k] = liveMag * Math.cos(phaseTotal);
             fftInputImag[k] = liveMag * Math.sin(phaseTotal);

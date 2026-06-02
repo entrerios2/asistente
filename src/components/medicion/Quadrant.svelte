@@ -592,6 +592,80 @@
             ctx.globalAlpha = 1.0; // Restablecer opacidad
         });
 
+        // 3.5. Renderizar curvas de las Instantáneas globales que estén visibles (Prompt 8)
+        traceManager.instantaneas.forEach((snap) => {
+            if (!snap.visible) return;
+
+            // Estilo para instantáneas en segundo plano: delgadas y discontinuas
+            const lw = 1.3;
+            const op = 0.75;
+            ctx.globalAlpha = op;
+
+            activeMetrics.forEach((metric) => {
+                if (hasTimeDomainActive && !["Impulse", "Step"].includes(metric)) return;
+                if (!hasTimeDomainActive && ["Impulse", "Step"].includes(metric)) return;
+
+                // Color reservado para la métrica
+                let color = "#ff4444";
+                if (metric === "Phase") color = "#d946ef";
+                else if (metric === "Coherence") color = "#eab308";
+                else if (metric === "Spectrum") color = "#a855f7";
+                else if (metric === "Group Delay") color = "#10b981";
+                else if (metric === "Simulated Magnitude") color = "#00ffff";
+
+                // Extraer el buffer específico de esta métrica desde la instantánea multimétrica
+                const bufferToDraw = snap.data[metric];
+
+                if (bufferToDraw && bufferToDraw.length > 0) {
+                    if (metric === "Phase") {
+                        drawPhasePath(
+                            ctx,
+                            width,
+                            height,
+                            { color, lineWidth: lw, lineDash: [6, 4] },
+                            frequencyLUT,
+                            bufferToDraw,
+                            metricConfigs,
+                            interactionState
+                        );
+                    } else if (metric === "Simulated Magnitude") {
+                        drawSimulatedMagnitudePath(
+                            ctx,
+                            width,
+                            height,
+                            { color, lineWidth: lw, lineDash: [6, 4] },
+                            frequencyLUT,
+                            interpEngine.interpCoherence,
+                            bufferToDraw,
+                            metricConfigs,
+                            interactionState,
+                            (idx, arr) => arr[idx],
+                            mathOrchestrator.getEQResponseCached.bind(mathOrchestrator),
+                            BINS
+                        );
+                    } else {
+                        drawMetricPath(
+                            ctx,
+                            bufferToDraw,
+                            width,
+                            height,
+                            color,
+                            lw,
+                            [6, 4],
+                            metric,
+                            frequencyLUT,
+                            interpEngine.interpCoherence,
+                            metricConfigs,
+                            interactionState,
+                            (idx, arr) => arr[idx]
+                        );
+                    }
+                }
+            });
+
+            ctx.globalAlpha = 1.0;
+        });
+
         // 4. Renderizar métricas que no son capas o son globales (Impulse, Step)
         if (activeMetrics.includes("Impulse") && hasTimeDomainActive) {
             const style = metricStyles["Impulse"];
@@ -829,6 +903,13 @@
     function onLayerDragStart(e: DragEvent, layerId: string) {
         if (e.dataTransfer) {
             e.dataTransfer.setData("text/plain", layerId);
+        }
+    }
+
+    function loadInstantaneaIntoLayer(layerId: string, instId: string, metric: string) {
+        const inst = traceManager.instantaneas.find(i => i.id === instId);
+        if (inst && inst.data[metric]) {
+            traceManager.setLayerSource(layerId, 'snapshot', inst.data[metric]);
         }
     }
 

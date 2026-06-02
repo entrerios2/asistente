@@ -4,9 +4,11 @@
  * Shares results to avoid redundant calculations and implements adaptive throttling.
  */
 
-import { traceManager, type Trace } from './traceManager.svelte';
+import { traceManager } from './traceManager.svelte';
 import { uiStore } from './ui.svelte';
 import { meterStore } from './meterStore.svelte';
+import { calibrationStore } from './calibrationStore.svelte';
+import { peakingCoeffs, biquadResponse } from '../dsp/biquad';
 import {
     calculateMagnitude,
     calculatePhase,
@@ -58,8 +60,6 @@ class MathOrchestrator {
     private timerId: any = null;
 
     constructor() {
-        this.updateEQCache();
-
         if (typeof window !== 'undefined') {
             try {
                 // Initialize Web Worker with Vite URL loader
@@ -81,6 +81,14 @@ class MathOrchestrator {
             });
             $effect(() => {
                 this.startTimer(uiStore.dspUpdateRate);
+            });
+            $effect(() => {
+                // Sincronizar reactivamente el cache de biquads ante cualquier cambio de EQ (Prompt 7/8)
+                if (typeof traceManager !== 'undefined' && traceManager && traceManager.eqBands) {
+                    const _bands = JSON.stringify(traceManager.eqBands);
+                    const _filters = JSON.stringify(calibrationStore.suggestedFilters);
+                    this.updateEQCache();
+                }
             });
         });
     }
@@ -105,7 +113,11 @@ class MathOrchestrator {
             this.outputImpulse = new Float32Array(data.outputImpulse);
             this.outputStep = new Float32Array(data.outputStep);
             
-            meterStore.updateIn([data.dbIn, data.dbIn]);
+            // PROPAGAR VÚMETROS DINÁMICAMENTE CONFORME A LOS CANALES ACTIVOS (PROMPT 7)
+            const inChCount = uiStore.inChannels.filter(Boolean).length || 2;
+            const outChCount = uiStore.outChannels.filter(Boolean).length || 2;
+            meterStore.updateIn(Array.from({ length: inChCount }, () => data.dbIn));
+            meterStore.updateOut(Array.from({ length: outChCount }, () => data.dbIn));
             
             // ESCRIBIR EN LA CAPA ACTIVA BAJO MEDICIÓN (PROMPT 6)
             const activeLayer = traceManager.layers.find(l => l.isMeasuring && l.id === uiStore.activeLayerId);
@@ -180,41 +192,66 @@ class MathOrchestrator {
     }
 
     private checkDirty() {
-        let bandsHash = 0;
-        for (let b = 0; b < traceManager.eqBands.length; b++) {
-            const band = traceManager.eqBands[b];
-            bandsHash += band.freq * 1e6 + band.gain * 1e3 + band.q;
-        }
-        const measuring = uiStore.isMeasuring;
-        const simulating = uiStore.isSimulating;
+        try {
+            if (typeof traceManager === 'undefined' || !traceManager || !traceManager.eqBands) {
+                return;
+            }
+            let bandsHash = 0;
+            for (let b = 0; b < traceManager.eqBands.length; b++) {
+                const band = traceManager.eqBands[b];
+                bandsHash += band.freq * 1e6 + band.gain * 1e3 + band.q;
+            }
+            // Incluir sugerencias de calibración para refrescar el caché de EQ
+            for (const filter of calibrationStore.suggestedFilters) {
+                bandsHash += filter.frequency * 1e6 + filter.gain * 1e3 + filter.q + (filter.enabled ? 1 : 0);
+            }
 
-        if (bandsHash !== this.lastBandsHash || measuring !== this.lastMeasuring || simulating !== this.lastSimulating) {
-            this.lastBandsHash = bandsHash;
-            this.lastMeasuring = measuring;
-            this.lastSimulating = simulating;
-            this.dirty = true;
-            this.updateEQCache();
+            const measuring = uiStore.isMeasuring;
+            const simulating = uiStore.isSimulating;
+
+            if (bandsHash !== this.lastBandsHash || measuring !== this.lastMeasuring || simulating !== this.lastSimulating) {
+                this.lastBandsHash = bandsHash;
+                this.lastMeasuring = measuring;
+                this.lastSimulating = simulating;
+                this.dirty = true;
+                this.updateEQCache();
+            }
+        } catch (e) {
+            // Ignorar ReferenceError temporal durante la carga ESM
         }
     }
 
     private updateEQCache() {
-        const sr = 48000;
-        for (let i = 0; i < this.BINS; i++) {
-            const freq = (i * sr) / 2 / this.BINS;
-            let totalGain = 0;
-            for (let b = 0; b < traceManager.eqBands.length; b++) {
-                const band = traceManager.eqBands[b];
-                const fo = band.freq;
-                const G = band.gain;
-                const Q = band.q;
-
-                const bw = fo / Q;
-                const dist = Math.abs(Math.log2(freq / fo || 1e-6));
-                const octBw = bw / fo;
-                const weight = Math.exp(-Math.pow(dist / (octBw * 1.2), 2));
-                totalGain += G * weight;
+        try {
+            if (typeof traceManager === 'undefined' || !traceManager || !traceManager.eqBands) {
+                return;
             }
-            this.eqResponseCache[i] = totalGain;
+            const sr = 48000;
+            for (let i = 0; i < this.BINS; i++) {
+                const freq = (i * sr) / 2 / this.BINS || 1e-6;
+                let totalGain = 0;
+
+                // 1. Evaluar las bandas de EQ de traceManager (Playground) analíticamente usando biquads (Prompt 7)
+                for (let b = 0; b < traceManager.eqBands.length; b++) {
+                    const band = traceManager.eqBands[b];
+                    if (band.gain !== 0) {
+                        const coeffs = peakingCoeffs(band.freq, band.gain, band.q, sr);
+                        const [magDb] = biquadResponse(coeffs, freq, sr);
+                        totalGain += magDb;
+                    }
+                }
+
+                // 2. Evaluar los filtros paramétricos de calibrationStore analíticamente usando biquads (Prompt 7)
+                for (const filter of calibrationStore.suggestedFilters) {
+                    if (filter.enabled) {
+                        totalGain += calibrationStore.calculateFilterGainAt(filter, freq);
+                    }
+                }
+
+                this.eqResponseCache[i] = totalGain;
+            }
+        } catch (e) {
+            // Ignorar ReferenceError temporal durante la carga ESM
         }
     }
 
@@ -230,12 +267,19 @@ class MathOrchestrator {
         const delayMs = 1.4;
         let phase = -2 * Math.PI * freq * (delayMs / 1000);
 
+        // Evaluar analíticamente la fase de las bandas de EQ (Playground) con biquads (Prompt 7)
         for (let b = 0; b < traceManager.eqBands.length; b++) {
             const band = traceManager.eqBands[b];
-            const dist = Math.log2(freq / band.freq || 1e-6);
-            const weight = dist / (1 + dist * dist * band.q);
-            phase += band.gain * 0.04 * weight;
+            if (band.gain !== 0) {
+                const coeffs = peakingCoeffs(band.freq, band.gain, band.q, 48000);
+                const [_, phaseRad] = biquadResponse(coeffs, freq, 48000);
+                phase += phaseRad;
+            }
         }
+
+        // Evaluar analíticamente la fase de los filtros de calibrationStore (Prompt 7)
+        phase += calibrationStore.getFilterPhaseAt(freq);
+
         if (isMeasuring) {
             phase += (Math.random() - 0.5) * 0.04;
         }
@@ -260,7 +304,7 @@ class MathOrchestrator {
         return Math.max(0.01, Math.min(1, coh));
     }
 
-    run(liveTrace: Trace | undefined) {
+    run(liveTrace: any | undefined) {
         this.checkDirty();
 
         const isMeasuring = uiStore.isMeasuring;
@@ -272,11 +316,20 @@ class MathOrchestrator {
 
         this.lastMathTime = performance.now();
 
+        // Obtener la referencia de datos de entrada directa (Prompt 8/Fix)
+        let liveData: Float32Array | null = null;
+        if (liveTrace) {
+            if (liveTrace instanceof Float32Array) {
+                liveData = liveTrace;
+            } else if (liveTrace.data) {
+                liveData = liveTrace.data;
+            }
+        }
+
         if (this.worker) {
             // Web Worker asynchronous calculation (main path)
-            const liveData = liveTrace && liveTrace.data && liveTrace.data.length > 0 ? liveTrace.data : null;
             let liveDataTransfer: ArrayBuffer | undefined = undefined;
-            if (liveData) {
+            if (liveData && liveData.length > 0) {
                 const copy = new Float32Array(liveData);
                 liveDataTransfer = copy.buffer;
             }
@@ -288,6 +341,10 @@ class MathOrchestrator {
                 FFT_SIZE: this.FFT_SIZE,
                 eqResponseCache: this.eqResponseCache,
                 eqBands: $state.snapshot(traceManager.eqBands),
+                calibrationFilters: $state.snapshot(calibrationStore.suggestedFilters),
+                calibrationPoints: $state.snapshot(calibrationStore.calibrationPoints),
+                inputGain: uiStore.inputGain,
+                displayOffset: uiStore.displayOffset,
                 isMeasuring,
                 metrics: Array.from(this.globalActiveMetrics)
             }, liveDataTransfer ? [liveDataTransfer] : []);
@@ -307,11 +364,23 @@ class MathOrchestrator {
             const refPhase = 0;
 
             let liveDb = -50;
-            if (liveTrace && liveTrace.data && liveTrace.data.length > 0) {
-                const mapIdx = Math.floor((k * liveTrace.data.length) / this.BINS);
-                liveDb = liveTrace.data[mapIdx] || -120;
+            if (liveData && liveData.length > 0) {
+                const mapIdx = Math.floor((k * liveData.length) / this.BINS);
+                liveDb = liveData[mapIdx] || -120;
+
+                // 1. Aplicar ganancia de entrada
+                liveDb += uiStore.inputGain;
+
+                // 2. Compensar curva de calibración acústica (restar ganancia del micrófono)
+                liveDb -= calibrationStore.getCalibrationGainAt(f_k);
+
+                // 3. Aplicar offset absoluto de visualización
+                liveDb += uiStore.displayOffset;
             } else {
                 liveDb = -50 + this.getEQResponseCached(f_k) + Math.sin(k * 0.08) * 0.3;
+
+                // Aplicar offset de visualización al simulado también
+                liveDb += uiStore.displayOffset;
             }
 
             const liveMag = Math.pow(10, liveDb / 20);
@@ -332,53 +401,11 @@ class MathOrchestrator {
         }
         const dbIn = 20 * Math.log10(peakSum || 1e-6);
 
-        meterStore.updateIn([dbIn, dbIn]);
-
-        const metrics = this.globalActiveMetrics;
-        const needMagnitude = metrics.has("Magnitude") || metrics.has("Spectrum") || metrics.has("Spectrogram") || metrics.has("Impulse") || metrics.has("Step");
-        const needPhase = metrics.has("Phase") || metrics.has("Group Delay");
-        const needImpulse = metrics.has("Impulse") || metrics.has("Step");
-
-        if (needMagnitude) {
-            calculateMagnitude(
-                this.fftInputReal,
-                this.fftInputImag,
-                this.fftRefReal,
-                this.fftRefImag,
-                this.outputMagnitude,
-                this.hReal,
-                this.hImag,
-            );
-        }
-        if (needPhase) {
-            calculatePhase(
-                this.fftInputReal,
-                this.fftInputImag,
-                this.fftRefReal,
-                this.fftRefImag,
-                this.outputPhase,
-            );
-        }
-        if (needImpulse) {
-            calculateImpulseResponse(
-                this.hReal,
-                this.hImag,
-                this.outputImpulse,
-                this.tempFullReal,
-                this.tempFullImag,
-                this.tempFullRealOut,
-                this.tempFullImagOut,
-            );
-        }
-        if (metrics.has("Step")) {
-            calculateStepResponse(this.outputImpulse, this.outputStep);
-        }
-        if (metrics.has("Group Delay")) {
-            for (let k = 0; k < this.BINS; k++) {
-                this.tempPhaseRadians[k] = (this.outputPhase[k] * Math.PI) / 180;
-            }
-            calculateGroupDelay(this.tempPhaseRadians, 24000 / this.BINS, this.outputGroupDelay);
-        }
+        // PROPAGAR VÚMETROS DINÁMICAMENTE CONFORME A LOS CANALES ACTIVOS (PROMPT 7)
+        const inChCount = uiStore.inChannels.filter(Boolean).length || 2;
+        const outChCount = uiStore.outChannels.filter(Boolean).length || 2;
+        meterStore.updateIn(Array.from({ length: inChCount }, () => dbIn));
+        meterStore.updateOut(Array.from({ length: outChCount }, () => dbIn));
 
         // Guardar en la capa activa bajo medición
         const activeLayer = traceManager.layers.find(l => l.isMeasuring && l.id === uiStore.activeLayerId);

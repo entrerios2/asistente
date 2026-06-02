@@ -1,6 +1,7 @@
 <script lang="ts">
     import { uiStore } from "$lib/stores/ui.svelte";
     import { traceManager } from "$lib/stores/traceManager.svelte";
+    import { calibrationStore } from "$lib/stores/calibrationStore.svelte";
     import { getAudioProvider } from "$lib/hal";
     import { onMount, untrack } from "svelte";
 
@@ -440,9 +441,15 @@
     }
 
     // --- LÓGICA PESTAÑAS INSTANTÁNEAS Y CONFIGURACIÓN ---
-    let inputDevices = $state<{ id: string; name: string }[]>([]);
-    let outputDevices = $state<{ id: string; name: string }[]>([]);
+    let inputDevices = $state<{ id: string; name: string; channels?: number }[]>([]);
+    let outputDevices = $state<{ id: string; name: string; channels?: number }[]>([]);
     let isInternalLoopback = $state(uiStore.referenceChannel === "Loopback");
+
+    const activeInDevice = $derived(inputDevices.find(d => d.id === uiStore.audioInDevice));
+    const inputChannelsCount = $derived(activeInDevice && activeInDevice.channels ? activeInDevice.channels : 2);
+
+    const activeOutDevice = $derived(outputDevices.find(d => d.id === uiStore.audioOutDevice));
+    const outputChannelsCount = $derived(activeOutDevice && activeOutDevice.channels ? activeOutDevice.channels : 2);
 
     $effect(() => {
         if (isInternalLoopback) {
@@ -460,10 +467,10 @@
                 const devices = await provider.listDevices();
                 inputDevices = devices
                     .filter((d: any) => d.direction === "input")
-                    .map((d: any) => ({ id: d.id, name: d.name }));
+                    .map((d: any) => ({ id: d.id, name: d.name, channels: d.channels }));
                 outputDevices = devices
                     .filter((d: any) => d.direction === "output")
-                    .map((d: any) => ({ id: d.id, name: d.name }));
+                    .map((d: any) => ({ id: d.id, name: d.name, channels: d.channels }));
             } else if (
                 navigator.mediaDevices &&
                 navigator.mediaDevices.enumerateDevices
@@ -474,12 +481,14 @@
                     .map((d) => ({
                         id: d.deviceId || "default",
                         name: d.label || "Micrófono del Sistema",
+                        channels: 2
                     }));
                 outputDevices = devices
                     .filter((d) => d.kind === "audiooutput")
                     .map((d) => ({
                         id: d.deviceId || "default",
                         name: d.label || "Altavoces del Sistema",
+                        channels: 2
                     }));
             }
         } catch (e) {
@@ -491,10 +500,11 @@
                 {
                     id: "in-default",
                     name: "Micrófono de Sistema (Predeterminado)",
+                    channels: 2
                 },
-                { id: "in-focusrite", name: "Focusrite Scarlett 2i2 USB In" },
-                { id: "in-motu", name: "MOTU M2 Audio Interface In" },
-                { id: "in-webcam", name: "Micrófono de Cámara Web USB" },
+                { id: "in-focusrite", name: "Focusrite Scarlett 2i2 USB In", channels: 2 },
+                { id: "in-motu", name: "MOTU M2 Audio Interface In", channels: 2 },
+                { id: "in-webcam", name: "Micrófono de Cámara Web USB", channels: 1 },
             ];
         }
         if (outputDevices.length === 0) {
@@ -502,10 +512,11 @@
                 {
                     id: "out-default",
                     name: "Altavoces de Sistema (Predeterminado)",
+                    channels: 2
                 },
-                { id: "out-focusrite", name: "Focusrite Scarlett 2i2 USB Out" },
-                { id: "out-motu", name: "MOTU M2 Audio Interface Out" },
-                { id: "out-headphones", name: "Auriculares Estéreo Bluetooth" },
+                { id: "out-focusrite", name: "Focusrite Scarlett 2i2 USB Out", channels: 2 },
+                { id: "out-motu", name: "MOTU M2 Audio Interface Out", channels: 2 },
+                { id: "out-headphones", name: "Auriculares Estéreo Bluetooth", channels: 2 },
             ];
         }
     }
@@ -587,8 +598,7 @@
     let editingName = $state("");
 
     let sortedSnapshots = $derived.by(() => {
-        const snaps = traceManager.traces.filter((t) => t.type === "snapshot");
-        return [...snaps].sort((a, b) => {
+        return [...traceManager.instantaneas].sort((a, b) => {
             if (sortOrder === "desc") {
                 return b.timestamp - a.timestamp;
             } else {
@@ -598,11 +608,9 @@
     });
 
     function ensureMockSnapshots() {
-        const existingSnaps = traceManager.traces.filter(
-            (t) => t.type === "snapshot",
-        );
+        const existingSnaps = traceManager.instantaneas;
         if (existingSnaps.length === 0) {
-            const dataLen = 1024;
+            const dataLen = 4096;
             const curve1 = new Float32Array(dataLen);
             const curve2 = new Float32Array(dataLen);
             for (let i = 0; i < dataLen; i++) {
@@ -631,32 +639,36 @@
                 );
             }
 
-            traceManager.addTrace({
+            traceManager.instantaneas.push({
                 id: "snap-mock-1",
                 name: "Respuesta Sala A - Monitor L",
-                type: "snapshot",
-                metric: "RTA",
-                data: curve1,
-                color: "#a855f7",
-                style: "solid",
-                visible: true,
-                offsetY: 0,
                 timestamp: Date.now() - 60000 * 5,
+                data: {
+                    "Magnitude": curve1,
+                    "Phase": new Float32Array(dataLen).map((_, i) => -180 + (i / dataLen) * 360),
+                    "Coherence": new Float32Array(dataLen).fill(0.95)
+                },
+                visible: true,
+                color: "#a855f7",
                 source: "manual",
+                metric: "Magnitude",
+                offsetY: 0
             });
 
-            traceManager.addTrace({
+            traceManager.instantaneas.push({
                 id: "snap-mock-2",
                 name: "Respuesta Sala A - Subwoofer",
-                type: "snapshot",
-                metric: "RTA",
-                data: curve2,
-                color: "#f59e0b",
-                style: "dashed",
-                visible: false,
-                offsetY: -5,
                 timestamp: Date.now() - 3600000 * 3,
+                data: {
+                    "Magnitude": curve2,
+                    "Phase": new Float32Array(dataLen).map((_, i) => -180 + (i / dataLen) * 360),
+                    "Coherence": new Float32Array(dataLen).fill(0.85)
+                },
+                visible: false,
+                color: "#f59e0b",
                 source: "secuencial",
+                metric: "Magnitude",
+                offsetY: -5
             });
         }
     }
@@ -668,9 +680,9 @@
 
     function finishEditing(id: string) {
         if (editingId === id && editingName.trim()) {
-            const trace = traceManager.traces.find((t) => t.id === id);
-            if (trace) {
-                trace.name = editingName.trim();
+            const ins = traceManager.instantaneas.find((i) => i.id === id);
+            if (ins) {
+                ins.name = editingName.trim();
             }
         }
         editingId = null;
@@ -685,47 +697,10 @@
     }
 
     function captureActiveLive() {
-        const liveTrace = traceManager.traces.find((t) => t.type === "live");
-        const generatedId = crypto.randomUUID
-            ? crypto.randomUUID()
-            : Math.random().toString(36).substring(2, 15);
-        if (liveTrace) {
-            traceManager.captureSnapshot(
-                liveTrace.id,
-                `Instantánea #${traceManager.traces.filter((t) => t.type === "snapshot").length + 1}`,
-                uiStore.measurementMode === "manual" ? "manual" : "secuencial",
-            );
-            statusText = "Instantánea capturada con éxito";
-        } else {
-            const dataLen = 1024;
-            const curve = new Float32Array(dataLen);
-            for (let i = 0; i < dataLen; i++) {
-                const f = 20 * Math.pow(1000, i / dataLen);
-                const baseDb = -25 - 8 * Math.log10(f / 100);
-                const ripple =
-                    6 * Math.sin(Math.log10(f) * 3 * Math.PI) +
-                    Math.random() * 2;
-                curve[i] = Math.max(-120, Math.min(10, baseDb + ripple));
-            }
-            traceManager.addTrace({
-                id: generatedId,
-                name: `Captura Simulada #${traceManager.traces.filter((t) => t.type === "snapshot").length + 1}`,
-                type: "snapshot",
-                metric: "RTA",
-                data: curve,
-                color:
-                    "#" +
-                    Math.floor(Math.random() * 16777215)
-                        .toString(16)
-                        .padStart(6, "0"),
-                style: "solid",
-                visible: true,
-                offsetY: 0,
-                timestamp: Date.now(),
-                source: uiStore.measurementMode === "manual" ? "manual" : "secuencial",
-            });
-            statusText = "Instantánea de prueba capturada";
-        }
+        traceManager.captureInstantanea(
+            `Instantánea #${traceManager.instantaneas.length + 1}`
+        );
+        statusText = "Instantánea capturada con éxito";
     }
 </script>
 
@@ -1508,42 +1483,76 @@
                                                 </select>
                                             </div>
 
-                                            <!-- Frecuencia -->
-                                            <div class="flex flex-col gap-1">
+                                            <!-- Frecuencia (Prompt 7) -->
+                                            <div class="flex flex-col gap-1 col-span-2">
                                                 <label
                                                     class="text-[9px] text-gray-500 font-bold uppercase"
                                                     >Frecuencia (Hz)</label
                                                 >
-                                                <input
-                                                    type="number"
-                                                    bind:value={filter.freq}
-                                                    min="20"
-                                                    max="20000"
-                                                    class="w-full bg-[#121216] border border-[#1a1a24] rounded px-2 py-1 text-xs font-mono"
-                                                />
+                                                <div class="flex gap-2 items-center">
+                                                    <input
+                                                        type="number"
+                                                        bind:value={filter.freq}
+                                                        min="20"
+                                                        max="20000"
+                                                        class="w-20 bg-[#121216] border border-[#1a1a24] rounded px-2 py-1 text-xs font-mono text-white"
+                                                    />
+                                                    <input
+                                                        type="range"
+                                                        min="0"
+                                                        max="1"
+                                                        step="0.001"
+                                                        value={(Math.log10(filter.freq || 20) - Math.log10(20)) / (Math.log10(20000) - Math.log10(20))}
+                                                        oninput={(e) => {
+                                                            const val = parseFloat(e.currentTarget.value);
+                                                            const minLog = Math.log10(20);
+                                                            const maxLog = Math.log10(20000);
+                                                            filter.freq = Math.round(Math.pow(10, minLog + val * (maxLog - minLog)));
+                                                        }}
+                                                        ondblclick={() => filter.freq = 1000}
+                                                        class="flex-1 h-1.5 bg-[#121216] rounded-lg appearance-none cursor-pointer accent-[#3b82f6]"
+                                                        title="Doble clic para reiniciar a 1000Hz"
+                                                    />
+                                                </div>
                                             </div>
 
-                                            <!-- Q (ancho de banda) -->
-                                            <div class="flex flex-col gap-1">
+                                            <!-- Q (ancho de banda) (Prompt 7) -->
+                                            <div class="flex flex-col gap-1 col-span-2">
                                                 <label
                                                     class="text-[9px] text-gray-500 font-bold uppercase"
                                                     >Q (Factor)</label
                                                 >
-                                                <input
-                                                    type="number"
-                                                    bind:value={filter.q}
-                                                    min="0.1"
-                                                    max="10"
-                                                    step="0.1"
-                                                    disabled={[
-                                                        "lowpass",
-                                                        "highpass",
-                                                    ].includes(filter.type)}
-                                                    class="w-full bg-[#121216] border border-[#1a1a24] rounded px-2 py-1 text-xs font-mono disabled:opacity-30"
-                                                />
+                                                <div class="flex gap-2 items-center">
+                                                    <input
+                                                        type="number"
+                                                        bind:value={filter.q}
+                                                        min="0.1"
+                                                        max="10"
+                                                        step="0.1"
+                                                        disabled={[
+                                                            "lowpass",
+                                                            "highpass",
+                                                        ].includes(filter.type)}
+                                                        class="w-20 bg-[#121216] border border-[#1a1a24] rounded px-2 py-1 text-xs font-mono text-white disabled:opacity-30"
+                                                    />
+                                                    <input
+                                                        type="range"
+                                                        min="0.1"
+                                                        max="10"
+                                                        step="0.1"
+                                                        disabled={[
+                                                            "lowpass",
+                                                            "highpass",
+                                                        ].includes(filter.type)}
+                                                        bind:value={filter.q}
+                                                        ondblclick={() => filter.q = 1.0}
+                                                        class="flex-1 h-1.5 bg-[#121216] rounded-lg appearance-none cursor-pointer accent-[#3b82f6] disabled:opacity-30"
+                                                        title="Doble clic para reiniciar a 1.0"
+                                                    />
+                                                </div>
                                             </div>
 
-                                            <!-- Ganancia (Solo si es peaking/shelving) -->
+                                            <!-- Ganancia (Solo si es peaking/shelving) (Prompt 7) -->
                                             {#if ["peaking", "shelving"].includes(filter.type)}
                                                 <div
                                                     class="flex flex-col gap-1 col-span-2 mt-1"
@@ -1563,7 +1572,9 @@
                                                         max="15"
                                                         step="0.5"
                                                         bind:value={filter.gain}
-                                                        class="w-full h-1 bg-[#121216] rounded-lg appearance-none cursor-pointer accent-[#00ff88]"
+                                                        ondblclick={() => filter.gain = 0}
+                                                        class="w-full h-1.5 bg-[#121216] rounded-lg appearance-none cursor-pointer accent-[#00ff88]"
+                                                        title="Doble clic para reiniciar a 0dB"
                                                     />
                                                 </div>
                                             {/if}
@@ -1681,7 +1692,7 @@
                 class="flex-1 p-5 overflow-y-auto flex flex-col gap-5"
                 id="panel-snaps"
             >
-                <!-- Controles Superiores (Acciones Globales & Ordenamiento) -->
+                <!-- Controles Superiores (Acciones Globales, Import/Export & Configuración) (Prompt 8) -->
                 <div
                     class="flex flex-col gap-3.5 bg-[#121216]/40 border border-[#1a1a24]/50 rounded-xl p-4"
                 >
@@ -1694,14 +1705,31 @@
                             <h3
                                 class="text-xs font-bold text-gray-300 uppercase tracking-wider"
                             >
-                                Historial de Capturas
+                                Historial de Instantáneas
                             </h3>
                         </div>
                         <span
                             class="text-[10px] font-mono font-bold bg-[#a855f7]/15 text-[#a855f7] px-2 py-0.5 rounded-full"
                         >
-                            {sortedSnapshots.length} snaps
+                            {sortedSnapshots.length} instantáneas
                         </span>
+                    </div>
+
+                    <!-- Configuración de métricas a capturar en paralelo -->
+                    <div class="flex flex-col gap-2 bg-[#121216]/40 border border-[#1a1a24]/30 rounded-lg p-3 select-none">
+                        <span class="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Métricas a capturar en paralelo:</span>
+                        <div class="grid grid-cols-2 gap-2 mt-1">
+                            {#each Object.keys(traceManager.metricsToCapture) as metric}
+                                <label class="flex items-center gap-1.5 text-[10px] text-gray-300 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        bind:checked={traceManager.metricsToCapture[metric]}
+                                        class="accent-[#a855f7] scale-90"
+                                    />
+                                    <span>{metric === 'GroupDelay' ? 'Group Delay' : metric}</span>
+                                </label>
+                            {/each}
+                        </div>
                     </div>
 
                     <!-- Botón Capturar Instantánea Rápida -->
@@ -1712,8 +1740,37 @@
                         <span class="material-symbols-outlined text-sm"
                             >photo_camera</span
                         >
-                        Capturar Espectro en Vivo
+                        Capturar Instantánea
                     </button>
+
+                    <!-- Importar archivo local .snapshot.json (Prompt 8) -->
+                    <div class="flex flex-col gap-1.5 border-t border-[#1a1a24]/20 pt-2.5">
+                        <input
+                            type="file"
+                            accept=".snapshot.json"
+                            class="hidden"
+                            id="import-snap-input"
+                            onchange={async (e) => {
+                                const file = e.currentTarget.files?.[0];
+                                if (file) {
+                                    const text = await file.text();
+                                    const imported = await traceManager.importInstantaneaFromJSON(text);
+                                    if (imported) {
+                                        statusText = "Instantánea importada con éxito";
+                                    } else {
+                                        statusText = "Error importando instantánea";
+                                    }
+                                }
+                            }}
+                        />
+                        <label
+                            for="import-snap-input"
+                            class="w-full bg-[#121216] border border-[#1a1a24] hover:border-gray-500 text-gray-300 hover:text-white rounded-lg py-2 text-xs font-semibold text-center cursor-pointer transition-all flex items-center justify-center gap-1.5"
+                        >
+                            <span class="material-symbols-outlined text-sm">upload_file</span>
+                            Importar .snapshot.json
+                        </label>
+                    </div>
 
                     <!-- Ordenación y Configuración -->
                     <div
@@ -1826,7 +1883,7 @@
                                             {/if}
                                         </div>
 
-                                        <!-- Acciones Rápidas (Ojito y Borrar) -->
+                                        <!-- Acciones Rápidas (Ojito, Exportar y Borrar) (Prompt 8) -->
                                         <div class="flex items-center gap-1">
                                             <button
                                                 class="w-7 h-7 rounded flex items-center justify-center transition-all cursor-pointer min-h-[28px] min-w-[28px]
@@ -1847,6 +1904,19 @@
                                                         ? "visibility"
                                                         : "visibility_off"}
                                                 </span>
+                                            </button>
+                                            <button
+                                                class="w-7 h-7 rounded flex items-center justify-center text-gray-500 hover:text-[#00ff88] hover:bg-[#00ff88]/10 transition-all cursor-pointer min-h-[28px] min-w-[28px]"
+                                                onclick={() =>
+                                                    traceManager.exportInstantaneaToJSON(
+                                                        snap.id,
+                                                    )}
+                                                title="Descargar como .snapshot.json"
+                                            >
+                                                <span
+                                                    class="material-symbols-outlined text-[18px]"
+                                                    >download</span
+                                                >
                                             </button>
                                             <button
                                                 class="w-7 h-7 rounded flex items-center justify-center text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-all cursor-pointer min-h-[28px] min-w-[28px]"
@@ -1917,7 +1987,7 @@
                                                     (snap.offsetY = 0)}
                                                 title="Doble clic para restablecer a 0 dB"
                                             >
-                                                {snap.offsetY > 0
+                                                {snap.offsetY !== undefined && snap.offsetY > 0
                                                     ? `+${snap.offsetY}`
                                                     : snap.offsetY} dB
                                             </span>
@@ -1952,6 +2022,107 @@
                 class="flex-1 p-5 overflow-y-auto flex flex-col gap-5"
                 id="panel-config"
             >
+                <!-- CARGADOR DE CALIBRACIÓN Y GANANCIA (PROMPT 7) -->
+                <div
+                    class="flex flex-col gap-4 bg-[#121216]/40 border border-[#1a1a24]/50 rounded-xl p-4"
+                >
+                    <div
+                        class="flex items-center gap-2 border-b border-[#1a1a24]/30 pb-2"
+                    >
+                        <span
+                            class="material-symbols-outlined text-[#00ff88] text-lg"
+                            >settings_voice</span
+                        >
+                        <h3
+                            class="text-xs font-bold text-gray-300 uppercase tracking-wider"
+                        >
+                            Calibración y Ganancia
+                        </h3>
+                    </div>
+
+                    <!-- Archivo de Calibración (.cal / .txt) -->
+                    <div class="flex flex-col gap-1.5">
+                        <label
+                            class="text-[10px] font-bold text-gray-500 uppercase tracking-wider"
+                            >Archivo de Calibración (.cal / .txt)</label
+                        >
+                        {#if calibrationStore.calibrationFilename}
+                            <div class="flex items-center justify-between bg-[#121216] border border-[#00ff88]/20 px-3 py-2 rounded-md text-xs">
+                                <span class="text-[#00ff88] font-mono truncate">{calibrationStore.calibrationFilename}</span>
+                                <button
+                                    class="text-red-400 hover:text-red-300 text-xs font-bold"
+                                    onclick={() => {
+                                        calibrationStore.calibrationPoints = [];
+                                        calibrationStore.calibrationFilename = '';
+                                    }}
+                                >
+                                    Quitar
+                                </button>
+                            </div>
+                        {:else}
+                            <input
+                                type="file"
+                                accept=".cal,.txt"
+                                class="hidden"
+                                id="cal-file-input"
+                                onchange={(e) => {
+                                    const file = e.currentTarget.files?.[0];
+                                    if (file) {
+                                        const reader = new FileReader();
+                                        reader.onload = (evt) => {
+                                            const txt = evt.target?.result as string;
+                                            calibrationStore.loadCalibrationFile(txt, file.name);
+                                        };
+                                        reader.readAsText(file);
+                                    }
+                                }}
+                            />
+                            <label
+                                for="cal-file-input"
+                                class="w-full bg-[#121216] border border-[#1a1a24] hover:border-gray-500 rounded-md px-3 py-2 text-xs text-center text-gray-400 hover:text-white cursor-pointer transition-all"
+                            >
+                                Cargar Curva de Calibración
+                            </label>
+                        {/if}
+                    </div>
+
+                    <!-- Slider Ganancia de Entrada -->
+                    <div class="flex flex-col gap-1.5">
+                        <div class="flex justify-between items-center text-[10px] font-bold text-gray-500 uppercase">
+                            <span>Ganancia de Entrada</span>
+                            <span class="text-[#3b82f6] font-mono">{uiStore.inputGain > 0 ? `+${uiStore.inputGain}` : uiStore.inputGain} dB</span>
+                        </div>
+                        <input
+                            type="range"
+                            min="-20"
+                            max="20"
+                            step="0.5"
+                            bind:value={uiStore.inputGain}
+                            ondblclick={() => uiStore.inputGain = 0}
+                            class="w-full h-1.5 bg-[#121216] rounded-full appearance-none cursor-pointer accent-[#3b82f6]"
+                            title="Doble clic para reiniciar a 0dB"
+                        />
+                    </div>
+
+                    <!-- Slider Offset de Visualización -->
+                    <div class="flex flex-col gap-1.5">
+                        <div class="flex justify-between items-center text-[10px] font-bold text-gray-500 uppercase">
+                            <span>Offset de Visualización</span>
+                            <span class="text-[#eab308] font-mono">{uiStore.displayOffset > 0 ? `+${uiStore.displayOffset}` : uiStore.displayOffset} dB</span>
+                        </div>
+                        <input
+                            type="range"
+                            min="-100"
+                            max="100"
+                            step="1"
+                            bind:value={uiStore.displayOffset}
+                            ondblclick={() => uiStore.displayOffset = 0}
+                            class="w-full h-1.5 bg-[#121216] rounded-full appearance-none cursor-pointer accent-[#eab308]"
+                            title="Doble clic para reiniciar a 0dB"
+                        />
+                    </div>
+                </div>
+
                 <!-- AUDIO HARDWARE CARD -->
                 <div
                     class="flex flex-col gap-4 bg-[#121216]/40 border border-[#1a1a24]/50 rounded-xl p-4"
@@ -2009,7 +2180,7 @@
                             >Canales de Entrada Activos</label
                         >
                         <div class="grid grid-cols-4 gap-2">
-                            {#each [0, 1, 2, 3] as chIdx}
+                            {#each Array.from({ length: inputChannelsCount }) as _, chIdx}
                                 <button
                                     class="py-1.5 rounded-lg text-xs font-mono font-bold border transition-all cursor-pointer min-h-[36px]
                                            {uiStore.inChannels[chIdx]
@@ -2030,7 +2201,7 @@
                             >Canales de Salida Activos</label
                         >
                         <div class="grid grid-cols-4 gap-2">
-                            {#each [0, 1, 2, 3] as chIdx}
+                            {#each Array.from({ length: outputChannelsCount }) as _, chIdx}
                                 <button
                                     class="py-1.5 rounded-lg text-xs font-mono font-bold border transition-all cursor-pointer min-h-[36px]
                                            {uiStore.outChannels[chIdx]

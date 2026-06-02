@@ -10,6 +10,7 @@ export interface AudioDevice {
     name: string;
     backend: string;
     direction: 'input' | 'output';
+    channels: number;
 }
 
 export type SignalType = 'white' | 'pink' | 'brown' | 'music-noise' | 'sine' | 'sweep' | 'burst' | 'sinburst' | 'mls';

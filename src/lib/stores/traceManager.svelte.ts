@@ -1,9 +1,10 @@
 /**
- * TraceManager: Gestor de estado reactivo para trazos de audio y capas de medición.
- * Implementado con Svelte 5 Runes.
+ * TraceManager: Gestor de estado reactivo para trazos de audio, capas de medición e instantáneas persistidas.
+ * Implementado con Svelte 5 Runes e integrado con IndexedDB.
  */
 
 import { uiStore } from './ui.svelte';
+import { mathOrchestrator } from './mathOrchestrator.svelte';
 
 export interface Trace {
     id: string;
@@ -29,6 +30,18 @@ export interface MeasurementLayer {
     data: Float32Array;
 }
 
+export interface Instantanea {
+    id: string;
+    name: string;
+    timestamp: number;
+    data: Record<string, Float32Array>; // Mapea métricas (Magnitude, Phase, Coherence, Impulse, etc.) a sus buffers
+    visible: boolean;
+    color: string;
+    source: 'manual' | 'secuencial';
+    metric: string;
+    offsetY: number;
+}
+
 export interface EQBand {
     freq: number;
     gain: number;
@@ -40,11 +53,24 @@ class TraceManager {
     // Propiedad reactiva para forzar la reactividad en Svelte 5
     version = $state(0);
 
-    // Biblioteca histórica de trazos/instantáneas
-    traces = $state<Trace[]>([]);
+    // Buffer reactivo dedicado para los datos espectrales en vivo (RTA) (Prompt 8/Fix)
+    liveFrequencyData = $state(new Float32Array(4096));
+
+    // SISTEMA DE INSTANTÁNEAS MULTIMÉTRICAS PERSISTIDAS CON INDEXEDDB (PROMPT 8)
+    instantaneas = $state<Instantanea[]>([]);
     
     // SISTEMA DE CAPAS GLOBALES (PROMPT 6)
     layers = $state<MeasurementLayer[]>([]);
+
+    // Configuración de capturas (checkboxes interactivos)
+    metricsToCapture = $state<Record<string, boolean>>({
+        "Magnitude": true,
+        "Phase": true,
+        "Coherence": true,
+        "Impulse": false,
+        "GroupDelay": false,
+        "Step": false
+    });
 
     // Estado de las bandas de EQ (Playground)
     eqBands = $state<EQBand[]>([
@@ -58,6 +84,195 @@ class TraceManager {
     constructor() {
         // Inicializar con una capa por defecto para el primer cuadrante
         this.addLayer('Capa 1', 'q-1', 'live');
+
+        if (typeof window !== 'undefined') {
+            this.loadFromDB();
+        }
+    }
+
+    /**
+     * Carga asíncronamente todas las instantáneas guardadas en IndexedDB al arrancar la aplicación (Prompt 8).
+     */
+    async loadFromDB() {
+        try {
+            const { loadAllInstantaneas } = await import('../utils/db');
+            const items = await loadAllInstantaneas();
+            this.instantaneas = items.map((item: any) => {
+                const data: Record<string, Float32Array> = {};
+                for (const metric in item.data) {
+                    if (item.data[metric] instanceof ArrayBuffer || Array.isArray(item.data[metric]) || item.data[metric].buffer) {
+                        data[metric] = new Float32Array(item.data[metric]);
+                    } else {
+                        data[metric] = new Float32Array(item.data[metric]);
+                    }
+                }
+                return {
+                    id: item.id,
+                    name: item.name,
+                    timestamp: item.timestamp,
+                    data,
+                    visible: item.visible ?? true,
+                    color: item.color || '#00ff88',
+                    source: item.source || 'manual',
+                    metric: item.metric || 'Multimétrica',
+                    offsetY: item.offsetY || 0
+                };
+            });
+        } catch (e) {
+            console.error('[TraceManager] Error cargando instantáneas de IndexedDB:', e);
+        }
+    }
+
+    /**
+     * Captura una instantánea multimétrica en caliente de los buffers de mathOrchestrator (Prompt 8).
+     */
+    async captureInstantanea(name?: string, metricsToCapture?: string[]) {
+        const id = crypto.randomUUID();
+        const data: Record<string, Float32Array> = {};
+
+        const list = metricsToCapture || Object.keys(this.metricsToCapture).filter(k => this.metricsToCapture[k]);
+
+        // Capturar los buffers activos elegidos en las configuraciones
+        for (const metric of list) {
+            let src: Float32Array | null = null;
+            if (metric === "Magnitude") src = mathOrchestrator.outputMagnitude;
+            else if (metric === "Phase") src = mathOrchestrator.outputPhase;
+            else if (metric === "Coherence") src = mathOrchestrator.outputCoherence;
+            else if (metric === "Impulse") src = mathOrchestrator.outputImpulse;
+            else if (metric === "GroupDelay") src = mathOrchestrator.outputGroupDelay;
+            else if (metric === "Step") src = mathOrchestrator.outputStep;
+
+            if (src && src.length > 0) {
+                data[metric] = new Float32Array(src);
+            }
+        }
+
+        const ins: Instantanea = {
+            id,
+            name: name || `Instantánea ${new Date().toLocaleTimeString()}`,
+            timestamp: Date.now(),
+            data,
+            visible: true,
+            color: '#00ff88',
+            source: uiStore.measurementMode === 'manual' ? 'manual' : 'secuencial',
+            metric: 'Multimétrica',
+            offsetY: 0
+        };
+
+        this.instantaneas.push(ins);
+
+        // Guardar en la DB
+        try {
+            const { saveInstantanea } = await import('../utils/db');
+            await saveInstantanea({
+                id: ins.id,
+                name: ins.name,
+                timestamp: ins.timestamp,
+                data,
+                visible: ins.visible,
+                color: ins.color,
+                source: ins.source,
+                metric: ins.metric,
+                offsetY: ins.offsetY
+            });
+        } catch (e) {
+            console.error('[TraceManager] Error guardando instantánea en IndexedDB:', e);
+        }
+
+        return ins;
+    }
+
+    /**
+     * Elimina una instantánea tanto del estado reactivo como de IndexedDB (Prompt 8).
+     */
+    async deleteInstantanea(id: string) {
+        this.instantaneas = this.instantaneas.filter(ins => ins.id !== id);
+        try {
+            const { deleteInstantanea } = await import('../utils/db');
+            await deleteInstantanea(id);
+        } catch (e) {
+            console.error('[TraceManager] Error eliminando instantánea de IndexedDB:', e);
+        }
+    }
+
+    /**
+     * Exporta la instantánea multimétrica a un archivo legible .snapshot.json (Prompt 8).
+     */
+    exportInstantaneaToJSON(id: string) {
+        const ins = this.instantaneas.find(i => i.id === id);
+        if (!ins) return;
+
+        const serializableData: Record<string, number[]> = {};
+        for (const metric in ins.data) {
+            serializableData[metric] = Array.from(ins.data[metric]);
+        }
+
+        const serializable = {
+            id: ins.id,
+            name: ins.name,
+            timestamp: ins.timestamp,
+            visible: ins.visible,
+            color: ins.color,
+            data: serializableData
+        };
+
+        const jsonStr = JSON.stringify(serializable, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${ins.name.replace(/\s+/g, '_')}.snapshot.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    /**
+     * Importa una instantánea multimétrica desde un archivo .snapshot.json y la guarda reactivamente (Prompt 8).
+     */
+    async importInstantaneaFromJSON(content: string): Promise<Instantanea | null> {
+        try {
+            const parsed = JSON.parse(content);
+            if (!parsed.id || !parsed.name || !parsed.data) {
+                throw new Error('Estructura de archivo .snapshot.json inválida.');
+            }
+
+            const data: Record<string, Float32Array> = {};
+            for (const metric in parsed.data) {
+                data[metric] = new Float32Array(parsed.data[metric]);
+            }
+
+            const ins: Instantanea = {
+                id: parsed.id,
+                name: parsed.name,
+                timestamp: parsed.timestamp || Date.now(),
+                visible: parsed.visible ?? true,
+                color: parsed.color || '#00ff88',
+                data,
+                source: parsed.source || 'manual',
+                metric: parsed.metric || 'Multimétrica',
+                offsetY: parsed.offsetY || 0
+            };
+
+            this.instantaneas.push(ins);
+
+            const { saveInstantanea } = await import('../utils/db');
+            await saveInstantanea({
+                id: ins.id,
+                name: ins.name,
+                timestamp: ins.timestamp,
+                data: ins.data,
+                visible: ins.visible,
+                color: ins.color,
+                source: ins.source,
+                metric: ins.metric,
+                offsetY: ins.offsetY
+            });
+
+            return ins;
+        } catch (e) {
+            console.error('[TraceManager] Error importando instantánea:', e);
+            return null;
+        }
     }
 
     /**
@@ -133,61 +348,91 @@ class TraceManager {
     }
 
     /**
-     * Métodos para la biblioteca de Trazos/Instantáneas
+     * Retrocompatibilidad con la API de traces (Lectura unificada)
      */
+    traces = $derived.by(() => {
+        const list: Trace[] = [];
+        // Añadir el live-1 ficticio/inicial que la app espera
+        list.push({
+            id: 'live-1',
+            name: 'Señal en Vivo',
+            type: 'live',
+            metric: 'magnitude',
+            data: this.liveFrequencyData,
+            color: '#ff4444',
+            style: 'solid',
+            visible: true,
+            offsetY: 0,
+            timestamp: Date.now(),
+            source: 'manual'
+        });
+
+        // Convertir cada instantánea multimétrica a traces virtuales legibles para retrocompatibilidad total
+        this.instantaneas.forEach(ins => {
+            for (const metric in ins.data) {
+                list.push({
+                    id: `${ins.id}_${metric}`,
+                    name: `${ins.name} [${metric}]`,
+                    type: 'snapshot',
+                    metric: metric.toLowerCase(),
+                    data: ins.data[metric],
+                    color: ins.color || '#00ff88',
+                    style: 'solid',
+                    visible: ins.visible,
+                    offsetY: 0,
+                    timestamp: ins.timestamp,
+                    source: 'manual'
+                });
+            }
+        });
+        return list;
+    });
+
     addTrace(trace: Trace) {
-        this.traces.push(trace);
+        // Enrutado retrocompatible
+        const dataMap: Record<string, Float32Array> = {};
+        const metricName = trace.metric.charAt(0).toUpperCase() + trace.metric.slice(1);
+        dataMap[metricName] = trace.data;
+
+        this.instantaneas.push({
+            id: trace.id,
+            name: trace.name,
+            timestamp: trace.timestamp,
+            data: dataMap,
+            visible: trace.visible,
+            color: trace.color,
+            source: trace.source,
+            metric: trace.metric,
+            offsetY: trace.offsetY
+        });
     }
 
     removeTrace(id: string) {
-        this.traces = this.traces.filter(t => t.id !== id);
+        this.deleteInstantanea(id);
     }
 
     toggleVisibility(id: string) {
-        const trace = this.traces.find(t => t.id === id);
-        if (trace) {
-            trace.visible = !trace.visible;
+        const ins = this.instantaneas.find(i => i.id === id);
+        if (ins) {
+            ins.visible = !ins.visible;
         }
     }
 
     updateLiveTrace(id: string, data: Float32Array) {
-        const trace = this.traces.find(t => t.id === id);
-        if (trace) {
-            if (trace.data.length === data.length) {
-                trace.data.set(data);
-            } else {
-                trace.data = new Float32Array(data);
-            }
-            this.version++;
+        if (this.liveFrequencyData.length !== data.length) {
+            this.liveFrequencyData = new Float32Array(data.length);
         }
+        this.liveFrequencyData.set(data);
+        this.version++;
     }
 
     captureSnapshot(liveTraceId: string, name?: string, source: 'manual' | 'secuencial' = 'manual') {
-        const live = this.traces.find(t => t.id === liveTraceId);
-        // Fallback si no encuentra el traceId (por si pasan los datos directamente en una versión intermedia)
-        const dataToCopy = live ? live.data : new Float32Array(0);
-
-        const snapshot: Trace = {
-            id: crypto.randomUUID(),
-            name: name || `Snap ${new Date().toLocaleTimeString()}`,
-            type: 'snapshot',
-            metric: live ? live.metric : 'magnitude',
-            data: new Float32Array(dataToCopy),
-            color: live ? live.color : '#fff',
-            style: live ? live.style : 'solid',
-            visible: true,
-            offsetY: 0,
-            timestamp: Date.now(),
-            source
-        };
-        this.addTrace(snapshot);
-        return snapshot;
+        const metricList = Object.keys(this.metricsToCapture).filter(k => this.metricsToCapture[k]);
+        this.captureInstantanea(name, metricList);
     }
 
     get snapshots() {
-        return this.traces
-            .filter(t => t.type === 'snapshot')
-            .sort((a, b) => b.timestamp - a.timestamp);
+        return this.instantaneas;
     }
 }
 
