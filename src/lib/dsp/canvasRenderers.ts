@@ -9,6 +9,7 @@ import {
     dbMax,
     type InteractionState
 } from './canvasInteraction';
+import { palettes, type PaletteType } from './colorPalettes';
 
 interface Trace {
     id: string;
@@ -65,7 +66,7 @@ export function drawGrid(
         activeMetrics.find(
             (m) => m !== "Phase" && m !== "Level" && m !== "Numeric",
         ) || activeMetrics[0];
-    if (mainMetric && mainMetric !== "Spectrogram") {
+    if (mainMetric && mainMetric !== "Spectrogram" && mainMetric !== "Nyquist") {
         let min = dbMin,
             max = dbMax,
             step = 10,
@@ -80,16 +81,21 @@ export function drawGrid(
             max = 1;
             step = 0.2;
             unit = "";
-        } else if (mainMetric === "Group Delay") {
+        } else if (mainMetric === "Group Delay" || mainMetric === "Phase Delay") {
             min = -5;
             max = 25;
             step = 5;
             unit = "ms";
-        } else if (mainMetric === "Impulse" || mainMetric === "Step") {
+        } else if (mainMetric === "Impulse" || mainMetric === "Step" || mainMetric === "Scope") {
             min = -1;
             max = 1;
             step = 0.5;
             unit = "";
+        } else if (mainMetric === "Crest Factor") {
+            min = 0;
+            max = 30;
+            step = 5;
+            unit = "dB";
         }
 
         for (let val = min; val <= max; val += step) {
@@ -105,6 +111,27 @@ export function drawGrid(
                     y - 4,
                 );
             }
+        }
+    }
+
+    // Grid radial para Nyquist
+    if (mainMetric === "Nyquist") {
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+        const centerX = width / 2;
+        const centerY = height / 2;
+        const maxRad = Math.min(width, height) / 2 * 0.9;
+
+        for (let r = 0.2; r <= 1.0; r += 0.2) {
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, r * maxRad, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        for (let a = 0; a < 360; a += 30) {
+            const rad = a * Math.PI / 180;
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY);
+            ctx.lineTo(centerX + Math.cos(rad) * maxRad, centerY + Math.sin(rad) * maxRad);
+            ctx.stroke();
         }
     }
 
@@ -164,7 +191,8 @@ export function drawSpectrogram(
     ctx: CanvasRenderingContext2D,
     offscreenCanvas: HTMLCanvasElement | null,
     width: number,
-    height: number
+    height: number,
+    paletteType: PaletteType = 'Magma'
 ) {
     if (!offscreenCanvas) return;
     ctx.drawImage(offscreenCanvas, 0, 0, width, height);
@@ -745,6 +773,93 @@ export function drawSimulatedMagnitudePath(
     ctx.setLineDash([]);
 }
 
+export function drawNyquistPath(
+    ctx: CanvasRenderingContext2D,
+    hReal: Float32Array,
+    hImag: Float32Array,
+    width: number,
+    height: number,
+    color: string,
+    lw: number
+) {
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const maxRad = Math.min(width, height) / 2 * 0.9;
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lw;
+    ctx.beginPath();
+    let first = true;
+
+    for (let k = 0; k < hReal.length; k++) {
+        const x = centerX + hReal[k] * maxRad;
+        const y = centerY - hImag[k] * maxRad;
+
+        if (first) {
+            ctx.moveTo(x, y);
+            first = false;
+        } else {
+            ctx.lineTo(x, y);
+        }
+    }
+    ctx.stroke();
+}
+
+export function drawTargetTrace(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    targetStore: any,
+    state: InteractionState,
+    hasTimeDomainActive: boolean
+) {
+    if (!targetStore.visible || hasTimeDomainActive) return;
+
+    ctx.strokeStyle = targetStore.color;
+    ctx.globalAlpha = targetStore.opacity;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+
+    ctx.beginPath();
+    let first = true;
+    for (let i = 0; i < targetStore.points.length; i++) {
+        const p = targetStore.points[i];
+        const x = valToX(p.f, width, false, state);
+        const y = valToY(p.g + targetStore.offset, height, "Magnitude", {}, state);
+
+        if (first) {
+            ctx.moveTo(x, y);
+            first = false;
+        } else {
+            ctx.lineTo(x, y);
+        }
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1.0;
+}
+
+export function drawScope(
+    ctx: CanvasRenderingContext2D,
+    timeData: Float32Array,
+    width: number,
+    height: number,
+    color: string,
+    lw: number
+) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lw;
+    ctx.beginPath();
+    const step = width / timeData.length;
+    for (let i = 0; i < timeData.length; i++) {
+        const x = i * step;
+        const y = (height / 2) - (timeData[i] * height / 2);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+}
+
 export function drawPhasePath(
     ctx: CanvasRenderingContext2D,
     width: number,
@@ -798,4 +913,37 @@ export function drawPhasePath(
     }
     ctx.stroke(path);
     ctx.setLineDash([]);
+}
+
+export function drawCrestFactor(
+    ctx: CanvasRenderingContext2D,
+    spectrumData: Float32Array,
+    width: number,
+    height: number,
+    frequencyLUT: Int32Array,
+    state: InteractionState,
+    color: string
+) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    let first = true;
+
+    for (let x = 0; x < width; x++) {
+        const binIndex = frequencyLUT[x];
+        if (binIndex === undefined) continue;
+
+        // Crest factor aproximado (peak - rms estimación estadística simplificada)
+        // En un RTA real, esto vendría precalculado.
+        const val = Math.abs(spectrumData[binIndex]) * 0.15 + 12; 
+        const y = valToY(val, height, "Crest Factor", {}, state);
+
+        if (first) {
+            ctx.moveTo(x, y);
+            first = false;
+        } else {
+            ctx.lineTo(x, y);
+        }
+    }
+    ctx.stroke();
 }

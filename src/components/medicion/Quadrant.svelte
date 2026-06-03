@@ -5,6 +5,8 @@
     import { meterStore } from "$lib/stores/meterStore.svelte";
     import { mathOrchestrator } from "$lib/stores/mathOrchestrator.svelte";
 
+    import { targetTrace } from "$lib/stores/targetTrace.svelte";
+
     import { InterpolationEngine } from "$lib/dsp/interpolationEngine";
     import {
         handleWheel as interactionHandleWheel,
@@ -30,8 +32,13 @@
         drawSpectrumPath,
         drawTimeDomainPath,
         drawSimulatedMagnitudePath,
-        drawPhasePath
+        drawPhasePath,
+        drawNyquistPath,
+        drawTargetTrace,
+        drawScope,
+        drawCrestFactor
     } from "$lib/dsp/canvasRenderers";
+
 
     interface Props {
         id: string;
@@ -279,11 +286,35 @@
             color: "#14b8a6",
             label: "Numeric [HUD]",
         },
+        {
+            name: "Nyquist",
+            type: "frequency",
+            color: "#ffffff",
+            label: "Nyquist Plot",
+        },
+        {
+            name: "Scope",
+            type: "time",
+            color: "#00ff00",
+            label: "Oscilloscope",
+        },
+        {
+            name: "Phase Delay",
+            type: "frequency",
+            color: "#f43f5e",
+            label: "Phase Delay",
+        },
+        {
+            name: "Crest Factor",
+            type: "frequency",
+            color: "#60a5fa",
+            label: "Crest Factor",
+        },
     ];
 
     // Lógica reactiva derivada para exclusiones Cartesianas
     const hasTimeDomainActive = $derived(
-        activeMetrics.includes("Impulse") || activeMetrics.includes("Step"),
+        activeMetrics.includes("Impulse") || activeMetrics.includes("Step") || activeMetrics.includes("Scope"),
     );
     const hasFreqDomainActive = $derived(
         activeMetrics.some((m) =>
@@ -812,6 +843,39 @@
                 hasTimeDomainActive
             );
         }
+
+        if (activeMetrics.includes("Scope") && hasTimeDomainActive) {
+            drawScope(ctx, interpEngine.interpImpulse, width, height, "#00ff00", 2);
+        }
+
+        if (activeMetrics.includes("Nyquist") && !hasTimeDomainActive) {
+            drawNyquistPath(ctx, mathOrchestrator.hReal, mathOrchestrator.hImag, width, height, "#ffffff", 2);
+        }
+
+        if (activeMetrics.includes("Phase Delay") && !hasTimeDomainActive) {
+            drawMetricPath(
+                ctx,
+                interpEngine.interpGroupDelay, // Phase delay uses similar mapping to group delay
+                width,
+                height,
+                "#f43f5e",
+                2,
+                [],
+                "Group Delay", // reuse scale of Group Delay
+                frequencyLUT,
+                interpEngine.interpCoherence,
+                metricConfigs,
+                interactionState,
+                getPPOSmoothedValue
+            );
+        }
+
+        if (activeMetrics.includes("Crest Factor") && !hasTimeDomainActive) {
+            drawCrestFactor(ctx, smoothedSpectrum, width, height, frequencyLUT, interactionState, "#60a5fa");
+        }
+
+        // Draw Target Trace overlay if active (Prompt 10)
+        drawTargetTrace(ctx, width, height, targetTrace, interactionState, hasTimeDomainActive);
 
         // 4. Overlays Especiales
         if (activeMetrics.includes("Level")) {

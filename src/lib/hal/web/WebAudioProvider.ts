@@ -134,6 +134,29 @@ export class WebAudioProvider implements AudioProvider {
 		this.freqDataArray = null;
 	}
 
+	async playWavFile(file: File, level: number): Promise<void> {
+		if (!this.audioContext) {
+			this.audioContext = new AudioContext({ sampleRate: 48000 });
+		}
+		const arrayBuffer = await file.arrayBuffer();
+		const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+		
+		if (this.generatorNode) this.generatorNode.disconnect();
+		
+		const source = this.audioContext.createBufferSource();
+		source.buffer = audioBuffer;
+		source.loop = true;
+		
+		this.generatorGainNode = this.audioContext.createGain();
+		this.generatorGainNode.gain.setValueAtTime(Math.pow(10, level / 20), this.audioContext.currentTime);
+		
+		source.connect(this.generatorGainNode);
+		this.generatorGainNode.connect(this.audioContext.destination);
+		
+		source.start();
+		this.generatorNode = source;
+	}
+
 	playGenerator(type: SignalType, active: boolean, freq: number, level: number, routing: 'L' | 'R' | 'Stereo'): void {
 		if (!this.audioContext) {
 			this.audioContext = new AudioContext({ sampleRate: 48000 });
