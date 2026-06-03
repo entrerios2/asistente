@@ -1,4 +1,4 @@
-import { fft, ifft } from './fft';
+import { ifft } from './fft';
 
 /**
  * Algoritmo de deconvolución compleja en el dominio de la frecuencia.

@@ -50,6 +50,10 @@ class UIStore {
     windowType = $state<'Rectangular' | 'Hann' | 'Hamming' | 'FlatTop' | 'BlackmanHarris' | 'HFT223D' | 'Exponential'>('Hann');
     enableLeq = $state(false);
     leqWindowSeconds = $state(10);
+    leqValue = $state(-120); // Valor Leq actual en dBSPL
+    enableSourceWindow = $state(false);
+    sourceWindowWidthMs = $state(10.0);
+    sourceWindowOffsetMs = $state(0.0);
 
     toggleSnapshots() {
         this.showSnapshots = !this.showSnapshots;

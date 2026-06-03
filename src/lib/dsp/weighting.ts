@@ -1,5 +1,3 @@
-import { peakingCoeffs, biquadResponse } from './biquad';
-
 /**
  * Implementación de filtros de ponderación ANSI 1.43-1997.
  * Aplica curvas A, B, C y Z (lineal).

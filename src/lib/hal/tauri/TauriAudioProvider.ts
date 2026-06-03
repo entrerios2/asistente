@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { AudioProvider, AudioListener, AudioBufferChunk, AudioDevice, SignalType } from '../types';
+import { uiStore } from '../../stores/ui.svelte';
 
 export class TauriAudioProvider implements AudioProvider {
 	private intervalId: any = null;
@@ -11,6 +12,11 @@ export class TauriAudioProvider implements AudioProvider {
 				data[i] = Math.random() * 2 - 1;
 			}
 			listener.onAudioData(data);
+
+			if (uiStore.enableLeq) {
+				// Simulación de Leq dinámica alrededor de un nivel calibrado
+				uiStore.leqValue = 75 + Math.sin(Date.now() / 3000) * 4 + Math.random() * 0.5;
+			}
 		}, 20);
 	}
 
@@ -21,7 +27,7 @@ export class TauriAudioProvider implements AudioProvider {
 		}
 	}
 
-	playGenerator(type: SignalType, active: boolean, freq: number, level: number, routing: 'L' | 'R' | 'Stereo'): void {
+	playGenerator(type: SignalType, active: boolean, _freq: number, _level: number, _routing: 'L' | 'R' | 'Stereo'): void {
 		console.info(`Tauri Generator [${type}]: ${active ? 'ON (Simulated)' : 'OFF'}`);
 	}
 

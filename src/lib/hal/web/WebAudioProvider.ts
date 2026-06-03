@@ -1,12 +1,13 @@
 import { base } from '$app/paths';
 import type { AudioProvider, AudioListener, SignalType, AudioDevice } from '../types';
 import { meterStore } from '../../stores/meterStore.svelte';
+import { uiStore } from '../../stores/ui.svelte';
+import { LeqCalculator } from '../../dsp/leq';
 import {
 	generateWhiteNoise,
 	generatePinkNoise,
 	generateBrownNoise,
 	generateMusicNoise,
-	generateSineBuffer,
 	generateLogSweep,
 	generateBurst,
 	generateSinBurst,
@@ -22,6 +23,7 @@ export class WebAudioProvider implements AudioProvider {
 	private analyserNode: AnalyserNode | null = null;
 	private freqDataArray: Float32Array | null = null;
 	private animationFrameId: number | null = null;
+	private leqCalculator: LeqCalculator | null = null;
 
 	// Nodos del generador
 	private generatorNode: AudioNode | null = null;
@@ -99,6 +101,19 @@ export class WebAudioProvider implements AudioProvider {
 			if (this.analyserNode && this.freqDataArray && listener.onFrequencyData) {
 				this.analyserNode.getFloatFrequencyData(this.freqDataArray as any);
 				listener.onFrequencyData(this.freqDataArray as any);
+
+				if (uiStore.enableLeq) {
+					if (!this.leqCalculator) {
+						this.leqCalculator = new LeqCalculator(uiStore.leqWindowSeconds, 48000);
+					} else {
+						this.leqCalculator.setWindowSeconds(uiStore.leqWindowSeconds);
+					}
+					const timeData = new Float32Array(this.analyserNode.fftSize);
+					this.analyserNode.getFloatTimeDomainData(timeData);
+					uiStore.leqValue = this.leqCalculator.processBlock(timeData);
+				} else {
+					this.leqCalculator = null;
+				}
 			}
 
 			this.animationFrameId = requestAnimationFrame(readData);

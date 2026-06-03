@@ -1,8 +1,6 @@
 <script lang="ts">
     import { calibrationStore } from '$lib/stores/calibrationStore.svelte';
 
-    const filters = calibrationStore.suggestedFilters;
-
     function removeFilter(index: number) {
         calibrationStore.removeFilter(index);
     }

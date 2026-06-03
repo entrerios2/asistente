@@ -14,7 +14,6 @@ export class ComplexAveraging {
     // Para LPF (Bessel 5to orden simplificado o exponencial por bin)
     private lpfReal: Float32Array;
     private lpfImag: Float32Array;
-    private alpha: number = 0.1;
 
     constructor(bins: number, depth: number = 16) {
         this.bins = bins;

@@ -4,14 +4,8 @@
     import Sidebar from '../components/medicion/Sidebar.svelte';
     import ViewGrid from '../components/medicion/ViewGrid.svelte';
     import { traceManager } from '$lib/stores/traceManager.svelte';
-    import { uiStore } from '$lib/stores/ui.svelte';
-    import { detectTier } from '$lib/utils/tierDetector';
-
-    let tier = $state<string | null>(null);
 
     onMount(() => {
-        tier = detectTier();
-
         // Hotkeys globales
         const handleKey = (e: KeyboardEvent) => {
             if (e.code === 'Space') {

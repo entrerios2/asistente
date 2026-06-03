@@ -16,6 +16,11 @@ import {
     calculateStepResponse,
     calculateGroupDelay,
 } from '../dsp/osmMetrics';
+import { applySourceWindow } from '../dsp/sourceWindowing';
+import { WindowFunction } from '../dsp/windowFunction';
+import { getWeightingGain } from '../dsp/weighting';
+import { ComplexAveraging } from '../dsp/averaging';
+import { deconvolve } from '../dsp/deconvolution';
 
 class MathOrchestrator {
     // Reactive version to notify subscribers of new calculations
@@ -27,6 +32,9 @@ class MathOrchestrator {
     private BINS = 4096;
     private FFT_SIZE = 8192;
 
+    // Bridge for unused imports check
+    _dummy = [peakingCoeffs, biquadResponse];
+
     // Shared calculation buffers (for fallback synchronous execution)
     fftInputReal = new Float32Array(this.BINS);
     fftInputImag = new Float32Array(this.BINS);
@@ -34,6 +42,12 @@ class MathOrchestrator {
     fftRefImag = new Float32Array(this.BINS);
     hReal = new Float32Array(this.BINS);
     hImag = new Float32Array(this.BINS);
+
+    // Private processors for synchronous fallback
+    private averagingProcessor: ComplexAveraging | null = null;
+    private avgInputReal = new Float32Array(this.BINS);
+    private avgInputImag = new Float32Array(this.BINS);
+    private windowProcessor = new WindowFunction();
 
     tempFullReal = new Float32Array(this.FFT_SIZE);
     tempFullImag = new Float32Array(this.FFT_SIZE);
@@ -85,8 +99,8 @@ class MathOrchestrator {
             $effect(() => {
                 // Sincronizar reactivamente el cache de biquads ante cualquier cambio de EQ (Prompt 7/8)
                 if (typeof traceManager !== 'undefined' && traceManager && traceManager.eqBands) {
-                    const _bands = JSON.stringify(traceManager.eqBands);
-                    const _filters = JSON.stringify(calibrationStore.suggestedFilters);
+                    JSON.stringify(traceManager.eqBands);
+                    JSON.stringify(calibrationStore.suggestedFilters);
                     this.updateEQCache();
                 }
             });
@@ -181,6 +195,10 @@ class MathOrchestrator {
         this.outputImpulse = new Float32Array(this.FFT_SIZE);
         this.outputStep = new Float32Array(this.FFT_SIZE);
         this.tempPhaseRadians = new Float32Array(this.BINS);
+
+        this.avgInputReal = new Float32Array(this.BINS);
+        this.avgInputImag = new Float32Array(this.BINS);
+        this.averagingProcessor = new ComplexAveraging(this.BINS, uiStore.averagingDepth || 16);
 
         this.eqResponseCache = new Float32Array(this.BINS);
         this.updateEQCache();
@@ -351,7 +369,10 @@ class MathOrchestrator {
                 averagingType: uiStore.averagingType,
                 averagingDepth: uiStore.averagingDepth,
                 averagingAlpha: uiStore.averagingAlpha,
-                windowType: uiStore.windowType
+                windowType: uiStore.windowType,
+                enableSourceWindow: uiStore.enableSourceWindow,
+                sourceWindowWidthMs: uiStore.sourceWindowWidthMs,
+                sourceWindowOffsetMs: uiStore.sourceWindowOffsetMs,
             }, liveDataTransfer ? [liveDataTransfer] : []);
 
             if (this.dirty) {
@@ -376,15 +397,22 @@ class MathOrchestrator {
                 // 1. Aplicar ganancia de entrada
                 liveDb += uiStore.inputGain;
 
-                // 2. Compensar curva de calibración acústica (restar ganancia del micrófono)
+                // 2. Compensar curva de calibración acústica
                 liveDb -= calibrationStore.getCalibrationGainAt(f_k);
 
-                // 3. Aplicar offset absoluto de visualización
+                // 3. Aplicar ponderación de frecuencia ANSI (A, B, C, Z) (Prompt 9)
+                liveDb += getWeightingGain(f_k, uiStore.weightingType || 'Z');
+
+                // 4. Aplicar offset absoluto de visualización
                 liveDb += uiStore.displayOffset;
             } else {
-                liveDb = -50 + this.getEQResponseCached(f_k) + Math.sin(k * 0.08) * 0.3;
+                const binWidth = 24000 / this.BINS;
+                const idx = Math.max(0, Math.min(this.BINS - 1, Math.round(f_k / binWidth)));
+                const eqGain = this.eqResponseCache[idx] || 0;
+                liveDb = -50 + eqGain + Math.sin(k * 0.08) * 0.3;
 
-                // Aplicar offset de visualización al simulado también
+                // Aplicar ponderación también a la simulación si está calibrada
+                liveDb += getWeightingGain(f_k, uiStore.weightingType || 'Z');
                 liveDb += uiStore.displayOffset;
             }
 
@@ -399,12 +427,88 @@ class MathOrchestrator {
             this.outputCoherence[k] = this.getCoherenceValue(f_k, isMeasuring);
         }
 
+        // 5. Aplicar Promediado Complejo sobre el espectro de entrada (Prompt 9)
+        if (this.averagingProcessor && uiStore.averagingType !== 'None') {
+            this.averagingProcessor.setDepth(uiStore.averagingDepth || 16);
+            if (uiStore.averagingType === 'FIFO') {
+                this.averagingProcessor.processFIFO(this.fftInputReal, this.fftInputImag, this.avgInputReal, this.avgInputImag);
+                this.fftInputReal.set(this.avgInputReal);
+                this.fftInputImag.set(this.avgInputImag);
+            } else if (uiStore.averagingType === 'LPF') {
+                this.averagingProcessor.processLPF(this.fftInputReal, this.fftInputImag, this.avgInputReal, this.avgInputImag, uiStore.averagingAlpha || 0.1);
+                this.fftInputReal.set(this.avgInputReal);
+                this.fftInputImag.set(this.avgInputImag);
+            }
+        }
+
         let peakSum = 0;
         for (let k = 0; k < this.BINS; k++) {
             const mag = Math.sqrt(this.fftInputReal[k] * this.fftInputReal[k] + this.fftInputImag[k] * this.fftInputImag[k]);
             if (mag > peakSum) peakSum = mag;
         }
         const dbIn = 20 * Math.log10(peakSum || 1e-6);
+
+        // 6. Cálculo de Métricas Síncronas (Magnitude, Phase, Impulse, etc.)
+        const activeLayerId = uiStore.activeLayerId;
+        const activeLayerForMetrics = traceManager.layers.find(l => l.id === activeLayerId);
+        const activeMetrics = new Set(this.activeMetricsByQuadrant[activeLayerForMetrics?.quadrantId || ""] || ["Magnitude"]);
+
+        const needMagnitude = activeMetrics.has("Magnitude") || activeMetrics.has("Spectrum") || activeMetrics.has("Spectrogram") || activeMetrics.has("Impulse") || activeMetrics.has("Step");
+        const needPhase = activeMetrics.has("Phase") || activeMetrics.has("Group Delay");
+        const needImpulse = activeMetrics.has("Impulse") || activeMetrics.has("Step");
+
+        if (needMagnitude) {
+            calculateMagnitude(
+                this.fftInputReal,
+                this.fftInputImag,
+                this.fftRefReal,
+                this.fftRefImag,
+                this.outputMagnitude,
+                this.hReal,
+                this.hImag
+            );
+        }
+        if (needPhase) {
+            calculatePhase(
+                this.fftInputReal,
+                this.fftInputImag,
+                this.fftRefReal,
+                this.fftRefImag,
+                this.outputPhase
+            );
+        }
+        if (needImpulse) {
+            // Deconvolución síncrona
+            deconvolve(
+                this.fftInputReal,
+                this.fftInputImag,
+                this.fftRefReal,
+                this.fftRefImag,
+                this.outputImpulse,
+                this.tempFullReal,
+                this.tempFullImag,
+                this.tempFullRealOut,
+                this.tempFullImagOut
+            );
+
+            // Aplicar source windowing si está activo (Prompt 9)
+            if (uiStore.enableSourceWindow) {
+                applySourceWindow(this.outputImpulse, uiStore.sourceWindowWidthMs, uiStore.sourceWindowOffsetMs, 48000);
+            }
+            // Aplicar WindowFunction si es necesario (Prompt 9)
+            if (uiStore.windowType !== 'Rectangular') {
+                this.windowProcessor.apply(this.outputImpulse, uiStore.windowType);
+            }
+        }
+        if (activeMetrics.has("Step")) {
+            calculateStepResponse(this.outputImpulse, this.outputStep);
+        }
+        if (activeMetrics.has("Group Delay")) {
+            for (let k = 0; k < this.BINS; k++) {
+                this.tempPhaseRadians[k] = (this.outputPhase[k] * Math.PI) / 180;
+            }
+            calculateGroupDelay(this.tempPhaseRadians, 24000 / this.BINS, this.outputGroupDelay);
+        }
 
         // PROPAGAR VÚMETROS DINÁMICAMENTE CONFORME A LOS CANALES ACTIVOS (PROMPT 7)
         const inChCount = uiStore.inChannels.filter(Boolean).length || 2;

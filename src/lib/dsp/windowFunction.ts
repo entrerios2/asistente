@@ -41,7 +41,6 @@ export class WindowFunction {
 
             // Factores de corrección
             const cg = sumAmp / size; // Gain correction (Amplitud)
-            const eg = Math.sqrt(sumEnergy / size); // Energy correction (Energía)
 
             // Normalización in-place en la caché según el factor requerido
             for (let n = 0; n < size; n++) {

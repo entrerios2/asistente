@@ -3,8 +3,6 @@ import {
     valToY,
     xToVal,
     yToVal,
-    freqMin,
-    freqMax,
     timeMin,
     timeMax,
     dbMin,
@@ -249,8 +247,8 @@ export function drawLevelOverlay(
 
 export function drawNumericOverlay(
     ctx: CanvasRenderingContext2D,
-    width: number,
-    height: number,
+    _width: number,
+    _height: number,
     meterStore: any,
     hasTimeDomainActive: boolean
 ) {

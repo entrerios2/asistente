@@ -39,7 +39,6 @@
 
 			// Dibujamos las barras
 			const barWidth = 4;
-			const gap = 1;
 			
 			ctx.fillStyle = '#38bdf8'; // Azul eléctrico
 

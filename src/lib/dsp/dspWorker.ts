@@ -1,13 +1,14 @@
 import {
     calculateMagnitude,
     calculatePhase,
-    calculateImpulseResponse,
     calculateStepResponse,
     calculateGroupDelay,
 } from './osmMetrics';
 import { getWeightingGain } from './weighting';
 import { ComplexAveraging } from './averaging';
 import { deconvolve } from './deconvolution';
+import { applySourceWindow } from './sourceWindowing';
+import { WindowFunction } from './windowFunction';
 
 interface EQBand {
     freq: number;
@@ -202,6 +203,7 @@ let currentBins = 0;
 let currentFftSize = 0;
 
 let averagingProcessor: ComplexAveraging | null = null;
+const windowProcessor = new WindowFunction();
 
 self.onmessage = (event) => {
     if (event.data && event.data.type === 'run-dsp') {
@@ -220,7 +222,11 @@ self.onmessage = (event) => {
             weightingType,
             averagingType,
             averagingDepth,
-            averagingAlpha
+            averagingAlpha,
+            windowType,
+            enableSourceWindow,
+            sourceWindowWidthMs,
+            sourceWindowOffsetMs,
         } = event.data;
 
         // Re-allocate only if dimensions changed
@@ -367,6 +373,15 @@ self.onmessage = (event) => {
                 tempFullRealOut,
                 tempFullImagOut
             );
+
+            // Aplicar source windowing si está activo (Prompt 9)
+            if (enableSourceWindow) {
+                applySourceWindow(outputImpulse, sourceWindowWidthMs, sourceWindowOffsetMs, 48000);
+            }
+            // Aplicar WindowFunction si es necesario (Prompt 9)
+            if (windowType !== 'Rectangular') {
+                windowProcessor.apply(outputImpulse, windowType);
+            }
         }
 
         if (metricsSet.has("Step")) {

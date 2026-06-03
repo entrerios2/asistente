@@ -27,6 +27,8 @@
         drawNumericOverlay,
         drawCrosshair,
         drawMetricPath,
+        drawSpectrumPath,
+        drawTimeDomainPath,
         drawSimulatedMagnitudePath,
         drawPhasePath
     } from "$lib/dsp/canvasRenderers";
@@ -56,8 +58,6 @@
         "Step": { color: "#f97316", lineWidth: 2, lineDash: [] },
         "Simulated Magnitude": { color: "#00ffff", lineWidth: 1.5, lineDash: [4, 4] },
     });
-
-    let editingStyleMetric = $state<string | null>(null);
 
     let showAddDropdown = $state(false);
     let activeConfigMetric = $state<string | null>(null);
@@ -106,11 +106,8 @@
 
     // Control de recalculo y throttling
     let dirty = $state(true);
-    let lastMathTime = 0;
-    const MATH_THROTTLE_MS = 50;
-
+    
     // Puente reactivo de Svelte 5 para marcar dirty = true
-    let lastVersion = 0;
     // Sincronización desde el panel lateral hacia el cuadrante
     $effect(() => {
         const isSimulatingGlobal = uiStore.isSimulating;
@@ -133,10 +130,10 @@
 
     $effect(() => {
         // Observar cambios en variables que alteran el cálculo
-        const _bands = JSON.stringify(traceManager.eqBands);
-        const _metrics = activeMetrics.join(",");
-        const _measuring = uiStore.isMeasuring;
-        const _simulating = uiStore.isSimulating;
+        JSON.stringify(traceManager.eqBands);
+        activeMetrics.join(",");
+        uiStore.isMeasuring;
+        uiStore.isSimulating;
         dirty = true;
     });
 
@@ -301,8 +298,6 @@
             ].includes(m),
         ),
     );
-    const hasSpectrumActive = $derived(activeMetrics.includes("Spectrum"));
-    const hasMagnitudeActive = $derived(activeMetrics.includes("Magnitude"));
 
     function isMetricDisabled(name: string): boolean {
         if (
@@ -341,7 +336,6 @@
         if (ppo >= 48) return dataArray[binIndex];
         
         const octaveFraction = 1 / ppo;
-        const sr = 48000;
         const binWidth = 24000 / BINS;
         const freq = binIndex * binWidth || 1e-6;
         
@@ -562,7 +556,7 @@
                         rawBuffer,
                         metricConfigs,
                         interactionState,
-                        (idx, arr) => arr[idx],
+                        (idx: number, arr: Float32Array) => arr[idx],
                         mathOrchestrator.getEQResponseCached.bind(mathOrchestrator),
                         BINS
                     );
@@ -633,7 +627,7 @@
                             bufferToDraw,
                             metricConfigs,
                             interactionState,
-                            (idx, arr) => arr[idx],
+                            (idx: number, arr: Float32Array) => arr[idx],
                             mathOrchestrator.getEQResponseCached.bind(mathOrchestrator),
                             BINS
                         );
@@ -651,7 +645,7 @@
                             interpEngine.interpCoherence,
                             metricConfigs,
                             interactionState,
-                            (idx, arr) => arr[idx]
+                            (idx: number, arr: Float32Array) => arr[idx]
                         );
                     }
                 }
@@ -707,7 +701,7 @@
                 smoothedMagnitude,
                 metricConfigs,
                 interactionState,
-                (idx, arr) => arr[idx],
+                (idx: number, arr: Float32Array) => arr[idx],
                 mathOrchestrator.getEQResponseCached.bind(mathOrchestrator),
                 BINS
             );
@@ -728,7 +722,7 @@
                 smoothedSpectrum,
                 metricConfigs,
                 interactionState,
-                (idx, arr) => arr[idx],
+                (idx: number, arr: Float32Array) => arr[idx],
                 BINS
             );
         }
@@ -900,7 +894,7 @@
         }
     }
 
-    function loadInstantaneaIntoLayer(layerId: string, instId: string, metric: string) {
+    export function loadInstantaneaIntoLayer(layerId: string, instId: string, metric: string) {
         const inst = traceManager.instantaneas.find(i => i.id === instId);
         if (inst && inst.data[metric]) {
             traceManager.setLayerSource(layerId, 'snapshot', inst.data[metric]);

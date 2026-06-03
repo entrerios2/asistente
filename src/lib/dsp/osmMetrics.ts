@@ -1,5 +1,4 @@
 import { fft, ifft } from './fft';
-import { ComplexMath } from './math';
 
 /**
  * osmMetrics.ts — Motor de procesamiento matemático de grado de ingeniería para
@@ -244,10 +243,8 @@ export class SpectrogramQueue {
     private writePointer: number = 0;
     private count: number = 0;
     private maxHistory: number;
-    private bins: number;
 
     constructor(bins: number, maxHistory: number = 100) {
-        this.bins = bins;
         this.maxHistory = maxHistory;
         this.pool = Array.from({ length: maxHistory }, () => new Float32Array(bins));
     }

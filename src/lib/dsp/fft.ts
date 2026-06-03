@@ -3,7 +3,7 @@
  * Implementación pura Radix-2 DIT (Decimation-In-Time).
  */
 
-let webfftInstance: any = null;
+export let webfftInstance: any = null;
 
 // Intento de carga dinámica de WebFFT para aceleración por hardware si está disponible
 if (typeof window !== 'undefined') {

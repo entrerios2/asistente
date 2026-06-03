@@ -7,7 +7,6 @@
 
     const provider = getAudioProvider();
 
-    let isCapturing = $state(false);
     let statusText = $state("Listo para medir");
     let progress = $state(0);
 
@@ -340,7 +339,6 @@
         progress = 0;
         if (uiStore.measurementMode === "manual") {
             provider.stopCapture();
-            isCapturing = false;
         }
     }
 
@@ -372,7 +370,6 @@
                         traceManager.updateLiveTrace("live-1", data);
                     },
                 });
-                isCapturing = true;
                 statusText = "Medición en vivo activa";
             } else {
                 statusText = "Ejecutando secuencia...";

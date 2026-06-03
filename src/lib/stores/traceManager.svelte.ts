@@ -418,7 +418,7 @@ class TraceManager {
         }
     }
 
-    updateLiveTrace(id: string, data: Float32Array) {
+    updateLiveTrace(_id: string, data: Float32Array) {
         if (this.liveFrequencyData.length !== data.length) {
             this.liveFrequencyData = new Float32Array(data.length);
         }
@@ -426,7 +426,7 @@ class TraceManager {
         this.version++;
     }
 
-    captureSnapshot(liveTraceId: string, name?: string, source: 'manual' | 'secuencial' = 'manual') {
+    captureSnapshot(_liveTraceId: string, name?: string, _source: 'manual' | 'secuencial' = 'manual') {
         const metricList = Object.keys(this.metricsToCapture).filter(k => this.metricsToCapture[k]);
         this.captureInstantanea(name, metricList);
     }
