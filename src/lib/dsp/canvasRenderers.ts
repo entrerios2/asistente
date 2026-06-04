@@ -868,13 +868,16 @@ export function drawPhasePath(
     frequencyLUT: Int32Array,
     interpPhase: Float32Array,
     metricConfigs: Record<string, any>,
-    state: InteractionState
+    state: InteractionState,
+    interpCoherence?: Float32Array
 ) {
     ctx.strokeStyle = style.color;
     ctx.lineWidth = style.lineWidth;
     ctx.setLineDash(style.lineDash || []);
     
     const cfg = metricConfigs["Phase"] || { rotate: 0, unwrapMode: "±180", yShift: 0 };
+    const magCfg = metricConfigs["Magnitude"] || { enableCoherence: false, coherenceThreshold: 0.5 };
+
     const path = new Path2D();
     let lastY = 0;
     let first = true;
@@ -882,6 +885,12 @@ export function drawPhasePath(
     for (let x = 0; x < width; x++) {
         const binIndex = frequencyLUT[x];
         if (binIndex === undefined) continue;
+
+        // Masking by coherence (Prompt 11 parity)
+        if (interpCoherence && magCfg.enableCoherence && interpCoherence[binIndex] < magCfg.coherenceThreshold) {
+            first = true;
+            continue;
+        }
 
         let val = interpPhase[binIndex];
         

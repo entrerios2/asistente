@@ -702,60 +702,70 @@
 </script>
 
 <aside
-    class="w-[380px] h-full bg-[#0a0a0c] border-r border-[#1a1a24]/50 flex flex-row text-gray-200 select-none"
+    class="w-[380px] h-full bg-[#0a0a0c] border-r border-[#1a1a24]/50 flex flex-col text-gray-200 select-none"
 >
-    <!-- Pestañas Laterales -->
-    <nav
-        class="w-[60px] bg-[#050507] border-r border-[#1a1a24]/50 flex flex-col items-center py-4 gap-2"
-    >
+    <!-- CABECERA DE PESTAÑAS Y CONTROL (PROMPT 11) -->
+    <div class="flex items-center bg-[#050507] border-b border-[#1a1a24]/50 px-2 py-2 gap-1 h-[56px] flex-shrink-0">
+        <!-- Botón Colapsar Integrado -->
         <button
-            class="w-11 h-11 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer min-h-[44px] min-w-[44px]
-                   {uiStore.activeTab === 'medicion'
-                ? 'bg-[#3b82f6]/10 text-[#3b82f6]'
-                : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}"
-            onclick={() => (uiStore.activeTab = "medicion")}
-            title="Medición"
+            class="w-10 h-10 rounded-lg flex items-center justify-center text-gray-500 hover:text-white hover:bg-white/5 transition-all cursor-pointer mr-1"
+            onclick={() => (uiStore.showSidebar = !uiStore.showSidebar)}
+            title="Colapsar Panel"
         >
-            <span class="material-symbols-outlined text-[22px]">cadence</span>
+            <span class="material-symbols-outlined text-[20px]">menu_open</span>
         </button>
 
-        <button
-            class="w-11 h-11 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer min-h-[44px] min-w-[44px]
-                   {uiStore.activeTab === 'eq'
-                ? 'bg-[#3b82f6]/10 text-[#3b82f6]'
-                : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}"
-            onclick={() => (uiStore.activeTab = "eq")}
-            title="Ecualización"
-        >
-            <span class="material-symbols-outlined text-[22px]"
-                >instant_mix</span
+        <!-- Selector de Pestañas Horizontal -->
+        <nav class="flex-1 flex items-center gap-1">
+            <button
+                class="flex-1 h-9 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer gap-2 px-2
+                       {uiStore.activeTab === 'medicion'
+                    ? 'bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20'
+                    : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}"
+                onclick={() => (uiStore.activeTab = "medicion")}
+                title="Medición"
             >
-        </button>
+                <span class="material-symbols-outlined text-[18px]">cadence</span>
+                <span class="text-[10px] font-bold uppercase tracking-wider hidden xl:block">Med</span>
+            </button>
 
-        <button
-            class="w-11 h-11 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer min-h-[44px] min-w-[44px]
-                   {uiStore.activeTab === 'snaps'
-                ? 'bg-[#3b82f6]/10 text-[#3b82f6]'
-                : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}"
-            onclick={() => (uiStore.activeTab = "snaps")}
-            title="Instantáneas"
-        >
-            <span class="material-symbols-outlined text-[22px]"
-                >screenshot_frame_2</span
+            <button
+                class="flex-1 h-9 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer gap-2 px-2
+                       {uiStore.activeTab === 'eq'
+                    ? 'bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20'
+                    : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}"
+                onclick={() => (uiStore.activeTab = "eq")}
+                title="Ecualización"
             >
-        </button>
+                <span class="material-symbols-outlined text-[18px]">instant_mix</span>
+                <span class="text-[10px] font-bold uppercase tracking-wider hidden xl:block">EQ</span>
+            </button>
 
-        <button
-            class="w-11 h-11 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer min-h-[44px] min-w-[44px]
-                   {uiStore.activeTab === 'config'
-                ? 'bg-[#3b82f6]/10 text-[#3b82f6]'
-                : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}"
-            onclick={() => (uiStore.activeTab = "config")}
-            title="Configuración"
-        >
-            <span class="material-symbols-outlined text-[22px]">settings</span>
-        </button>
-    </nav>
+            <button
+                class="flex-1 h-9 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer gap-2 px-2
+                       {uiStore.activeTab === 'snaps'
+                    ? 'bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20'
+                    : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}"
+                onclick={() => (uiStore.activeTab = "snaps")}
+                title="Instantáneas"
+            >
+                <span class="material-symbols-outlined text-[18px]">screenshot_frame_2</span>
+                <span class="text-[10px] font-bold uppercase tracking-wider hidden xl:block">Inst</span>
+            </button>
+
+            <button
+                class="flex-1 h-9 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer gap-2 px-2
+                       {uiStore.activeTab === 'config'
+                    ? 'bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20'
+                    : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}"
+                onclick={() => (uiStore.activeTab = "config")}
+                title="Configuración"
+            >
+                <span class="material-symbols-outlined text-[18px]">settings</span>
+                <span class="text-[10px] font-bold uppercase tracking-wider hidden xl:block">Cfg</span>
+            </button>
+        </nav>
+    </div>
 
     <!-- Contenido Principal del Sidebar -->
     <div class="flex-1 h-full overflow-hidden flex flex-col bg-[#0a0a0c]">

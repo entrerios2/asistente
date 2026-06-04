@@ -156,8 +156,8 @@ export function handleWheel(
 
     const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
 
-    const zoomX = !e.ctrlKey;
-    const zoomY = !e.shiftKey;
+    const zoomX = !e.altKey;
+    const zoomY = e.altKey;
 
     if (zoomX) {
         const valBefore = xToVal(mX, containerWidth, hasTimeDomainActive, state);
@@ -169,7 +169,7 @@ export function handleWheel(
     if (zoomY) {
         const refMetric =
             activeMetrics.find((m) => m !== "Phase") || "Magnitude";
-        const valBefore = yToVal(mY, containerHeight, refMetric, state);
+        const valBefore = yToVal(mY, containerHeight, refMetric, metricConfigs, state);
         state.scaleY = Math.max(0.1, Math.min(80, state.scaleY * zoomFactor));
         const yAfter = valToY(valBefore, containerHeight, refMetric, metricConfigs, state);
         state.offsetY += mY - yAfter;

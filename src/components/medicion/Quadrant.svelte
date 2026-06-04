@@ -6,6 +6,7 @@
     import { mathOrchestrator } from "$lib/stores/mathOrchestrator.svelte";
 
     import { targetTrace } from "$lib/stores/targetTrace.svelte";
+    import { palettes, type PaletteType } from "$lib/dsp/colorPalettes";
 
     import { InterpolationEngine } from "$lib/dsp/interpolationEngine";
     import {
@@ -74,9 +75,12 @@
         "Simulated Magnitude": { modeY: "dB", sensorResistance: 10, smoothingPPO: 48, invertY: false, enableCoherence: false, coherenceThreshold: 0.5, yShift: 0 },
         "Phase": { unwrapMode: "±180", rotate: 0, range: 360, yShift: 0 },
         "Coherence": { cohType: "normal", showThresholdLine: false, thresholdColor: "#eab308", thresholdValue: 0.5, yShift: 0 },
+        "Spectrogram": { palette: "Magma" as PaletteType },
     });
 
     let frequencyLUT = $state<Int32Array>(new Int32Array(0));
+    let hoverMetric = $state<string | null>(null);
+    let soloMetric = $state<string | null>(null);
 
     // Dimensiones reactivas del contenedor físico
     let containerWidth = $state(0);
@@ -151,31 +155,15 @@
     let offscreenCtx: CanvasRenderingContext2D | null = null;
 
     // Precomputar LUT de colores en formato RGBA numérico para optimización extrema con ImageData
-    const spectrogramLUT_RGBA = new Uint8ClampedArray(256 * 3);
-    for (let i = 0; i < 256; i++) {
-        const norm = i / 255;
-        let r = 0,
-            g = 0,
-            b = 0;
-        if (norm < 0.3) {
-            r = Math.round((norm / 0.3) * 80);
-            g = Math.round((norm / 0.3) * 10);
-            b = Math.round(50 + (norm / 0.3) * 100);
-        } else if (norm < 0.7) {
-            const t = (norm - 0.3) / 0.4;
-            r = Math.round(80 + t * 150);
-            g = Math.round(10 + t * 60);
-            b = Math.round(150 - t * 120);
-        } else {
-            const t = (norm - 0.7) / 0.3;
-            r = 230 + Math.round(t * 25);
-            g = 70 + Math.round(t * 185);
-            b = 30 + Math.round(t * 180);
+    const spectrogramLUT_RGBA = $derived.by(() => {
+        const paletteName = metricConfigs["Spectrogram"]?.palette || "Magma";
+        const paletteData = palettes[paletteName as PaletteType];
+        const lut = new Uint8ClampedArray(256 * 3);
+        if (paletteData) {
+            lut.set(paletteData);
         }
-        spectrogramLUT_RGBA[i * 3] = r;
-        spectrogramLUT_RGBA[i * 3 + 1] = g;
-        spectrogramLUT_RGBA[i * 3 + 2] = b;
-    }
+        return lut;
+    });
 
     const smoothedMagnitude = new Float32Array(interpEngine.BINS);
     const smoothedSpectrum = new Float32Array(interpEngine.BINS);
@@ -532,6 +520,9 @@
                 if (hasTimeDomainActive && !["Impulse", "Step"].includes(metric)) return;
                 if (!hasTimeDomainActive && ["Impulse", "Step"].includes(metric)) return;
 
+                // Aplicar Hover Focus y Solo Mode (Prompt 11)
+                ctx.globalAlpha = op * getMetricAlpha(metric);
+
                 // Color reservado para la métrica
                 let color = "#ff4444"; // Magnitud por defecto
                 if (metric === "Phase") color = "#d946ef";
@@ -603,7 +594,8 @@
                         frequencyLUT,
                         rawBuffer,
                         metricConfigs,
-                        interactionState
+                        interactionState,
+                        interpEngine.interpCoherence
                     );
                 }
             });
@@ -623,6 +615,9 @@
             activeMetrics.forEach((metric) => {
                 if (hasTimeDomainActive && !["Impulse", "Step"].includes(metric)) return;
                 if (!hasTimeDomainActive && ["Impulse", "Step"].includes(metric)) return;
+
+                // Aplicar Hover Focus y Solo Mode (Prompt 11) en instantáneas
+                ctx.globalAlpha = op * getMetricAlpha(metric);
 
                 // Color reservado para la métrica
                 let color = "#ff4444";
@@ -645,7 +640,8 @@
                             frequencyLUT,
                             bufferToDraw,
                             metricConfigs,
-                            interactionState
+                            interactionState,
+                            interpEngine.interpCoherence
                         );
                     } else if (metric === "Simulated Magnitude") {
                         drawSimulatedMagnitudePath(
@@ -768,7 +764,8 @@
                 frequencyLUT,
                 interpEngine.interpPhase,
                 metricConfigs,
-                interactionState
+                interactionState,
+                interpEngine.interpCoherence
             );
         }
 
@@ -937,6 +934,26 @@
         interactionHandleDoubleClick(interactionState);
     }
 
+    function zoomTactile(axis: "XY" | "X" | "Y") {
+        const factor = 1.25;
+        if (axis === "XY" || axis === "X") {
+            interactionState.scaleX = Math.max(0.1, Math.min(80, interactionState.scaleX * factor));
+        }
+        if (axis === "XY" || axis === "Y") {
+            interactionState.scaleY = Math.max(0.1, Math.min(80, interactionState.scaleY * factor));
+        }
+    }
+
+    function getMetricAlpha(metric: string): number {
+        if (soloMetric) {
+            return soloMetric === metric ? 1.0 : 0.2;
+        }
+        if (hoverMetric) {
+            return hoverMetric === metric ? 1.0 : 0.15;
+        }
+        return 1.0;
+    }
+
     function toggleSelector(e: MouseEvent) {
         e.stopPropagation();
         showSelector = !showSelector;
@@ -1030,6 +1047,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
     class="quadrant-container"
+    style="cursor: {interactionState.isDragging ? 'grabbing' : 'grab'};"
     bind:this={container}
     onmousemove={handleMouseMove}
     onmousedown={handleMouseDown}
@@ -1101,7 +1119,14 @@
             <!-- Pills Interactivos -->
             <div class="active-metrics-badges flex items-center gap-2">
                 {#each activeMetrics as m}
-                    <div class="metric-badge-pill flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-[#121216] border border-[#222] text-gray-300">
+                    <div 
+                        class="metric-badge-pill flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-[11px] font-semibold transition-all border select-none
+                               {soloMetric === m ? 'bg-[#00ff88]/20 border-[#00ff88] text-[#00ff88]' : 'bg-[#121216] border-[#222] text-gray-300'}"
+                        onmouseenter={() => (hoverMetric = m)}
+                        onmouseleave={() => (hoverMetric = null)}
+                        onclick={() => (soloMetric = soloMetric === m ? null : m)}
+                        title="Clic para modo Solo, Hover para destacar"
+                    >
                         <span>{m}</span>
                         {#if metricConfigs[m]}
                             <button
@@ -1211,6 +1236,65 @@
 
     <!-- CANVAS DEL GRÁFICO -->
     <canvas bind:this={canvas}></canvas>
+
+    <!-- HUD DE CAPAS (PROMPT 11) -->
+    <div class="absolute left-3 bottom-3 flex flex-col gap-1 z-20 select-none pointer-events-none">
+        <div class="bg-[#0c0c0e]/80 border border-[#1a1a24] rounded-lg p-2 flex flex-col gap-1.5 shadow-xl min-w-[120px] pointer-events-auto">
+            <div class="flex items-center justify-between border-b border-[#1a1a24] pb-1 mb-0.5">
+                <span class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">Capas en Escena</span>
+                <span class="material-symbols-outlined text-[10px] text-gray-600">layers</span>
+            </div>
+            {#each quadrantLayers as layer}
+                <div class="flex items-center justify-between gap-3 group">
+                    <span class="text-[10px] truncate {layer.id === uiStore.activeLayerId ? 'text-[#00ff88] font-bold' : 'text-gray-400'}">
+                        {layer.name}
+                    </span>
+                    <div class="flex items-center gap-1">
+                        <button 
+                            class="text-gray-500 hover:text-white transition-colors cursor-pointer"
+                            onclick={() => layer.visible = !layer.visible}
+                        >
+                            <span class="material-symbols-outlined text-[12px]">
+                                {layer.visible ? 'visibility' : 'visibility_off'}
+                            </span>
+                        </button>
+                    </div>
+                </div>
+            {/each}
+        </div>
+    </div>
+
+    <!-- BOTONERA DE ZOOM FLOTANTE (PROMPT 11) -->
+    <div class="absolute right-3 bottom-3 flex flex-col gap-1 z-20 select-none opacity-40 hover:opacity-100 transition-opacity">
+        <button
+            class="flex items-center justify-center w-7 h-7 rounded bg-[#0c0c0e]/80 border border-[#1a1a24] text-[9px] font-bold text-gray-400 hover:text-white hover:border-[#00ff88] transition-all cursor-pointer shadow-lg"
+            onclick={() => zoomTactile("XY")}
+            title="Zoom Ambos Ejes (+)"
+        >
+            XY
+        </button>
+        <button
+            class="flex items-center justify-center w-7 h-7 rounded bg-[#0c0c0e]/80 border border-[#1a1a24] text-[9px] font-bold text-gray-400 hover:text-white hover:border-[#00ff88] transition-all cursor-pointer shadow-lg"
+            onclick={() => zoomTactile("X")}
+            title="Zoom Eje X (+)"
+        >
+            X
+        </button>
+        <button
+            class="flex items-center justify-center w-7 h-7 rounded bg-[#0c0c0e]/80 border border-[#1a1a24] text-[9px] font-bold text-gray-400 hover:text-white hover:border-[#00ff88] transition-all cursor-pointer shadow-lg"
+            onclick={() => zoomTactile("Y")}
+            title="Zoom Eje Y (+)"
+        >
+            Y
+        </button>
+        <button
+            class="flex items-center justify-center w-7 h-7 rounded bg-[#0c0c0e]/80 border border-[#1a1a24] text-gray-400 hover:text-white hover:border-[#00ff88] transition-all cursor-pointer shadow-lg"
+            onclick={() => handleDoubleClick()}
+            title="Restaurar Zoom"
+        >
+            <span class="material-symbols-outlined text-[14px]">restart_alt</span>
+        </button>
+    </div>
 
     <!-- POPOVER FLOTANTE ABSOLUTO OSM (CONFIGURACIÓN GLOBAL) -->
     {#if showSelector}
@@ -1445,6 +1529,62 @@
                     <span class="text-gray-400 font-medium">Desplazamiento Eje Y ({metricConfigs["Coherence"].yShift}px)</span>
                     <input type="range" min="-300" max="300" step="5" class="accent-[#00ff88]"
                            bind:value={metricConfigs["Coherence"].yShift} />
+                </div>
+            {/if}
+            
+            {#if activeConfigMetric === "Spectrogram"}
+                <!-- Paleta de Colores -->
+                <div class="flex flex-col gap-1">
+                    <span class="text-gray-400 font-medium">Paleta de Colores</span>
+                    <select class="bg-[#121216] border border-[#222] rounded px-2 py-1 text-xs text-white focus:outline-none"
+                            bind:value={metricConfigs["Spectrogram"].palette}>
+                        <option value="Magma">Magma</option>
+                        <option value="Jet">Jet (Arcoíris)</option>
+                        <option value="Hot">Hot (Térmico)</option>
+                        <option value="Grayscale">Escala de Grises</option>
+                    </select>
+                </div>
+            {/if}
+
+            <!-- Editor de Estilos de Curva (Prompt 11) -->
+            {#if activeConfigMetric && metricStyles[activeConfigMetric]}
+                <div class="border-t border-[#1a1a24] pt-2 mt-1 flex flex-col gap-2">
+                    <span class="text-gray-400 font-bold uppercase tracking-wider text-[8px]">Estilo de Curva</span>
+                    
+                    <!-- Color -->
+                    <div class="flex items-center justify-between">
+                        <span>Color</span>
+                        <input type="color" bind:value={metricStyles[activeConfigMetric].color} class="w-6 h-6 border-none cursor-pointer rounded bg-transparent" />
+                    </div>
+
+                    <!-- Grosor -->
+                    <div class="flex flex-col gap-1">
+                        <div class="flex justify-between">
+                            <span>Grosor</span>
+                            <span class="font-mono">{metricStyles[activeConfigMetric].lineWidth}px</span>
+                        </div>
+                        <input type="range" min="1" max="5" step="0.2" class="accent-[#00ff88]"
+                               bind:value={metricStyles[activeConfigMetric].lineWidth} />
+                    </div>
+
+                    <!-- Estilo de Trazo -->
+                    <div class="flex flex-col gap-1">
+                        <span>Estilo de Línea</span>
+                        <div class="flex gap-1">
+                            <button class="flex-1 py-1 text-center border rounded text-[9px] cursor-pointer {metricStyles[activeConfigMetric].lineDash.length === 0 ? 'bg-[#00ff88]/10 border-[#00ff88] text-[#00ff88]' : 'bg-[#121216] border-[#222]'}"
+                                    onclick={() => metricStyles[activeConfigMetric!].lineDash = []}>
+                                Sólido
+                            </button>
+                            <button class="flex-1 py-1 text-center border rounded text-[9px] cursor-pointer {metricStyles[activeConfigMetric].lineDash.join(',') === '8,4' ? 'bg-[#00ff88]/10 border-[#00ff88] text-[#00ff88]' : 'bg-[#121216] border-[#222]'}"
+                                    onclick={() => metricStyles[activeConfigMetric!].lineDash = [8, 4]}>
+                                Dashed
+                            </button>
+                            <button class="flex-1 py-1 text-center border rounded text-[9px] cursor-pointer {metricStyles[activeConfigMetric].lineDash.join(',') === '2,3' ? 'bg-[#00ff88]/10 border-[#00ff88] text-[#00ff88]' : 'bg-[#121216] border-[#222]'}"
+                                    onclick={() => metricStyles[activeConfigMetric!].lineDash = [2, 3]}>
+                                Dotted
+                            </button>
+                        </div>
+                    </div>
                 </div>
             {/if}
         </div>

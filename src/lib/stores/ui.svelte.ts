@@ -6,6 +6,7 @@ class UIStore {
     layout = $state('1x1'); // '1x1' | '1x2' | '2x1' | '2x2' | '3x1' | '3x2'
     showSnapshots = $state(true); // Aunque ahora esté en el sidebar, mantenemos el control
     isDarkMode = $state(true);
+    showSidebar = $state(true);
     
     // Configuración de Audio
     audioInDevice = $state('');

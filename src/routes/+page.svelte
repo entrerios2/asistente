@@ -4,6 +4,7 @@
     import Sidebar from '../components/medicion/Sidebar.svelte';
     import ViewGrid from '../components/medicion/ViewGrid.svelte';
     import { traceManager } from '$lib/stores/traceManager.svelte';
+    import { uiStore } from '$lib/stores/ui.svelte';
 
     onMount(() => {
         // Hotkeys globales
@@ -30,7 +31,9 @@
 <div class="app-layout">
     <Header />
     <div class="app-container">
-        <Sidebar />
+        <div class="sidebar-wrapper transition-all duration-300 ease-in-out overflow-hidden flex-shrink-0 {uiStore.showSidebar ? 'w-[380px]' : 'w-0 border-none'}">
+            <Sidebar />
+        </div>
         
         <main class="main-viewport">
             <ViewGrid />
