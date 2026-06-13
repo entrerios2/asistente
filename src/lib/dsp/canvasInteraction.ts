@@ -6,8 +6,9 @@ export const dbMin = -30; // dB
 export const dbMax = 30; // dB
 
 export interface InteractionState {
-    scaleX: number;
-    scaleY: number;
+    zoomX: number;     // Zoom independiente eje X (frecuencia)
+    zoomY: number;     // Zoom independiente eje Y (amplitud)
+    zoomMode: 'XY' | 'X' | 'Y'; // Modo de zoom activo
     offsetX: number;
     offsetY: number;
     isDragging: boolean;
@@ -27,7 +28,7 @@ export function valToX(val: number, width: number, hasTimeDomainActive: boolean,
         // Eje X Lineal (Tiempo en milisegundos: -10ms a 100ms)
         const range = timeMax - timeMin;
         const normalized = (val - timeMin) / range;
-        return normalized * width * state.scaleX + state.offsetX;
+        return normalized * width * state.zoomX + state.offsetX;
     } else {
         // Eje X Logarítmico (Frecuencia en hercios: 20Hz a 20kHz)
         if (val < freqMin) val = freqMin;
@@ -35,12 +36,12 @@ export function valToX(val: number, width: number, hasTimeDomainActive: boolean,
         const logMax = Math.log10(freqMax);
         const logFreq = Math.log10(val);
         const normalized = (logFreq - logMin) / (logMax - logMin);
-        return normalized * width * state.scaleX + state.offsetX;
+        return normalized * width * state.zoomX + state.offsetX;
     }
 }
 
 export function xToVal(x: number, width: number, hasTimeDomainActive: boolean, state: InteractionState): number {
-    const adjustedX = (x - state.offsetX) / state.scaleX;
+    const adjustedX = (x - state.offsetX) / state.zoomX;
     if (hasTimeDomainActive) {
         const range = timeMax - timeMin;
         return timeMin + (adjustedX / width) * range;
@@ -106,7 +107,7 @@ export function valToY(
     const range = max - min;
     const normalized = (val - min) / range;
     const base = height - normalized * height;
-    return base * state.scaleY + state.offsetY;
+    return base * state.zoomY + state.offsetY;
 }
 
 export function yToVal(
@@ -115,7 +116,7 @@ export function yToVal(
     metricType: string,
     state: InteractionState
 ): number {
-    const adjustedY = (y - state.offsetY) / state.scaleY;
+    const adjustedY = (y - state.offsetY) / state.zoomY;
     let min = dbMin,
         max = dbMax;
     if (metricType === "Spectrum") {
@@ -148,20 +149,35 @@ export function handleWheel(
     activeMetrics: string[],
     metricConfigs: Record<string, any>,
     hasTimeDomainActive: boolean
-) {
+): void {
     e.preventDefault();
     const rect = canvasElement.getBoundingClientRect();
     const mX = e.clientX - rect.left;
     const mY = e.clientY - rect.top;
 
-    const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
 
-    const zoomX = !e.altKey;
-    const zoomY = e.altKey;
+    let zoomX = false;
+    let zoomY = false;
+
+    if (e.altKey) {
+        zoomY = true;
+    } else if (e.shiftKey) {
+        zoomX = true;
+    } else {
+        if (state.zoomMode === 'X') {
+            zoomX = true;
+        } else if (state.zoomMode === 'Y') {
+            zoomY = true;
+        } else {
+            zoomX = true;
+            zoomY = true;
+        }
+    }
 
     if (zoomX) {
         const valBefore = xToVal(mX, containerWidth, hasTimeDomainActive, state);
-        state.scaleX = Math.max(0.1, Math.min(80, state.scaleX * zoomFactor));
+        state.zoomX = Math.max(0.1, Math.min(20, state.zoomX * delta));
         const xAfter = valToX(valBefore, containerWidth, hasTimeDomainActive, state);
         state.offsetX += mX - xAfter;
     }
@@ -169,8 +185,8 @@ export function handleWheel(
     if (zoomY) {
         const refMetric =
             activeMetrics.find((m) => m !== "Phase") || "Magnitude";
-        const valBefore = yToVal(mY, containerHeight, refMetric, metricConfigs, state);
-        state.scaleY = Math.max(0.1, Math.min(80, state.scaleY * zoomFactor));
+        const valBefore = yToVal(mY, containerHeight, refMetric, state);
+        state.zoomY = Math.max(0.1, Math.min(20, state.zoomY * delta));
         const yAfter = valToY(valBefore, containerHeight, refMetric, metricConfigs, state);
         state.offsetY += mY - yAfter;
     }
@@ -226,8 +242,8 @@ export function handleTouchStart(
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         state.touchStartDist = Math.sqrt(dx * dx + dy * dy);
-        state.touchStartScaleX = state.scaleX;
-        state.touchStartScaleY = state.scaleY;
+        state.touchStartScaleX = state.zoomX;
+        state.touchStartScaleY = state.zoomY;
     }
 }
 
@@ -253,8 +269,8 @@ export function handleTouchMove(
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist > 0 && state.touchStartDist > 0) {
             const factor = dist / state.touchStartDist;
-            state.scaleX = Math.max(0.1, Math.min(80, state.touchStartScaleX * factor));
-            state.scaleY = Math.max(0.1, Math.min(80, state.touchStartScaleY * factor));
+            state.zoomX = Math.max(0.1, Math.min(20, state.touchStartScaleX * factor));
+            state.zoomY = Math.max(0.1, Math.min(20, state.touchStartScaleY * factor));
         }
     }
 }
@@ -265,9 +281,13 @@ export function handleTouchEnd(state: InteractionState) {
     state.showCrosshair = false;
 }
 
-export function handleDoubleClick(state: InteractionState) {
-    state.scaleX = 1;
-    state.scaleY = 1;
+export function handleMouseUp(state: InteractionState): void {
+    state.isDragging = false;
+}
+
+export function handleDoubleClick(state: InteractionState): void {
+    state.zoomX = 1;
+    state.zoomY = 1;
     state.offsetX = 0;
     state.offsetY = 0;
 }
@@ -285,7 +305,7 @@ export function rebuildFrequencyLUT(
 
     for (let x = 0; x < width; x++) {
         // Calcular frecuencia logarítmica correspondiente al píxel X
-        const adjustedX = (x - state.offsetX) / state.scaleX;
+        const adjustedX = (x - state.offsetX) / state.zoomX;
         const logFreq = (adjustedX / width) * (logMax - logMin) + logMin;
         const freq = Math.pow(10, logFreq);
         

@@ -13,6 +13,7 @@
         handleWheel as interactionHandleWheel,
         handleMouseMove as interactionHandleMouseMove,
         handleMouseDown as interactionHandleMouseDown,
+        handleMouseUp as interactionHandleMouseUp,
         handleTouchStart as interactionHandleTouchStart,
         handleTouchMove as interactionHandleTouchMove,
         handleTouchEnd as interactionHandleTouchEnd,
@@ -88,8 +89,9 @@
 
     // Zoom & Pan state
     let interactionState = $state<InteractionState>({
-        scaleX: 1,
-        scaleY: 1,
+        zoomX: 1,
+        zoomY: 1,
+        zoomMode: 'XY' as const,
         offsetX: 0,
         offsetY: 0,
         isDragging: false,
@@ -968,6 +970,10 @@
         interactionHandleMouseDown(e, interactionState, showSelector, settingsBtn);
     }
 
+    function handleMouseUp() {
+        interactionHandleMouseUp(interactionState);
+    }
+
     function handleTouchStart(e: TouchEvent) {
         interactionHandleTouchStart(e, interactionState);
     }
@@ -987,10 +993,10 @@
     function zoomTactile(axis: "XY" | "X" | "Y") {
         const factor = 1.25;
         if (axis === "XY" || axis === "X") {
-            interactionState.scaleX = Math.max(0.1, Math.min(80, interactionState.scaleX * factor));
+            interactionState.zoomX = Math.max(0.1, Math.min(20, interactionState.zoomX * factor));
         }
         if (axis === "XY" || axis === "Y") {
-            interactionState.scaleY = Math.max(0.1, Math.min(80, interactionState.scaleY * factor));
+            interactionState.zoomY = Math.max(0.1, Math.min(20, interactionState.zoomY * factor));
         }
     }
 
@@ -1101,10 +1107,10 @@
     bind:this={container}
     onmousemove={handleMouseMove}
     onmousedown={handleMouseDown}
-    onmouseup={() => (interactionState.isDragging = false)}
+    onmouseup={handleMouseUp}
     onmouseleave={() => {
         interactionState.showCrosshair = false;
-        interactionState.isDragging = false;
+        handleMouseUp();
     }}
     onwheel={handleWheel}
     ondblclick={handleDoubleClick}
@@ -1285,7 +1291,7 @@
     </div>
 
     <!-- CANVAS DEL GRÁFICO -->
-    <canvas bind:this={canvas}></canvas>
+    <canvas bind:this={canvas} style="cursor: {interactionState.isDragging ? 'grabbing' : 'grab'}"></canvas>
 
     <!-- HUD DE CAPAS (PROMPT 11) -->
     <div class="absolute left-3 bottom-3 flex flex-col gap-1 z-20 select-none pointer-events-none">
