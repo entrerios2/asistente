@@ -31,9 +31,20 @@
 <div class="app-layout">
     <Header />
     <div class="app-container">
-        <div class="sidebar-wrapper transition-all duration-300 ease-in-out overflow-hidden flex-shrink-0 {uiStore.showSidebar ? 'w-[380px]' : 'w-0 border-none'}">
-            <Sidebar />
-        </div>
+        {#if uiStore.showSidebar}
+            <div class="sidebar-wrapper transition-all duration-300 ease-in-out overflow-hidden flex-shrink-0" style="width: 380px; transition: width 300ms ease, opacity 300ms ease;">
+                <Sidebar />
+            </div>
+        {:else}
+            <!-- Mini-botón flotante para re-abrir el sidebar -->
+            <button
+                class="fixed left-2 top-14 z-50 w-10 h-10 bg-[#121216]/90 border border-[#1a1a24] rounded-lg flex items-center justify-center text-gray-400 hover:text-white hover:bg-[#1a1a24] transition-all cursor-pointer shadow-lg"
+                onclick={() => uiStore.showSidebar = true}
+                title="Abrir Panel"
+            >
+                <span class="material-symbols-outlined text-[18px]">menu</span>
+            </button>
+        {/if}
         
         <main class="main-viewport">
             <ViewGrid />
