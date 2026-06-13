@@ -81,6 +81,13 @@ class TraceManager {
         { freq: 10000, gain: 0, q: 1, type: 'peaking' }
     ]);
 
+    eqBandsVersion = $state(0);
+
+    updateEQBand(index: number, field: 'freq' | 'gain' | 'q' | 'type', value: number | string) {
+        (this.eqBands[index] as any)[field] = value;
+        this.eqBandsVersion++;
+    }
+
     constructor() {
         // Inicializar con una capa por defecto para el primer cuadrante
         this.addLayer('Capa 1', 'q-1', 'live');

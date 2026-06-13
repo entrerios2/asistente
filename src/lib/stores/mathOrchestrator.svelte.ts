@@ -56,12 +56,12 @@ class MathOrchestrator {
     tempPhaseRadians = new Float32Array(this.BINS);
 
     // Shared output buffers
-    outputMagnitude = $state(new Float32Array(this.BINS));
-    outputPhase = $state(new Float32Array(this.BINS));
-    outputCoherence = $state(new Float32Array(this.BINS));
-    outputGroupDelay = $state(new Float32Array(this.BINS));
-    outputImpulse = $state(new Float32Array(this.FFT_SIZE));
-    outputStep = $state(new Float32Array(this.FFT_SIZE));
+    outputMagnitude = $state.raw(new Float32Array(this.BINS));
+    outputPhase = $state.raw(new Float32Array(this.BINS));
+    outputCoherence = $state.raw(new Float32Array(this.BINS));
+    outputGroupDelay = $state.raw(new Float32Array(this.BINS));
+    outputImpulse = $state.raw(new Float32Array(this.FFT_SIZE));
+    outputStep = $state.raw(new Float32Array(this.FFT_SIZE));
 
     // Cache for EQ response
     eqResponseCache = new Float32Array(this.BINS);
@@ -96,14 +96,6 @@ class MathOrchestrator {
             $effect(() => {
                 this.startTimer(uiStore.dspUpdateRate);
             });
-            $effect(() => {
-                // Sincronizar reactivamente el cache de biquads ante cualquier cambio de EQ (Prompt 7/8)
-                if (typeof traceManager !== 'undefined' && traceManager && traceManager.eqBands) {
-                    JSON.stringify(traceManager.eqBands);
-                    JSON.stringify(calibrationStore.suggestedFilters);
-                    this.updateEQCache();
-                }
-            });
         });
     }
 
@@ -120,12 +112,12 @@ class MathOrchestrator {
 
     private handleWorkerMessage(data: any) {
         if (data.type === 'dsp-results') {
-            this.outputMagnitude = new Float32Array(data.outputMagnitude);
-            this.outputPhase = new Float32Array(data.outputPhase);
-            this.outputCoherence = new Float32Array(data.outputCoherence);
-            this.outputGroupDelay = new Float32Array(data.outputGroupDelay);
-            this.outputImpulse = new Float32Array(data.outputImpulse);
-            this.outputStep = new Float32Array(data.outputStep);
+            this.outputMagnitude.set(new Float32Array(data.outputMagnitude));
+            this.outputPhase.set(new Float32Array(data.outputPhase));
+            this.outputCoherence.set(new Float32Array(data.outputCoherence));
+            this.outputGroupDelay.set(new Float32Array(data.outputGroupDelay));
+            this.outputImpulse.set(new Float32Array(data.outputImpulse));
+            this.outputStep.set(new Float32Array(data.outputStep));
             
             // PROPAGAR VÚMETROS DINÁMICAMENTE CONFORME A LOS CANALES ACTIVOS (PROMPT 7)
             const inChCount = uiStore.inChannels.filter(Boolean).length || 2;
