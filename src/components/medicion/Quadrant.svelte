@@ -108,6 +108,30 @@
     const interpEngine = new InterpolationEngine();
 
     const quadrantLayers = $derived(traceManager.layers.filter(l => l.quadrantId === id));
+    const myLayers = $derived(
+        traceManager.layers.filter(l => l.quadrantId === id && l.visible)
+    );
+
+    // Visual coding: dash patterns por índice de capa
+    const LAYER_DASHES: number[][] = [
+        [],          // Capa 1: sólida
+        [8, 4],      // Capa 2: guiones
+        [2, 3],      // Capa 3: puntos
+        [8, 3, 2, 3] // Capa 4: guión-punto
+    ];
+
+    // Visual coding: colores por tipo de métrica
+    const METRIC_COLORS: Record<string, string> = {
+        'Magnitude': '#ff4444',
+        'Phase': '#d946ef',
+        'Coherence': '#eab308',
+        'Group Delay': '#3b82f6',
+        'Impulse': '#14b8a6',
+        'Step': '#10b981',
+        'Spectrum': '#a855f7',
+        'Scope': '#06b6d4',
+        'Crest Factor': '#f97316',
+    };
 
     $effect(() => {
         frequencyLUT = rebuildFrequencyLUT(containerWidth, interactionState, interpEngine.BINS);
@@ -496,9 +520,35 @@
             }
         }
 
+        // NUEVO: Dibujar capas adicionales (no-live) de este cuadrante
+        for (let li = 0; li < myLayers.length; li++) {
+            const layer = myLayers[li];
+            if (layer.isMeasuring) continue; // La capa live se dibuja aparte con el pipeline principal
+            if (layer.data.length === 0) continue;
+
+            const dashPattern = LAYER_DASHES[li % LAYER_DASHES.length];
+            const isActive = layer.id === uiStore.activeLayerId;
+            const lineWidth = isActive ? 2.5 : 1.2;
+            const alpha = isActive ? 1.0 : 0.75;
+
+            // Determinar la métrica principal para el color
+            const metricForColor = activeMetrics[0] || 'Magnitude';
+            const color = METRIC_COLORS[metricForColor] || '#ff4444';
+
+            ctx.globalAlpha = alpha;
+            drawMetricPath(
+                ctx, layer.data, width, height,
+                color, lineWidth, dashPattern,
+                metricForColor, frequencyLUT, interpEngine.interpCoherence,
+                metricConfigs, interactionState, getPPOSmoothedValue
+            );
+            ctx.globalAlpha = 1.0;
+        }
+
         // 3. Renderizar las curvas de todas las capas de medición de este cuadrante (Prompt 6)
         quadrantLayers.forEach((layer, index) => {
             if (!layer.visible) return;
+            if (!layer.isMeasuring) return; // La capa no-live ya se dibuja en el bloque anterior
 
             // Determinar estilos visuales basados en la posición de la capa
             const isActive = layer.id === uiStore.activeLayerId;
