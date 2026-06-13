@@ -918,7 +918,15 @@
         }
 
         if (activeMetrics.includes("Crest Factor") && !hasTimeDomainActive) {
-            drawCrestFactor(ctx, smoothedSpectrum, width, height, frequencyLUT, interactionState, "#60a5fa");
+            drawCrestFactor(
+                ctx,
+                mathOrchestrator.outputCrestFactor,
+                width,
+                height,
+                frequencyLUT,
+                interactionState,
+                "#60a5fa"
+            );
         }
 
         // Draw Target Trace overlay if active (Prompt 10)

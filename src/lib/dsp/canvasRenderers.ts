@@ -926,13 +926,15 @@ export function drawPhasePath(
 
 export function drawCrestFactor(
     ctx: CanvasRenderingContext2D,
-    spectrumData: Float32Array,
+    crestFactorData: Float32Array,
     width: number,
     height: number,
     frequencyLUT: Int32Array,
     state: InteractionState,
     color: string
 ) {
+    if (frequencyLUT.length === 0) return;
+
     ctx.strokeStyle = color;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
@@ -942,9 +944,7 @@ export function drawCrestFactor(
         const binIndex = frequencyLUT[x];
         if (binIndex === undefined) continue;
 
-        // Crest factor aproximado (peak - rms estimación estadística simplificada)
-        // En un RTA real, esto vendría precalculado.
-        const val = Math.abs(spectrumData[binIndex]) * 0.15 + 12; 
+        const val = crestFactorData[binIndex];
         const y = valToY(val, height, "Crest Factor", {}, state);
 
         if (first) {
