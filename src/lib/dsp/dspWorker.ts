@@ -194,6 +194,7 @@ let outputGroupDelay: Float32Array;
 let outputImpulse: Float32Array;
 let outputStep: Float32Array;
 let tempPhaseRadians: Float32Array;
+let outputCrestFactor: Float32Array;
 
 // Temp buffers for averaging
 let avgInputReal: Float32Array;
@@ -253,6 +254,7 @@ self.onmessage = (event) => {
             outputImpulse = new Float32Array(FFT_SIZE);
             outputStep = new Float32Array(FFT_SIZE);
             tempPhaseRadians = new Float32Array(BINS);
+            outputCrestFactor = new Float32Array(BINS);
 
             avgInputReal = new Float32Array(BINS);
             avgInputImag = new Float32Array(BINS);
@@ -359,6 +361,24 @@ self.onmessage = (event) => {
                 outputPhase,
             );
         }
+
+        // Crest Factor por bin: CF = peak_dB - rms_dB (simplificado a partir de la magnitud)
+        if (metricsSet.has("Crest Factor")) {
+            for (let k = 0; k < BINS; k++) {
+                const mag = Math.sqrt(fftInputReal[k] * fftInputReal[k] + fftInputImag[k] * fftInputImag[k]);
+                const peakDb = 20 * Math.log10(mag + 1e-12);
+                // Estimar RMS como promedio local de 5 bins
+                let sumSq = 0;
+                let count = 0;
+                for (let j = Math.max(0, k - 2); j <= Math.min(BINS - 1, k + 2); j++) {
+                    const m = Math.sqrt(fftInputReal[j] * fftInputReal[j] + fftInputImag[j] * fftInputImag[j]);
+                    sumSq += m * m;
+                    count++;
+                }
+                const rmsDb = 10 * Math.log10(sumSq / count + 1e-24);
+                outputCrestFactor[k] = Math.max(0, Math.min(30, peakDb - rmsDb));
+            }
+        }
         
         // 6. Deconvolución en Tiempo Real (Prompt 9)
         if (needImpulse) {
@@ -402,6 +422,7 @@ self.onmessage = (event) => {
             outputGroupDelay: outputGroupDelay.slice().buffer,
             outputImpulse: outputImpulse.slice().buffer,
             outputStep: outputStep.slice().buffer,
+            outputCrestFactor: outputCrestFactor.slice().buffer,
             dbIn
         });
     }

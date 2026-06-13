@@ -62,6 +62,7 @@ class MathOrchestrator {
     outputGroupDelay = $state.raw(new Float32Array(this.BINS));
     outputImpulse = $state.raw(new Float32Array(this.FFT_SIZE));
     outputStep = $state.raw(new Float32Array(this.FFT_SIZE));
+    outputCrestFactor = $state.raw(new Float32Array(this.BINS));
 
     // Cache for EQ response
     eqResponseCache = new Float32Array(this.BINS);
@@ -118,6 +119,9 @@ class MathOrchestrator {
             this.outputGroupDelay.set(new Float32Array(data.outputGroupDelay));
             this.outputImpulse.set(new Float32Array(data.outputImpulse));
             this.outputStep.set(new Float32Array(data.outputStep));
+            if (data.outputCrestFactor) {
+                this.outputCrestFactor.set(new Float32Array(data.outputCrestFactor));
+            }
             
             // PROPAGAR VÚMETROS DINÁMICAMENTE CONFORME A LOS CANALES ACTIVOS (PROMPT 7)
             const inChCount = uiStore.inChannels.filter(Boolean).length || 2;
@@ -187,6 +191,7 @@ class MathOrchestrator {
         this.outputImpulse = new Float32Array(this.FFT_SIZE);
         this.outputStep = new Float32Array(this.FFT_SIZE);
         this.tempPhaseRadians = new Float32Array(this.BINS);
+        this.outputCrestFactor = new Float32Array(this.BINS);
 
         this.avgInputReal = new Float32Array(this.BINS);
         this.avgInputImag = new Float32Array(this.BINS);
