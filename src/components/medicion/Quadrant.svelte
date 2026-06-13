@@ -38,7 +38,8 @@
         drawNyquistPath,
         drawTargetTrace,
         drawScope,
-        drawCrestFactor
+        drawCrestFactor,
+        drawPhaseDelay
     } from "$lib/dsp/canvasRenderers";
 
 
@@ -902,20 +903,17 @@
         }
 
         if (activeMetrics.includes("Phase Delay") && !hasTimeDomainActive) {
-            drawMetricPath(
+            drawPhaseDelay(
                 ctx,
-                interpEngine.interpGroupDelay, // Phase delay uses similar mapping to group delay
+                interpEngine.interpPhase,
                 width,
                 height,
-                "#f43f5e",
-                2,
-                [],
-                "Group Delay", // reuse scale of Group Delay
+                '#06b6d4',
+                1.5,
                 frequencyLUT,
-                interpEngine.interpCoherence,
                 metricConfigs,
                 interactionState,
-                getPPOSmoothedValue
+                BINS
             );
         }
 

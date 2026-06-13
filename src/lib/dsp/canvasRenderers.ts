@@ -956,3 +956,49 @@ export function drawCrestFactor(
     }
     ctx.stroke();
 }
+
+export function drawPhaseDelay(
+    ctx: CanvasRenderingContext2D,
+    phaseData: Float32Array,
+    width: number,
+    height: number,
+    color: string,
+    lw: number,
+    frequencyLUT: Int32Array,
+    metricConfigs: Record<string, any>,
+    state: InteractionState,
+    bins: number
+) {
+    if (frequencyLUT.length === 0) return;
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lw;
+    ctx.beginPath();
+    let first = true;
+    const sr = 48000;
+    const binWidth = sr / 2 / bins;
+
+    for (let x = 0; x < width; x++) {
+        const binIndex = frequencyLUT[x];
+        if (binIndex === undefined || binIndex < 1) continue;
+
+        const freq = binIndex * binWidth || 1e-6;
+        const phaseRad = (phaseData[binIndex] * Math.PI) / 180;
+
+        // Phase Delay = -φ(f) / (2πf), convertido a ms
+        const phaseDelayMs = (-phaseRad / (2 * Math.PI * freq)) * 1000;
+
+        // Clamp para evitar valores absurdos en bajas frecuencias
+        const clampedDelay = Math.max(-5, Math.min(25, phaseDelayMs));
+
+        const y = valToY(clampedDelay, height, 'Phase Delay', metricConfigs, state);
+
+        if (first) {
+            ctx.moveTo(x, y);
+            first = false;
+        } else {
+            ctx.lineTo(x, y);
+        }
+    }
+    ctx.stroke();
+}
