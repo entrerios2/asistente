@@ -2130,6 +2130,209 @@
                     </div>
                 </div>
 
+                <!-- PROCESAMIENTO DSP AVANZADO -->
+                <div
+                    class="flex flex-col gap-4 bg-[#121216]/40 border border-[#1a1a24]/50 rounded-xl p-4"
+                >
+                    <div
+                        class="flex items-center gap-2 border-b border-[#1a1a24]/30 pb-2"
+                    >
+                        <span
+                            class="material-symbols-outlined text-[#ec4899] text-lg"
+                            >tune</span
+                        >
+                        <h3
+                            class="text-xs font-bold text-gray-300 uppercase tracking-wider"
+                        >
+                            Procesamiento DSP
+                        </h3>
+                    </div>
+
+                    <!-- Ponderación de Frecuencia -->
+                    <div class="flex flex-col gap-1.5">
+                        <label
+                            class="text-[10px] font-bold text-gray-500 uppercase tracking-wider"
+                            >Ponderación (Weighting)</label
+                        >
+                        <div class="flex bg-[#121216] p-0.5 rounded-md border border-[#1a1a24]/40">
+                            {#each ['Z', 'A', 'B', 'C'] as wt}
+                                <button
+                                    class="flex-1 py-1.5 text-[10px] font-bold rounded transition-all cursor-pointer min-h-[28px]
+                                           {uiStore.weightingType === wt
+                                        ? 'bg-[#ec4899]/15 text-[#ec4899] shadow'
+                                        : 'text-gray-500 hover:text-gray-300'}"
+                                    onclick={() => uiStore.weightingType = wt}
+                                >
+                                    {wt}
+                                </button>
+                            {/each}
+                        </div>
+                    </div>
+
+                    <!-- Promediado Complejo -->
+                    <div class="flex flex-col gap-1.5">
+                        <label
+                            class="text-[10px] font-bold text-gray-500 uppercase tracking-wider"
+                            >Promediado (Averaging)</label
+                        >
+                        <div class="flex bg-[#121216] p-0.5 rounded-md border border-[#1a1a24]/40">
+                            {#each ['None', 'FIFO', 'LPF'] as avgType}
+                                <button
+                                    class="flex-1 py-1.5 text-[10px] font-bold rounded transition-all cursor-pointer min-h-[28px]
+                                           {uiStore.averagingType === avgType
+                                        ? 'bg-[#ec4899]/15 text-[#ec4899] shadow'
+                                        : 'text-gray-500 hover:text-gray-300'}"
+                                    onclick={() => uiStore.averagingType = avgType}
+                                >
+                                    {avgType}
+                                </button>
+                            {/each}
+                        </div>
+                        {#if uiStore.averagingType === 'FIFO'}
+                            <div class="flex items-center gap-2 mt-1">
+                                <span class="text-[9px] text-gray-500 font-bold uppercase w-16">Depth</span>
+                                <input
+                                    type="range" min="2" max="64" step="1"
+                                    bind:value={uiStore.averagingDepth}
+                                    ondblclick={() => uiStore.averagingDepth = 16}
+                                    class="flex-1 h-1 bg-[#121216] rounded-lg appearance-none cursor-pointer accent-[#ec4899]"
+                                    title="Doble clic para reiniciar a 16"
+                                />
+                                <span class="text-[10px] font-mono text-[#ec4899] w-8 text-right">{uiStore.averagingDepth}</span>
+                            </div>
+                        {:else if uiStore.averagingType === 'LPF'}
+                            <div class="flex items-center gap-2 mt-1">
+                                <span class="text-[9px] text-gray-500 font-bold uppercase w-16">Alpha</span>
+                                <input
+                                    type="range" min="0.01" max="0.5" step="0.01"
+                                    bind:value={uiStore.averagingAlpha}
+                                    ondblclick={() => uiStore.averagingAlpha = 0.1}
+                                    class="flex-1 h-1 bg-[#121216] rounded-lg appearance-none cursor-pointer accent-[#ec4899]"
+                                    title="Doble clic para reiniciar a 0.1"
+                                />
+                                <span class="text-[10px] font-mono text-[#ec4899] w-10 text-right">{uiStore.averagingAlpha.toFixed(2)}</span>
+                            </div>
+                        {/if}
+                    </div>
+
+                    <!-- Función de Ventana -->
+                    <div class="flex flex-col gap-1.5">
+                        <label
+                            class="text-[10px] font-bold text-gray-500 uppercase tracking-wider"
+                            >Ventana (Window)</label
+                        >
+                        <select
+                            bind:value={uiStore.windowType}
+                            class="w-full bg-[#121216] border border-[#1a1a24] rounded-md px-3 py-2 text-xs text-gray-200 focus:outline-none focus:border-[#ec4899]"
+                        >
+                            {#each ['Rectangular', 'Hann', 'Hamming', 'FlatTop', 'BlackmanHarris', 'HFT223D', 'Exponential'] as wType}
+                                <option value={wType}>{wType}</option>
+                            {/each}
+                        </select>
+                    </div>
+
+                    <!-- Source Windowing (Time Gate) -->
+                    <div class="flex flex-col gap-2 pt-2 border-t border-[#1a1a24]/20">
+                        <label class="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                bind:checked={uiStore.enableSourceWindow}
+                                class="w-4 h-4 rounded accent-[#ec4899] cursor-pointer"
+                            />
+                            <span class="font-semibold select-none">Source Window (Time Gate)</span>
+                        </label>
+                        {#if uiStore.enableSourceWindow}
+                            <div class="flex flex-col gap-2 pl-6">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[9px] text-gray-500 font-bold uppercase w-14">Width</span>
+                                    <input
+                                        type="range" min="0.5" max="50" step="0.5"
+                                        bind:value={uiStore.sourceWindowWidthMs}
+                                        ondblclick={() => uiStore.sourceWindowWidthMs = 10.0}
+                                        class="flex-1 h-1 bg-[#121216] rounded-lg appearance-none cursor-pointer accent-[#ec4899]"
+                                    />
+                                    <span class="text-[10px] font-mono text-[#ec4899] w-14 text-right">{uiStore.sourceWindowWidthMs.toFixed(1)} ms</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[9px] text-gray-500 font-bold uppercase w-14">Offset</span>
+                                    <input
+                                        type="range" min="-20" max="20" step="0.1"
+                                        bind:value={uiStore.sourceWindowOffsetMs}
+                                        ondblclick={() => uiStore.sourceWindowOffsetMs = 0}
+                                        class="flex-1 h-1 bg-[#121216] rounded-lg appearance-none cursor-pointer accent-[#ec4899]"
+                                    />
+                                    <span class="text-[10px] font-mono text-[#ec4899] w-14 text-right">{uiStore.sourceWindowOffsetMs.toFixed(1)} ms</span>
+                                </div>
+                            </div>
+                        {/if}
+                    </div>
+
+                    <!-- Leq (Nivel Equivalente Continuo) -->
+                    <div class="flex flex-col gap-2 pt-2 border-t border-[#1a1a24]/20">
+                        <label class="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                bind:checked={uiStore.enableLeq}
+                                class="w-4 h-4 rounded accent-[#ec4899] cursor-pointer"
+                            />
+                            <span class="font-semibold select-none">Leq (Nivel Equivalente)</span>
+                        </label>
+                        {#if uiStore.enableLeq}
+                            <div class="flex items-center gap-2 pl-6">
+                                <span class="text-[9px] text-gray-500 font-bold uppercase w-14">Ventana</span>
+                                <input
+                                    type="range" min="1" max="60" step="1"
+                                    bind:value={uiStore.leqWindowSeconds}
+                                    ondblclick={() => uiStore.leqWindowSeconds = 10}
+                                    class="flex-1 h-1 bg-[#121216] rounded-lg appearance-none cursor-pointer accent-[#ec4899]"
+                                />
+                                <span class="text-[10px] font-mono text-[#ec4899] w-10 text-right">{uiStore.leqWindowSeconds} s</span>
+                            </div>
+                            <div class="flex items-center gap-2 pl-6">
+                                <span class="text-[9px] text-gray-500 font-bold uppercase w-14">Valor</span>
+                                <span class="text-sm font-mono font-bold text-[#00ff88]">{uiStore.leqValue.toFixed(1)} dBSPL</span>
+                            </div>
+                        {/if}
+                    </div>
+
+                    <!-- FPS y DSP Rate -->
+                    <div class="flex flex-col gap-2 pt-2 border-t border-[#1a1a24]/20">
+                        <div class="flex items-center gap-2">
+                            <span class="text-[9px] text-gray-500 font-bold uppercase w-16">Target FPS</span>
+                            <input
+                                type="range" min="5" max="60" step="5"
+                                bind:value={uiStore.targetFps}
+                                ondblclick={() => uiStore.targetFps = 30}
+                                class="flex-1 h-1 bg-[#121216] rounded-lg appearance-none cursor-pointer accent-[#ec4899]"
+                                title="Doble clic para reiniciar a 30"
+                            />
+                            <span class="text-[10px] font-mono text-[#ec4899] w-8 text-right">{uiStore.targetFps}</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-[9px] text-gray-500 font-bold uppercase w-16">DSP Rate</span>
+                            <input
+                                type="range" min="1" max="10" step="1"
+                                bind:value={uiStore.dspUpdateRate}
+                                ondblclick={() => uiStore.dspUpdateRate = 2}
+                                class="flex-1 h-1 bg-[#121216] rounded-lg appearance-none cursor-pointer accent-[#ec4899]"
+                                title="Doble clic para reiniciar a 2 Hz"
+                            />
+                            <span class="text-[10px] font-mono text-[#ec4899] w-10 text-right">{uiStore.dspUpdateRate} Hz</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-[9px] text-gray-500 font-bold uppercase w-16">FFT Size</span>
+                            <select
+                                bind:value={uiStore.fftSize}
+                                class="flex-1 bg-[#121216] border border-[#1a1a24] rounded px-2 py-1 text-xs text-gray-200"
+                            >
+                                {#each [2048, 4096, 8192, 16384, 32768] as size}
+                                    <option value={size}>{size}</option>
+                                {/each}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- AUDIO HARDWARE CARD -->
                 <div
                     class="flex flex-col gap-4 bg-[#121216]/40 border border-[#1a1a24]/50 rounded-xl p-4"
