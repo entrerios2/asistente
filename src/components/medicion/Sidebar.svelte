@@ -807,6 +807,46 @@
                 <!-- CONTENIDO MODO MANUAL -->
                 {#if uiStore.measurementMode === "manual"}
                     <div class="flex flex-col gap-4">
+                        <!-- AUTOMATIZACIÓN DE MEDICIÓN (F27) -->
+                        <div class="flex flex-col gap-2 bg-[#121216]/40 border border-[#1a1a24]/50 rounded-xl p-3 mt-3">
+                            <div class="flex items-center gap-2 border-b border-[#1a1a24]/30 pb-1.5">
+                                <span class="material-symbols-outlined text-[#a855f7] text-sm">bolt</span>
+                                <h3 class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Automatización</h3>
+                            </div>
+
+                            <label class="flex items-center gap-2.5 cursor-pointer group py-1">
+                                <input
+                                    type="checkbox"
+                                    bind:checked={uiStore.autoSaveSnapshotOnStop}
+                                    class="w-4 h-4 rounded accent-[#a855f7] cursor-pointer"
+                                />
+                                <div class="flex flex-col">
+                                    <span class="text-xs text-gray-200 font-semibold group-hover:text-white transition-colors select-none">
+                                        Auto-guardar al detener
+                                    </span>
+                                    <span class="text-[9px] text-gray-500">
+                                        Guarda instantánea automática al pulsar Detener
+                                    </span>
+                                </div>
+                            </label>
+
+                            <label class="flex items-center gap-2.5 cursor-pointer group py-1">
+                                <input
+                                    type="checkbox"
+                                    bind:checked={uiStore.linkGeneratorToMeasurement}
+                                    class="w-4 h-4 rounded accent-[#a855f7] cursor-pointer"
+                                />
+                                <div class="flex flex-col">
+                                    <span class="text-xs text-gray-200 font-semibold group-hover:text-white transition-colors select-none">
+                                        Vincular Generador al medir
+                                    </span>
+                                    <span class="text-[9px] text-gray-500">
+                                        Enciende/apaga el generador junto con la medición
+                                    </span>
+                                </div>
+                            </label>
+                        </div>
+
                         <!-- Dropdown Generador -->
                         <div class="flex flex-col gap-1.5">
                             <label
