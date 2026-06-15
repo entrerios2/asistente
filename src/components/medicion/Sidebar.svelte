@@ -340,9 +340,24 @@
         if (uiStore.measurementMode === "manual") {
             provider.stopCapture();
         }
+
+        // Auto-guardar instantánea al detener (F27)
+        if (uiStore.autoSaveSnapshotOnStop) {
+            captureActiveLive();
+        }
+
+        // Apagar generador si está vinculado (F27)
+        if (uiStore.linkGeneratorToMeasurement) {
+            uiStore.genActive = false;
+        }
     }
 
     async function startMeasurement() {
+        // Encender generador si está vinculado (F27)
+        if (uiStore.linkGeneratorToMeasurement && !uiStore.genActive) {
+            uiStore.genActive = true;
+        }
+
         progress = 0;
         statusText = "Iniciando captura...";
         try {
@@ -2201,7 +2216,7 @@
                                            {uiStore.weightingType === wt
                                         ? 'bg-[#ec4899]/15 text-[#ec4899] shadow'
                                         : 'text-gray-500 hover:text-gray-300'}"
-                                    onclick={() => uiStore.weightingType = wt}
+                                    onclick={() => uiStore.weightingType = wt as 'A' | 'B' | 'C' | 'Z'}
                                 >
                                     {wt}
                                 </button>
@@ -2222,7 +2237,7 @@
                                            {uiStore.averagingType === avgType
                                         ? 'bg-[#ec4899]/15 text-[#ec4899] shadow'
                                         : 'text-gray-500 hover:text-gray-300'}"
-                                    onclick={() => uiStore.averagingType = avgType}
+                                    onclick={() => uiStore.averagingType = avgType as 'None' | 'FIFO' | 'LPF'}
                                 >
                                     {avgType}
                                 </button>
