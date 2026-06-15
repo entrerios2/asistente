@@ -10,6 +10,23 @@ import { deconvolve } from './deconvolution';
 import { applySourceWindow } from './sourceWindowing';
 import { WindowFunction } from './windowFunction';
 
+// WebFFT: motor FFT acelerado (WASM/GPU)
+let webfftEngine: any = null;
+let webfftSize = 0;
+
+async function initWebFFT(fftSize: number): Promise<void> {
+    try {
+        const { default: WebFFT } = await import('webfft');
+        webfftEngine = new WebFFT(fftSize);
+        await webfftEngine.profile();
+        webfftSize = fftSize;
+        console.log('[dspWorker] WebFFT initialized:', webfftEngine.toString());
+    } catch (e) {
+        console.warn('[dspWorker] WebFFT not available, using Radix-2 fallback:', e);
+        webfftEngine = null;
+    }
+}
+
 interface EQBand {
     freq: number;
     gain: number;
@@ -230,6 +247,11 @@ self.onmessage = (event) => {
             sourceWindowOffsetMs,
         } = event.data;
 
+        // WebFFT initialization if FFT_SIZE changes
+        if (FFT_SIZE && FFT_SIZE !== webfftSize) {
+            initWebFFT(FFT_SIZE);
+        }
+
         // Re-allocate only if dimensions changed
         if (BINS !== currentBins || FFT_SIZE !== currentFftSize) {
             currentBins = BINS;
@@ -382,17 +404,50 @@ self.onmessage = (event) => {
         
         // 6. Deconvolución en Tiempo Real (Prompt 9)
         if (needImpulse) {
-            deconvolve(
-                fftInputReal,
-                fftInputImag,
-                fftRefReal,
-                fftRefImag,
-                outputImpulse,
-                tempFullReal,
-                tempFullImag,
-                tempFullRealOut,
-                tempFullImagOut
-            );
+            if (webfftEngine && webfftEngine.size === FFT_SIZE) {
+                const bins = fftInputReal.length;
+                const N = bins * 2;
+                const regularization = 1e-10;
+
+                // 1. División compleja en frecuencia H(f) = Y(f) / X(f)
+                for (let k = 0; k < bins; k++) {
+                    const den = fftRefReal[k] * fftRefReal[k] + fftRefImag[k] * fftRefImag[k] + regularization;
+                    const hR = (fftInputReal[k] * fftRefReal[k] + fftInputImag[k] * fftRefImag[k]) / den;
+                    const hI = (fftInputImag[k] * fftRefReal[k] - fftInputReal[k] * fftRefImag[k]) / den;
+
+                    tempFullReal[k] = hR;
+                    tempFullImag[k] = hI;
+                }
+
+                // 2. Espectro simétrico hermítico para señal real
+                for (let k = 1; k < bins; k++) {
+                    tempFullReal[N - k] = tempFullReal[k];
+                    tempFullImag[N - k] = -tempFullImag[k];
+                }
+
+                // 3. IFFT compleja usando WebFFT
+                const interleaved = new Float32Array(N * 2);
+                for (let i = 0; i < N; i++) {
+                    interleaved[i * 2] = tempFullReal[i];
+                    interleaved[i * 2 + 1] = -tempFullImag[i];
+                }
+                const result = webfftEngine.fft(interleaved);
+                for (let i = 0; i < N; i++) {
+                    outputImpulse[i] = result[i * 2] / N;
+                }
+            } else {
+                deconvolve(
+                    fftInputReal,
+                    fftInputImag,
+                    fftRefReal,
+                    fftRefImag,
+                    outputImpulse,
+                    tempFullReal,
+                    tempFullImag,
+                    tempFullRealOut,
+                    tempFullImagOut
+                );
+            }
 
             // Aplicar source windowing si está activo (Prompt 9)
             if (enableSourceWindow) {
