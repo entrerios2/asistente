@@ -414,6 +414,9 @@
 
         ctx.clearRect(0, 0, width, height);
 
+        // Actualizar capas calculadas antes de dibujar
+        traceManager.updateCalculatedLayers();
+
         // 1. Renderizado de Espectrograma 2D (Fondo)
         if (activeMetrics.includes("Spectrogram") && !hasTimeDomainActive) {
             drawSpectrogram(ctx, offscreenCanvas, width, height);
@@ -532,20 +535,29 @@
             const dashPattern = LAYER_DASHES[li % LAYER_DASHES.length];
             const isActive = layer.id === uiStore.activeLayerId;
             const lineWidth = isActive ? 2.5 : 1.2;
-            const alpha = isActive ? 1.0 : 0.75;
+            let alpha = isActive ? 1.0 : 0.75;
 
             // Determinar la métrica principal para el color
             const metricForColor = activeMetrics[0] || 'Magnitude';
             const color = METRIC_COLORS[metricForColor] || '#ff4444';
 
+            // Estilo especial para capas calculadas
+            if (layer.isCalculated) {
+                alpha = 0.9;
+                ctx.setLineDash([4, 2, 1, 2]); // Trazo distintivo
+            }
+
             ctx.globalAlpha = alpha;
             drawMetricPath(
                 ctx, layer.data, width, height,
-                color, lineWidth, dashPattern,
+                color, lineWidth, layer.isCalculated ? [4, 2, 1, 2] : dashPattern,
                 metricForColor, frequencyLUT, interpEngine.interpCoherence,
                 metricConfigs, interactionState, getPPOSmoothedValue
             );
             ctx.globalAlpha = 1.0;
+            if (layer.isCalculated) {
+                ctx.setLineDash([]);
+            }
         }
 
         // 3. Renderizar las curvas de todas las capas de medición de este cuadrante (Prompt 6)
@@ -1319,6 +1331,9 @@
                     ondragstart={(e) => onLayerDragStart(e, layer.id)}
                 >
                     <span class="text-[10px] truncate {layer.id === uiStore.activeLayerId ? 'text-[#00ff88] font-bold' : 'text-gray-400'}">
+                        {#if layer.isCalculated}
+                            <span class="text-[8px] text-[#a855f7] font-mono mr-1">∑</span>
+                        {/if}
                         {layer.name}
                     </span>
                     <div class="flex items-center gap-1">
@@ -1333,6 +1348,16 @@
                     </div>
                 </div>
             {/each}
+
+            <!-- Botón para agregar capa calculada -->
+            <button
+                class="flex items-center gap-1 text-[9px] text-gray-500 hover:text-[#a855f7] transition-colors cursor-pointer mt-1 px-1 py-0.5 rounded hover:bg-[#a855f7]/5"
+                onclick={() => traceManager.addCalculatedLayer('Avg', id, 'average')}
+                title="Agregar capa calculada (promedio de capas visibles)"
+            >
+                <span class="material-symbols-outlined text-[12px]">functions</span>
+                <span>+ Calculada</span>
+            </button>
         </div>
     </div>
 
