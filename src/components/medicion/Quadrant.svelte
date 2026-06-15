@@ -420,7 +420,7 @@
         }
 
         // 2. Dibujar Grilla de Fondo (encima)
-        drawGrid(ctx, width, height, hasTimeDomainActive, activeMetrics, metricConfigs, interactionState);
+        drawGrid(ctx, width, height, hasTimeDomainActive, activeMetrics, metricConfigs, interactionState, uiStore.isDarkMode);
 
         const liveTrace = traceManager.traces.find((t) => t.id === "live-1");
 
@@ -1109,7 +1109,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
     class="quadrant-container"
-    style="cursor: {interactionState.isDragging ? 'grabbing' : 'grab'};"
+    style="cursor: {interactionState.isDragging ? 'grabbing' : 'grab'}; background: {uiStore.isDarkMode ? '#060608' : '#f8f8fa'};"
     bind:this={container}
     onmousemove={handleMouseMove}
     onmousedown={handleMouseDown}
@@ -1672,7 +1672,7 @@
         display: block;
         width: 100%;
         height: 100%;
-        background: radial-gradient(circle at center, #0a0a0e 0%, #050507 100%);
+        background: transparent;
     }
 
     /* Cabecera Premium */

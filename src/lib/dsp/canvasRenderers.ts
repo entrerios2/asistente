@@ -23,10 +23,25 @@ export function drawGrid(
     hasTimeDomainActive: boolean,
     activeMetrics: string[],
     metricConfigs: Record<string, any>,
-    state: InteractionState
+    state: InteractionState,
+    isDarkMode: boolean
 ) {
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
-    ctx.fillStyle = "rgba(156, 163, 175, 0.6)";
+    const theme = isDarkMode ? {
+        gridLine: 'rgba(255, 255, 255, 0.04)',
+        gridLineMajor: 'rgba(255, 255, 255, 0.08)',
+        axisLabel: 'rgba(255, 255, 255, 0.35)',
+        axisLine: '#333',
+        background: '#060608',
+    } : {
+        gridLine: 'rgba(0, 0, 0, 0.06)',
+        gridLineMajor: 'rgba(0, 0, 0, 0.12)',
+        axisLabel: 'rgba(0, 0, 0, 0.55)',
+        axisLine: '#999',
+        background: '#f8f8fa',
+    };
+
+    ctx.strokeStyle = theme.gridLineMajor;
+    ctx.fillStyle = theme.axisLabel;
     ctx.font = "9px monospace";
 
     // Vertical ticks (X axis)
@@ -116,7 +131,7 @@ export function drawGrid(
 
     // Grid radial para Nyquist
     if (mainMetric === "Nyquist") {
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+        ctx.strokeStyle = theme.gridLineMajor;
         const centerX = width / 2;
         const centerY = height / 2;
         const maxRad = Math.min(width, height) / 2 * 0.9;
