@@ -28,6 +28,9 @@ export interface MeasurementLayer {
     quadrantId: string;
     sourceType: 'live' | 'snapshot' | 'calculated';
     data: Float32Array;
+    isCalculated?: boolean;        // true = capa virtual calculada
+    calcOperation?: 'average' | 'sum' | 'subtract' | 'min' | 'max';  // Operación
+    calcTargetMetrics?: string[];  // Métricas sobre las que calcular (vacío = todas)
 }
 
 export interface Instantanea {
@@ -303,6 +306,97 @@ class TraceManager {
         return layer;
     }
 
+    addCalculatedLayer(name: string, quadrantId: string, operation: 'average' | 'sum' | 'subtract' | 'min' | 'max' = 'average'): string {
+        const id = `calc-${Date.now()}`;
+        this.layers.push({
+            id,
+            name,
+            visible: true,
+            isMeasuring: false,
+            quadrantId,
+            sourceType: 'live',
+            data: new Float32Array(0),
+            isCalculated: true,
+            calcOperation: operation,
+            calcTargetMetrics: ['Magnitude'],
+        });
+        return id;
+    }
+
+    updateCalculatedLayers(): void {
+        for (const layer of this.layers) {
+            if (!layer.isCalculated || !layer.visible) continue;
+
+            // Obtener capas fuente: mismo quadrantId, visibles, NO calculadas
+            const sources = this.layers.filter(l =>
+                l.quadrantId === layer.quadrantId &&
+                l.visible &&
+                !l.isCalculated &&
+                l.data.length > 0
+            );
+
+            if (sources.length === 0) {
+                layer.data = new Float32Array(0);
+                continue;
+            }
+
+            const bins = sources[0].data.length;
+            const result = new Float32Array(bins);
+
+            switch (layer.calcOperation) {
+                case 'average': {
+                    for (let k = 0; k < bins; k++) {
+                        let sum = 0;
+                        for (const src of sources) {
+                            sum += src.data[k] || 0;
+                        }
+                        result[k] = sum / sources.length;
+                    }
+                    break;
+                }
+                case 'sum': {
+                    for (let k = 0; k < bins; k++) {
+                        for (const src of sources) {
+                            result[k] += src.data[k] || 0;
+                        }
+                    }
+                    break;
+                }
+                case 'min': {
+                    result.fill(Infinity);
+                    for (let k = 0; k < bins; k++) {
+                        for (const src of sources) {
+                            if ((src.data[k] || 0) < result[k]) result[k] = src.data[k];
+                        }
+                    }
+                    break;
+                }
+                case 'max': {
+                    result.fill(-Infinity);
+                    for (let k = 0; k < bins; k++) {
+                        for (const src of sources) {
+                            if ((src.data[k] || 0) > result[k]) result[k] = src.data[k];
+                        }
+                    }
+                    break;
+                }
+                case 'subtract': {
+                    if (sources.length >= 2) {
+                        for (let k = 0; k < bins; k++) {
+                            result[k] = (sources[0].data[k] || 0) - (sources[1].data[k] || 0);
+                        }
+                    }
+                    break;
+                }
+            }
+
+            if (layer.data.length !== bins) {
+                layer.data = new Float32Array(bins);
+            }
+            layer.data.set(result);
+        }
+    }
+
     renameLayer(id: string, name: string) {
         const layer = this.layers.find(l => l.id === id);
         if (layer) {
@@ -444,3 +538,7 @@ class TraceManager {
 }
 
 export const traceManager = new TraceManager();
+
+if (typeof window !== 'undefined') {
+    (window as any).traceManager = traceManager;
+}
