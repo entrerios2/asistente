@@ -1123,8 +1123,14 @@
     ontouchstart={handleTouchStart}
     ontouchmove={handleTouchMove}
     ontouchend={handleTouchEnd}
-    ondragover={(e) => e.preventDefault()}
-    ondrop={onLayerDrop}
+    ondragover={(e) => { e.preventDefault(); e.dataTransfer!.dropEffect = 'move'; }}
+    ondragenter={(e) => { e.preventDefault(); e.currentTarget.style.outline = '2px solid #00ff88'; }}
+    ondragleave={(e) => { e.currentTarget.style.outline = 'none'; }}
+    ondrop={(e) => {
+        e.preventDefault();
+        e.currentTarget.style.outline = 'none';
+        onLayerDrop(e);
+    }}
 >
     <!-- CABECERA PREMIUM DE CADA CUADRANTE -->
     <div class="quadrant-header flex items-center justify-between bg-[#08080a] border-b border-[#1a1a24] px-3 py-1.5 min-h-[40px]"
@@ -1307,7 +1313,11 @@
                 <span class="material-symbols-outlined text-[10px] text-gray-600">layers</span>
             </div>
             {#each quadrantLayers as layer}
-                <div class="flex items-center justify-between gap-3 group">
+                <div 
+                    class="flex items-center justify-between gap-3 group cursor-grab"
+                    draggable="true"
+                    ondragstart={(e) => onLayerDragStart(e, layer.id)}
+                >
                     <span class="text-[10px] truncate {layer.id === uiStore.activeLayerId ? 'text-[#00ff88] font-bold' : 'text-gray-400'}">
                         {layer.name}
                     </span>
