@@ -1221,12 +1221,14 @@
             <div class="active-metrics-badges flex items-center gap-1">
                 {#each activeMetrics as m}
                     {@const isHidden = metricConfigs[m]?.hidden}
+                    {@const mStyle = metricStyles[m] || { color: '#888', lineWidth: 1, lineDash: [] }}
+                    {@const hasDash = mStyle.lineDash.length > 0}
                     <button
-                        class="px-2 py-0.5 rounded text-[10px] font-semibold transition-all border cursor-pointer select-none
-                               {soloMetric === m ? 'bg-[#00ff88]/20 border-[#00ff88] text-[#00ff88]'
-                                : isHidden ? 'bg-[#0a0a0e] border-[#1a1a24] text-gray-600 opacity-50'
-                                : 'bg-[#121216] border-[#222] text-gray-300 hover:border-[#444]'}
-                               {isHidden ? 'line-through' : ''}"
+                        class="px-2 py-0.5 rounded text-[10px] font-semibold transition-all cursor-pointer select-none
+                               {isHidden ? 'opacity-30 line-through' : ''}"
+                        style="color: {soloMetric === m ? '#000' : 'white'};
+                               background: {soloMetric === m ? mStyle.color : mStyle.color + '15'};
+                               border: 1.5px {hasDash ? 'dashed' : 'solid'} {mStyle.color}{isHidden ? '40' : '80'};"
                         onmouseenter={() => (hoverMetric = m)}
                         onmouseleave={() => (hoverMetric = null)}
                         onclick={() => activeConfigMetric = activeConfigMetric === m ? null : m}
