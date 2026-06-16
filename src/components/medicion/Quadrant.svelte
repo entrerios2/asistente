@@ -59,14 +59,14 @@
     let showSelector = $state(false);
 
     let metricStyles = $state<Record<string, { color: string, lineWidth: number, lineDash: number[] }>>({
-        "Spectrum": { color: "#a855f7", lineWidth: 2, lineDash: [] },
-        "Magnitude": { color: "#ff4444", lineWidth: 2, lineDash: [] },
-        "Phase": { color: "#d946ef", lineWidth: 1.6, lineDash: [] },
-        "Coherence": { color: "#eab308", lineWidth: 1.8, lineDash: [] },
-        "Group Delay": { color: "#10b981", lineWidth: 1.8, lineDash: [] },
-        "Impulse": { color: "#3b82f6", lineWidth: 2, lineDash: [] },
-        "Step": { color: "#f97316", lineWidth: 2, lineDash: [] },
-        "Simulated Magnitude": { color: "#00ffff", lineWidth: 1.5, lineDash: [4, 4] },
+        "Spectrum": { color: "#a855f7", lineWidth: 1, lineDash: [] },
+        "Magnitude": { color: "#ff4444", lineWidth: 1, lineDash: [] },
+        "Phase": { color: "#d946ef", lineWidth: 1, lineDash: [] },
+        "Coherence": { color: "#eab308", lineWidth: 1, lineDash: [] },
+        "Group Delay": { color: "#10b981", lineWidth: 1, lineDash: [] },
+        "Impulse": { color: "#3b82f6", lineWidth: 1, lineDash: [] },
+        "Step": { color: "#f97316", lineWidth: 1, lineDash: [] },
+        "Simulated Magnitude": { color: "#00ffff", lineWidth: 1, lineDash: [4, 4] },
     });
 
     let showAddDropdown = $state(false);
@@ -534,7 +534,7 @@
 
             const dashPattern = LAYER_DASHES[li % LAYER_DASHES.length];
             const isActive = layer.id === uiStore.activeLayerId;
-            const lineWidth = isActive ? 2.5 : 1.2;
+            const lineWidth = isActive ? 1.8 : 1;
             let alpha = isActive ? 1.0 : 0.75;
 
             // Determinar la métrica principal para el color
@@ -567,7 +567,7 @@
 
             // Determinar estilos visuales basados en la posición de la capa
             const isActive = layer.id === uiStore.activeLayerId;
-            const lw = isActive ? 2.8 : 1.3;
+            const lw = isActive ? 1.8 : 1;
             const op = isActive ? 1.0 : 0.75;
             
             // Estilo de línea (lineDash) según el índice de capa secundaria
