@@ -190,39 +190,47 @@ export function handleWheel(
 
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
 
+    // --- DETECCIÓN INTELIGENTE DE EJE ---
+    const Y_LABEL_ZONE = 45;  // Margen izquierdo (zona de labels Y)
+    const X_LABEL_ZONE = 25;  // Margen inferior (zona de labels X)
+
     let zoomX = false;
     let zoomY = false;
 
-    if (e.altKey) {
+    if (mX <= Y_LABEL_ZONE) {
+        // Mouse sobre labels del eje Y → zoom solo Y
+        zoomY = true;
+    } else if (mY >= containerHeight - X_LABEL_ZONE) {
+        // Mouse sobre labels del eje X → zoom solo X
+        zoomX = true;
+    } else if (e.altKey) {
         zoomY = true;
     } else if (e.shiftKey) {
         zoomX = true;
     } else {
-        if (state.zoomMode === 'X') {
-            zoomX = true;
-        } else if (state.zoomMode === 'Y') {
-            zoomY = true;
-        } else {
-            zoomX = true;
-            zoomY = true;
-        }
+        // Área central: zoom XY proporcional
+        zoomX = true;
+        zoomY = true;
     }
 
     if (zoomX) {
         const valBefore = xToVal(mX, containerWidth, hasTimeDomainActive, state);
-        state.zoomX = Math.max(0.1, Math.min(20, state.zoomX * delta));
+        state.zoomX = Math.max(0.5, Math.min(20, state.zoomX * delta));
         const xAfter = valToX(valBefore, containerWidth, hasTimeDomainActive, state);
         state.offsetX += mX - xAfter;
     }
 
     if (zoomY) {
-        const refMetric =
-            activeMetrics.find((m) => m !== "Phase") || "Magnitude";
+        const refMetric = activeMetrics.find(m => m !== "Phase") || "Magnitude";
         const valBefore = yToVal(mY, containerHeight, refMetric, state);
-        state.zoomY = Math.max(0.1, Math.min(20, state.zoomY * delta));
+        state.zoomY = Math.max(0.5, Math.min(20, state.zoomY * delta));
         const yAfter = valToY(valBefore, containerHeight, refMetric, metricConfigs, state);
         state.offsetY += mY - yAfter;
     }
+
+    // Clamp X + Y: reusar la función helper de Prompt 1
+    const refMetric = activeMetrics.find(m => m !== "Phase") || "Magnitude";
+    clampPan(state, containerWidth, containerHeight, hasTimeDomainActive, refMetric, metricConfigs);
 }
 
 export function handleMouseMove(
