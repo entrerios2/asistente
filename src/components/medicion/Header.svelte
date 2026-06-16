@@ -97,17 +97,18 @@
     <div class="header-right">
         <!-- ACCESOS RÁPIDOS DE CONTROL -->
         <div
-            class="flex items-center gap-3 bg-[#121216] border border-[#1a1a24] p-1.5 px-3 rounded-xl"
+            class="flex items-center gap-3 p-1.5 px-3 rounded-xl"
+            style="background: var(--bg-tertiary); border: 1px solid var(--border-primary);"
         >
             <!-- CONTROL GENERADOR RÁPIDO -->
             <div
                 class="flex items-center gap-1.5 pr-3 border-r border-[#1a1a24]/50"
             >
                 <button
-                    class="flex items-center justify-center p-1.5 rounded-lg border transition-all cursor-pointer min-h-[30px] min-w-[30px]
-                           {uiStore.genActive
-                        ? 'bg-[#00ff88]/15 border-[#00ff88] text-[#00ff88]'
-                        : 'bg-[#0a0a0c] border-[#1a1a24] text-gray-500 hover:text-gray-300'}"
+                    class="flex items-center justify-center p-1.5 rounded-lg border transition-all cursor-pointer min-h-[30px] min-w-[30px]"
+                    style="background: {uiStore.genActive ? 'rgba(0,255,136,0.15)' : 'var(--bg-secondary)'};
+                           border-color: {uiStore.genActive ? '#00ff88' : 'var(--border-primary)'};
+                           color: {uiStore.genActive ? '#00ff88' : 'var(--text-muted)'};"
                     onclick={toggleGenerator}
                     title={uiStore.genActive
                         ? "Detener Generador"
@@ -141,7 +142,8 @@
                 <!-- Icono de Modo de Medición -->
                 <!-- svelte-ignore a11y_click_events_have_key_events -->
                 <button
-                    class="flex items-center justify-center p-1.5 rounded-lg border bg-[#0a0a0c] border-[#1a1a24] text-gray-400 hover:text-gray-200 transition-all cursor-pointer min-h-[30px] min-w-[30px]"
+                    class="flex items-center justify-center p-1.5 rounded-lg border text-gray-400 hover:text-gray-200 transition-all cursor-pointer min-h-[30px] min-w-[30px]"
+                    style="background: var(--bg-secondary); border-color: var(--border-primary);"
                     onclick={openModeMeasurement}
                     title="Abrir panel de medición"
                 >
@@ -154,10 +156,10 @@
 
                 <!-- Botón Medir / Detener -->
                 <button
-                    class="flex items-center gap-1.5 p-1.5 px-3 rounded-lg border transition-all duration-300 font-bold text-xs cursor-pointer min-h-[30px]
-                           {uiStore.isMeasuring
-                        ? 'bg-red-500/15 border-red-500 text-red-500 shadow-[0_0_12px_rgba(239,68,68,0.25)] animate-pulse'
-                        : 'bg-[#0a0a0c] border-[#1a1a24] text-gray-300 hover:bg-[#1a1a24]'}"
+                    class="flex items-center gap-1.5 p-1.5 px-3 rounded-lg border transition-all duration-300 font-bold text-xs cursor-pointer min-h-[30px]"
+                    style="{uiStore.isMeasuring
+                        ? 'background: rgba(239,68,68,0.15); border-color: #ef4444; color: #ef4444; box-shadow: 0 0 12px rgba(239,68,68,0.25);'
+                        : 'background: var(--bg-secondary); border-color: var(--border-primary); color: var(--text-primary);'}"
                     onclick={toggleMeasurement}
                 >
                     <span class="material-symbols-outlined text-[14px]"
@@ -171,7 +173,8 @@
         <!-- SELECTOR DE GRILLA VISUAL (ESTILO WORD) -->
         <div class="relative">
             <button
-                class="flex items-center gap-1.5 bg-[#121216] border border-[#1a1a24] hover:border-[#1b1b26] p-1.5 px-3 rounded-xl transition-all text-xs font-semibold cursor-pointer min-h-[40px] text-gray-400 hover:text-gray-200"
+                class="flex items-center gap-1.5 hover:border-[#1b1b26] p-1.5 px-3 rounded-xl transition-all text-xs font-semibold cursor-pointer min-h-[40px] text-gray-400 hover:text-gray-200"
+                style="background: var(--bg-tertiary); border: 1px solid var(--border-primary);"
                 onclick={() => (showGridDropdown = !showGridDropdown)}
                 title="Configurar visualización multi-cuadrante"
             >
@@ -192,7 +195,8 @@
                 ></div>
 
                 <div
-                    class="absolute right-0 mt-2 bg-[#0c0c0e] border border-[#1a1a24] rounded-xl p-3 shadow-[0_10px_30px_#000000] z-50 min-w-[140px] flex flex-col gap-2"
+                    class="absolute right-0 mt-2 rounded-xl p-3 shadow-[0_10px_30px_#000000] z-50 min-w-[140px] flex flex-col gap-2"
+                    style="background: var(--bg-surface); border: 1px solid var(--border-primary);"
                 >
                     <div
                         class="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1 select-none"
@@ -202,7 +206,8 @@
 
                     <!-- Matriz interactiva de cuadrados de 2x3 (2 col, 3 filas) -->
                     <div
-                        class="grid grid-cols-2 gap-1.5 p-2 bg-[#121216] border border-[#1a1a24] rounded-lg cursor-pointer transition-colors"
+                        class="grid grid-cols-2 gap-1.5 p-2 rounded-lg cursor-pointer transition-colors"
+                        style="background: var(--bg-tertiary); border: 1px solid var(--border-primary);"
                         onmouseleave={() => {
                             hoverCol = 0;
                             hoverRow = 0;
@@ -213,10 +218,10 @@
                                 <!-- Celda Individual -->
                                 <!-- svelte-ignore a11y_click_events_have_key_events -->
                                 <div
-                                    class="w-6 h-6 rounded-[4px] border transition-all duration-150
-                                           {isHighlighted(col, row)
-                                        ? 'bg-[#00ff88]/20 border-[#00ff88] shadow-[0_0_8px_rgba(0,255,136,0.15)] scale-[1.05]'
-                                        : 'bg-[#0a0a0c] border-[#1a1a24] hover:border-gray-500'}"
+                                    class="w-6 h-6 rounded-[4px] border transition-all duration-150"
+                                    style="{isHighlighted(col, row)
+                                        ? 'background: rgba(0,255,136,0.2); border-color: #00ff88; box-shadow: 0 0 8px rgba(0,255,136,0.15); transform: scale(1.05);'
+                                        : 'background: var(--bg-secondary); border-color: var(--border-primary);'}"
                                     onmouseenter={() => {
                                         hoverCol = col;
                                         hoverRow = row;
@@ -294,8 +299,8 @@
 <style>
     .global-header {
         height: 54px;
-        background: #08080a;
-        border-bottom: 1px solid #1a1a24;
+        background: var(--bg-primary);
+        border-bottom: 1px solid var(--border-primary);
         display: flex;
         justify-content: space-between;
         align-items: center;
@@ -316,7 +321,7 @@
         font-family: "Outfit", "Inter", sans-serif;
         font-size: 0.85rem;
         font-weight: 700;
-        color: #e2e8f0;
+        color: var(--text-primary);
         margin: 0;
         letter-spacing: 0.03em;
     }
@@ -332,8 +337,8 @@
         display: flex;
         align-items: center;
         gap: 12px;
-        background: #121216;
-        border: 1px solid #1a1a24;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-primary);
         padding: 6px 12px;
         border-radius: 12px;
         transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
@@ -341,8 +346,8 @@
     }
 
     .vu-outer-container:hover {
-        background: #181822;
-        border-color: #262636;
+        background: var(--bg-surface);
+        border-color: var(--border-secondary);
         box-shadow: 0 0 15px #000000;
     }
 
@@ -413,7 +418,7 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        border-left: 1px solid #262636;
+        border-left: 1px solid var(--border-secondary);
         padding-left: 10px;
         height: 24px;
     }
