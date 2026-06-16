@@ -720,56 +720,26 @@
     class="w-[380px] h-full bg-[#0a0a0c] border-r border-[#1a1a24]/50 flex flex-col text-gray-200 select-none"
 >
     <!-- CABECERA DE PESTAÑAS Y CONTROL (PROMPT 11) -->
-    <div class="flex items-center bg-[#050507] border-b border-[#1a1a24]/50 px-2 py-2 gap-1 h-[56px] flex-shrink-0">
-        <!-- Selector de Pestañas Horizontal -->
-        <nav class="flex-1 flex items-center gap-1">
-            <button
-                class="flex-1 h-9 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer gap-2 px-2
-                       {uiStore.activeTab === 'medicion'
-                    ? 'bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20'
-                    : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}"
-                onclick={() => (uiStore.activeTab = "medicion")}
-                title="Medición"
-            >
-                <span class="material-symbols-outlined text-[18px]">cadence</span>
-                <span class="text-[10px] font-bold uppercase tracking-wider hidden xl:block">Med</span>
-            </button>
-
-            <button
-                class="flex-1 h-9 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer gap-2 px-2
-                       {uiStore.activeTab === 'eq'
-                    ? 'bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20'
-                    : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}"
-                onclick={() => (uiStore.activeTab = "eq")}
-                title="Ecualización"
-            >
-                <span class="material-symbols-outlined text-[18px]">instant_mix</span>
-                <span class="text-[10px] font-bold uppercase tracking-wider hidden xl:block">EQ</span>
-            </button>
-
-            <button
-                class="flex-1 h-9 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer gap-2 px-2
-                       {uiStore.activeTab === 'snaps'
-                    ? 'bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20'
-                    : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}"
-                onclick={() => (uiStore.activeTab = "snaps")}
-                title="Instantáneas"
-            >
-                <span class="material-symbols-outlined text-[18px]">screenshot_frame_2</span>
-                <span class="text-[10px] font-bold uppercase tracking-wider hidden xl:block">Inst</span>
-            </button>
-
-            <button
-                class="flex-1 h-9 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer gap-2 px-2
-                       {uiStore.activeTab === 'config'
-                    ? 'bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20'
-                    : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}"
-                onclick={() => (uiStore.activeTab = "config")}
-                title="Configuración"
-            >
-                <span class="material-symbols-outlined text-[18px]">settings</span>
-                <span class="text-[10px] font-bold uppercase tracking-wider hidden xl:block">Cfg</span>
-            </button>
+    <div class="flex items-center bg-[#050507] border-b border-[#1a1a24]/50 px-2 py-1.5 gap-0.5 h-[60px] flex-shrink-0">
+        <nav class="flex-1 flex items-center gap-0.5">
+            {#each [
+                { id: 'medicion', icon: 'podcasts', label: 'Med' },
+                { id: 'eq', icon: 'cadence', label: 'EQ' },
+                { id: 'snaps', icon: 'photo_camera', label: 'Inst' },
+                { id: 'config', icon: 'settings', label: 'Cfg' },
+            ] as tab}
+                <button
+                    class="flex-1 h-[48px] rounded-lg flex flex-col items-center justify-center transition-all duration-200 cursor-pointer gap-0.5
+                           {uiStore.activeTab === tab.id
+                        ? 'bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20'
+                        : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}"
+                    onclick={() => (uiStore.activeTab = tab.id)}
+                    title={tab.label}
+                >
+                    <span class="material-symbols-outlined text-[20px]">{tab.icon}</span>
+                    <span class="text-[8px] font-bold uppercase tracking-wider leading-none">{tab.label}</span>
+                </button>
+            {/each}
         </nav>
     </div>
 
