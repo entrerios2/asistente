@@ -91,7 +91,7 @@
     // Zoom & Pan state
     let interactionState = $state<InteractionState>({
         zoomX: 1,
-        zoomY: 1,
+        zoomY: 0.7,
         zoomMode: 'XY' as const,
         offsetX: 0,
         offsetY: 0,

@@ -358,7 +358,7 @@ export function handleMouseUp(
 
 export function handleDoubleClick(state: InteractionState): void {
     state.zoomX = 1;
-    state.zoomY = 1;
+    state.zoomY = 0.7;
     state.offsetX = 0;
     state.offsetY = 0;
 }
