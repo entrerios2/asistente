@@ -88,6 +88,15 @@
     let containerWidth = $state(0);
     let containerHeight = $state(0);
 
+    let cursorStyle = $derived.by(() => {
+        if (interactionState.isDragging) return 'grabbing';
+        const mX = interactionState.mouseX;
+        const mY = interactionState.mouseY;
+        if (mX <= 45) return 'ns-resize';
+        if (mY >= containerHeight - 25) return 'ew-resize';
+        return 'crosshair';
+    });
+
     // Zoom & Pan state
     let interactionState = $state<InteractionState>({
         zoomX: 1,
@@ -1136,7 +1145,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
     class="quadrant-container"
-    style="cursor: {interactionState.isDragging ? 'grabbing' : 'grab'}; background: {uiStore.isDarkMode ? '#060608' : '#f8f8fa'}; touch-action: none;"
+    style="cursor: {cursorStyle}; background: {uiStore.isDarkMode ? '#060608' : '#f8f8fa'}; touch-action: none;"
     bind:this={container}
     onmousemove={handleMouseMove}
     onmousedown={handleMouseDown}
@@ -1330,7 +1339,7 @@
     </div>
 
     <!-- CANVAS DEL GRÁFICO -->
-    <canvas bind:this={canvas} style="cursor: {interactionState.isDragging ? 'grabbing' : 'grab'}"></canvas>
+    <canvas bind:this={canvas} style="cursor: {cursorStyle}"></canvas>
 
 
 
