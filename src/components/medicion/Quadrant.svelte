@@ -1004,10 +1004,12 @@
     }
 
     function handleTouchStart(e: TouchEvent) {
+        e.preventDefault();
         interactionHandleTouchStart(e, interactionState);
     }
 
     function handleTouchMove(e: TouchEvent) {
+        e.preventDefault();
         interactionHandleTouchMove(e, interactionState, canvas, activeMetrics, metricConfigs);
     }
 
@@ -1139,10 +1141,9 @@
     });
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
     class="quadrant-container"
-    style="cursor: {interactionState.isDragging ? 'grabbing' : 'grab'}; background: {uiStore.isDarkMode ? '#060608' : '#f8f8fa'};"
+    style="cursor: {interactionState.isDragging ? 'grabbing' : 'grab'}; background: {uiStore.isDarkMode ? '#060608' : '#f8f8fa'}; touch-action: none;"
     bind:this={container}
     onmousemove={handleMouseMove}
     onmousedown={handleMouseDown}

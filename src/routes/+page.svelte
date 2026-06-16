@@ -65,7 +65,8 @@
         display: flex;
         flex-direction: column;
         width: 100vw;
-        height: 100vh;
+        height: 100vh;  /* fallback */
+        height: 100dvh; /* preferido */
         overflow: hidden;
     }
 
@@ -89,7 +90,8 @@
         }
 
         .main-viewport {
-            height: calc(100vh - 100px); /* Ajustado por Header y Bottom Sheet */
+            height: calc(100vh - 100px);   /* fallback */
+            height: calc(100dvh - 100px);  /* preferido */
         }
     }
 </style>
