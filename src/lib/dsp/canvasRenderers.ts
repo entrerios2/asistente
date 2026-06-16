@@ -7,6 +7,8 @@ import {
     timeMax,
     dbMin,
     dbMax,
+    freqMin,
+    freqMax,
     type InteractionState
 } from './canvasInteraction';
 import { palettes, type PaletteType } from './colorPalettes';
@@ -544,29 +546,29 @@ export function drawMetricPath(
     state: InteractionState,
     getPPOSmoothedValue: (binIndex: number, dataArray: Float32Array, ppo: number) => number
 ) {
-    if (frequencyLUT.length === 0) return;
-
     ctx.strokeStyle = color;
     ctx.lineWidth = lw;
     ctx.setLineDash(lineDash || []);
     
     const cfg = metricConfigs[metricType];
-    
     const path = new Path2D();
-    let first = true;
 
-    for (let x = 0; x < width; x++) {
-        const binIndex = frequencyLUT[x];
-        if (binIndex === undefined) continue;
+    // Construir array de puntos (un punto por bin FFT visible)
+    const points: {x: number, y: number}[] = [];
+    const binWidth = 24000 / dataArray.length;
 
-        // Coherence threshold masking for standard Magnitude
-        if (cfg && cfg.enableCoherence && interpCoherence[binIndex] < cfg.coherenceThreshold) {
-            first = true;
-            continue;
-        }
+    for (let bin = 0; bin < dataArray.length; bin++) {
+        const freq = bin * binWidth;
+        if (freq < freqMin || freq > freqMax) continue;
+        const x = valToX(freq, width, false, state);
+        if (x < -10 || x > width + 10) continue;
 
-        // PPO smoothing if applicable
-        let val = (cfg && cfg.smoothingPPO) ? getPPOSmoothedValue(binIndex, dataArray, cfg.smoothingPPO) : dataArray[binIndex];
+        // Coherence threshold masking (si aplica)
+        if (cfg && cfg.enableCoherence && interpCoherence[bin] < cfg.coherenceThreshold) continue;
+
+        let val = (cfg && cfg.smoothingPPO)
+            ? getPPOSmoothedValue(bin, dataArray, cfg.smoothingPPO)
+            : dataArray[bin];
 
         // Coherence transformations
         if (metricType === "Coherence") {
@@ -588,12 +590,20 @@ export function drawMetricPath(
         }
 
         const y = valToY(val, height, metricType, metricConfigs, state) + (cfg?.yShift || 0);
+        points.push({ x, y });
+    }
 
-        if (first) {
-            path.moveTo(x, y);
-            first = false;
-        } else {
-            path.lineTo(x, y);
+    // Dibujar con spline (quadratic curve through midpoints)
+    if (points.length > 0) {
+        path.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length - 1; i++) {
+            const midX = (points[i].x + points[i + 1].x) / 2;
+            const midY = (points[i].y + points[i + 1].y) / 2;
+            path.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+        }
+        if (points.length > 1) {
+            const last = points[points.length - 1];
+            path.lineTo(last.x, last.y);
         }
     }
 
@@ -633,40 +643,40 @@ export function drawSpectrumPath(
     getPPOSmoothedValue: (binIndex: number, dataArray: Float32Array, ppo: number) => number,
     bins: number
 ) {
-    if (frequencyLUT.length === 0) return;
-
     ctx.strokeStyle = color;
     ctx.lineWidth = lw;
     ctx.setLineDash(lineDash || []);
     
     const cfg = metricConfigs["Spectrum"] || { modeY: "dB", smoothingPPO: 48 };
     const path = new Path2D();
-    let first = true;
     const hasLive =
         liveTrace && liveTrace.data && liveTrace.data.length > 0;
     const dataArray = hasLive ? liveTrace.data : interpMagnitude;
     const offset = hasLive ? 0 : 68;
 
-    for (let x = 0; x < width; x++) {
-        const binIndex = frequencyLUT[x];
-        if (binIndex === undefined) continue;
+    // Construir array de puntos (un punto por bin FFT visible)
+    const points: {x: number, y: number}[] = [];
+    const binWidth = 24000 / dataArray.length;
+
+    for (let bin = 0; bin < dataArray.length; bin++) {
+        const freq = bin * binWidth;
+        if (freq < freqMin || freq > freqMax) continue;
+        const x = valToX(freq, width, false, state);
+        if (x < -10 || x > width + 10) continue;
 
         // Coherence threshold masking for Spectrum
-        if (cfg.enableCoherence && interpCoherence[binIndex] < cfg.coherenceThreshold) {
-            first = true;
-            continue;
-        }
+        if (cfg.enableCoherence && interpCoherence[bin] < cfg.coherenceThreshold) continue;
 
         let val = 0;
         if (hasLive) {
-            const mapIdx = Math.floor((binIndex * dataArray.length) / bins);
+            const mapIdx = Math.floor((bin * dataArray.length) / bins);
             val = dataArray[mapIdx] || -120;
         } else {
-            val = dataArray[binIndex] + offset;
+            val = dataArray[bin] + offset;
         }
 
         // Smooth using PPO
-        val = getPPOSmoothedValue(binIndex, hasLive ? dataArray : interpMagnitude, cfg.smoothingPPO) + (hasLive ? 0 : offset);
+        val = getPPOSmoothedValue(bin, hasLive ? dataArray : interpMagnitude, cfg.smoothingPPO) + (hasLive ? 0 : offset);
 
         // Mode Y transformations
         if (cfg.modeY === "Linear") {
@@ -676,14 +686,23 @@ export function drawSpectrumPath(
         }
 
         const y = valToY(val, height, "Spectrum", metricConfigs, state) + (cfg.yShift || 0);
+        points.push({ x, y });
+    }
 
-        if (first) {
-            path.moveTo(x, y);
-            first = false;
-        } else {
-            path.lineTo(x, y);
+    // Dibujar con spline (quadratic curve through midpoints)
+    if (points.length > 0) {
+        path.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length - 1; i++) {
+            const midX = (points[i].x + points[i + 1].x) / 2;
+            const midY = (points[i].y + points[i + 1].y) / 2;
+            path.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+        }
+        if (points.length > 1) {
+            const last = points[points.length - 1];
+            path.lineTo(last.x, last.y);
         }
     }
+
     ctx.stroke(path);
     ctx.setLineDash([]);
 }
