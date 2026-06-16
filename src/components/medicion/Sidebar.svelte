@@ -2549,9 +2549,9 @@
 
                         <div class="flex items-center bg-[#121216] border border-[#1a1a24] p-0.5 rounded-lg gap-0.5">
                             {#each [
-                                { mode: 'system', icon: 'computer', label: 'Auto' },
-                                { mode: 'light', icon: 'light_mode', label: 'Claro' },
-                                { mode: 'dark', icon: 'dark_mode', label: 'Oscuro' },
+                                { mode: 'system' as const, icon: 'computer', label: 'Auto' },
+                                { mode: 'light' as const, icon: 'light_mode', label: 'Claro' },
+                                { mode: 'dark' as const, icon: 'dark_mode', label: 'Oscuro' },
                             ] as opt}
                                 <button
                                     class="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-md text-[10px] font-semibold transition-all cursor-pointer
