@@ -1327,9 +1327,7 @@
                                 {/if}
                             </div>
 
-                            <div
-                                class="flex flex-col gap-2.5 max-h-[300px] overflow-y-auto pr-1"
-                            >
+                            <div class="flex flex-col gap-2.5">
                                 {#each graphicBands as band}
                                     <div class="flex items-center gap-2">
                                         <span
@@ -1387,9 +1385,7 @@
                                 </select>
                             </div>
 
-                            <div
-                                class="flex flex-col gap-3 max-h-[350px] overflow-y-auto pr-1"
-                            >
+                            <div class="flex flex-col gap-3">
                                 {#each parametricFilters.slice(0, numParametricFilters) as filter}
                                     <div
                                         class="border border-[#1a1a24] bg-[#121216]/20 rounded-lg p-3 flex flex-col gap-3"
