@@ -40,8 +40,8 @@
         <!-- BOTÓN FLOTANTE COLAPSAR/ABRIR SIDEBAR -->
         <button
             class="absolute z-50 w-5 h-12 flex items-center justify-center
-                   bg-[#0a0a0c] border border-[#1a1a24] rounded-r-lg
-                   text-gray-500 hover:text-white hover:bg-[#121216]
+                   bg-amber-500 border border-amber-400 rounded-r-lg
+                   text-white hover:bg-amber-400
                    transition-all duration-300 cursor-pointer shadow-lg"
             style="top: 50%; transform: translateY(-50%); left: {uiStore.showSidebar ? '380px' : '0px'};"
             onclick={() => uiStore.showSidebar = !uiStore.showSidebar}
