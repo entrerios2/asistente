@@ -84,17 +84,6 @@
 <header class="global-header">
     <!-- ESTRUCTURA IZQUIERDA (TÍTULO) -->
     <div class="header-left">
-        {#if !uiStore.showSidebar}
-            <button
-                class="cursor-pointer flex items-center justify-center text-gray-400 hover:text-white transition-colors p-1 rounded hover:bg-white/5 mr-2"
-                onclick={() => (uiStore.showSidebar = !uiStore.showSidebar)}
-                title="Mostrar panel lateral"
-            >
-                <span class="material-symbols-outlined text-[20px]">
-                    menu
-                </span>
-            </button>
-        {/if}
         <span
             class="material-symbols-outlined text-[#00ff88] text-[20px] select-none font-bold"
             >analytics</span

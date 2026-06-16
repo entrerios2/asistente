@@ -721,15 +721,6 @@
 >
     <!-- CABECERA DE PESTAÑAS Y CONTROL (PROMPT 11) -->
     <div class="flex items-center bg-[#050507] border-b border-[#1a1a24]/50 px-2 py-2 gap-1 h-[56px] flex-shrink-0">
-        <!-- Botón Colapsar Integrado -->
-        <button
-            class="w-10 h-10 rounded-lg flex items-center justify-center text-gray-500 hover:text-white hover:bg-white/5 transition-all cursor-pointer mr-1"
-            onclick={() => (uiStore.showSidebar = !uiStore.showSidebar)}
-            title="Colapsar Panel"
-        >
-            <span class="material-symbols-outlined text-[20px]">menu_open</span>
-        </button>
-
         <!-- Selector de Pestañas Horizontal -->
         <nav class="flex-1 flex items-center gap-1">
             <button
