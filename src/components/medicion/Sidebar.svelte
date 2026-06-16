@@ -30,7 +30,7 @@
     let downloadFormat = $state("wav");
 
     // --- ESTADOS DE ECUALIZACIÓN ---
-    let eqType = $state(uiStore.eqType); // 'grafico' | 'parametrico' | 'tono'
+    let eqType = $state<'grafico' | 'parametrico'>(uiStore.eqType); // 'grafico' | 'parametrico'
     $effect(() => {
         uiStore.eqType = eqType;
     });
@@ -133,10 +133,6 @@
         },
     ]);
 
-    let toneBass = $state(0);
-    let toneMid = $state(0);
-    let toneTreble = $state(0);
-
     // Sincronización reactiva con traceManager.eqBands
     $effect(() => {
         if (!showEQ) {
@@ -160,12 +156,6 @@
                     q: f.q,
                     type: f.type,
                 }));
-        } else if (eqType === "tono") {
-            traceManager.eqBands = [
-                { freq: 100, gain: toneBass, q: 0.7, type: "peaking" },
-                { freq: 1000, gain: toneMid, q: 0.7, type: "peaking" },
-                { freq: 10000, gain: toneTreble, q: 0.7, type: "peaking" },
-            ];
         }
     });
 
@@ -204,10 +194,6 @@
                         f.gain = Math.round((Math.random() * 10 - 5) * 10) / 10;
                         f.q = Math.round((0.5 + Math.random() * 2) * 10) / 10;
                     });
-            } else if (eqType === "tono") {
-                toneBass = Math.round((Math.random() * 8 - 4) * 10) / 10;
-                toneMid = Math.round((Math.random() * 6 - 3) * 10) / 10;
-                toneTreble = Math.round((Math.random() * 8 - 4) * 10) / 10;
             }
             isCalculatingAutoEQ = false;
             statusText = "AutoEQ calculado con éxito";
@@ -1282,7 +1268,6 @@
                             <option value="parametrico"
                                 >Ecualizador Paramétrico</option
                             >
-                            <option value="tono">Control de Tono</option>
                         </select>
                     </div>
 
@@ -1622,70 +1607,6 @@
                                         </div>
                                     </div>
                                 {/each}
-                            </div>
-                        </div>
-                    {/if}
-
-                    <!-- MODO TONO -->
-                    {#if eqType === "tono"}
-                        <div
-                            class="flex flex-col gap-4 bg-[#121216]/20 border border-[#1a1a24] rounded-lg p-4"
-                        >
-                            <div class="flex flex-col gap-1.5">
-                                <div
-                                    class="flex justify-between text-xs font-bold text-gray-300"
-                                >
-                                    <span>Graves (Bass)</span>
-                                    <span class="font-mono text-[#3b82f6]"
-                                        >{toneBass} dB</span
-                                    >
-                                </div>
-                                <input
-                                    type="range"
-                                    min="-12"
-                                    max="12"
-                                    step="0.5"
-                                    bind:value={toneBass}
-                                    class="w-full h-1.5 bg-[#121216] appearance-none cursor-pointer accent-[#3b82f6] rounded-full"
-                                />
-                            </div>
-
-                            <div class="flex flex-col gap-1.5">
-                                <div
-                                    class="flex justify-between text-xs font-bold text-gray-300"
-                                >
-                                    <span>Medios (Mid)</span>
-                                    <span class="font-mono text-[#3b82f6]"
-                                        >{toneMid} dB</span
-                                    >
-                                </div>
-                                <input
-                                    type="range"
-                                    min="-12"
-                                    max="12"
-                                    step="0.5"
-                                    bind:value={toneMid}
-                                    class="w-full h-1.5 bg-[#121216] appearance-none cursor-pointer accent-[#3b82f6] rounded-full"
-                                />
-                            </div>
-
-                            <div class="flex flex-col gap-1.5">
-                                <div
-                                    class="flex justify-between text-xs font-bold text-gray-300"
-                                >
-                                    <span>Agudos (Treble)</span>
-                                    <span class="font-mono text-[#3b82f6]"
-                                        >{toneTreble} dB</span
-                                    >
-                                </div>
-                                <input
-                                    type="range"
-                                    min="-12"
-                                    max="12"
-                                    step="0.5"
-                                    bind:value={toneTreble}
-                                    class="w-full h-1.5 bg-[#121216] appearance-none cursor-pointer accent-[#3b82f6] rounded-full"
-                                />
                             </div>
                         </div>
                     {/if}
