@@ -981,7 +981,7 @@
     }
 
     function handleMouseMove(e: MouseEvent) {
-        interactionHandleMouseMove(e, interactionState, canvas);
+        interactionHandleMouseMove(e, interactionState, canvas, containerWidth, containerHeight, hasTimeDomainActive, activeMetrics, metricConfigs);
     }
 
     function handleMouseDown(e: MouseEvent) {
@@ -997,7 +997,7 @@
     }
 
     function handleTouchMove(e: TouchEvent) {
-        interactionHandleTouchMove(e, interactionState, canvas);
+        interactionHandleTouchMove(e, interactionState, canvas, activeMetrics, metricConfigs);
     }
 
     function handleTouchEnd() {

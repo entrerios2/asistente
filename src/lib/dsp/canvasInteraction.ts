@@ -1,5 +1,5 @@
-export const freqMin = 20; // Hz
-export const freqMax = 20000; // Hz
+export const freqMin = 10;    // Hz (sub-bajo audible)
+export const freqMax = 22000; // Hz (cercano a Nyquist @ 44.1kHz)
 export const timeMin = -10; // ms
 export const timeMax = 100; // ms
 export const dbMin = -30; // dB
@@ -30,7 +30,7 @@ export function valToX(val: number, width: number, hasTimeDomainActive: boolean,
         const normalized = (val - timeMin) / range;
         return normalized * width * state.zoomX + state.offsetX;
     } else {
-        // Eje X Logarítmico (Frecuencia en hercios: 20Hz a 20kHz)
+        // Eje X Logarítmico (Frecuencia en hercios: 10Hz a 22kHz)
         if (val < freqMin) val = freqMin;
         const logMin = Math.log10(freqMin);
         const logMax = Math.log10(freqMax);
@@ -51,6 +51,39 @@ export function xToVal(x: number, width: number, hasTimeDomainActive: boolean, s
         const logFreq = (adjustedX / width) * (logMax - logMin) + logMin;
         return Math.pow(10, logFreq);
     }
+}
+
+/** Límites absolutos de pan en Y (dB). El usuario no puede hacer pan más allá de estos valores. */
+export const dbPanMin = -60; // dB
+export const dbPanMax = 60;  // dB
+
+/**
+ * Clamp de pan: impide que el usuario haga pan más allá de los límites.
+ * Eje X: freqMin/freqMax (solo en modo frecuencia, no en time domain).
+ * Eje Y: dbPanMin/dbPanMax (±60 dB).
+ * Debe llamarse después de cada modificación de state.offsetX/offsetY o state.zoomX/zoomY.
+ */
+export function clampPan(
+    state: InteractionState,
+    width: number,
+    height: number,
+    hasTimeDomainActive: boolean,
+    metricType: string,
+    metricConfigs: Record<string, any>
+): void {
+    // --- Clamp eje X (solo en modo frecuencia) ---
+    if (!hasTimeDomainActive) {
+        const xMin = valToX(freqMin, width, false, state);
+        const xMax = valToX(freqMax, width, false, state);
+        if (xMin > 0) state.offsetX -= xMin;
+        if (xMax < width) state.offsetX += width - xMax;
+    }
+
+    // --- Clamp eje Y (±60 dB) ---
+    const yTop = valToY(dbPanMax, height, metricType, metricConfigs, state);
+    const yBottom = valToY(dbPanMin, height, metricType, metricConfigs, state);
+    if (yTop > 0) state.offsetY -= yTop;
+    if (yBottom < height) state.offsetY += height - yBottom;
 }
 
 export function valToY(
@@ -195,7 +228,12 @@ export function handleWheel(
 export function handleMouseMove(
     e: MouseEvent,
     state: InteractionState,
-    canvasElement: HTMLCanvasElement
+    canvasElement: HTMLCanvasElement,
+    containerWidth: number,
+    containerHeight: number,
+    hasTimeDomainActive: boolean,
+    activeMetrics: string[],
+    metricConfigs: Record<string, any>
 ) {
     const rect = canvasElement.getBoundingClientRect();
     state.mouseX = e.clientX - rect.left;
@@ -207,6 +245,8 @@ export function handleMouseMove(
         state.offsetY += e.clientY - state.lastMouseY;
         state.lastMouseX = e.clientX;
         state.lastMouseY = e.clientY;
+        const refMetric = activeMetrics.find(m => m !== "Phase") || "Magnitude";
+        clampPan(state, containerWidth, containerHeight, hasTimeDomainActive, refMetric, metricConfigs);
     }
 }
 
@@ -250,7 +290,9 @@ export function handleTouchStart(
 export function handleTouchMove(
     e: TouchEvent,
     state: InteractionState,
-    canvasElement: HTMLCanvasElement
+    canvasElement: HTMLCanvasElement,
+    activeMetrics: string[],
+    metricConfigs: Record<string, any>
 ) {
     const rect = canvasElement.getBoundingClientRect();
     if (e.touches.length === 1 && state.isDragging) {
@@ -263,14 +305,16 @@ export function handleTouchMove(
         state.mouseX = touch.clientX - rect.left;
         state.mouseY = touch.clientY - rect.top;
         state.showCrosshair = true;
+        const refMetric = activeMetrics.find(m => m !== "Phase") || "Magnitude";
+        clampPan(state, rect.width, rect.height, false, refMetric, metricConfigs);
     } else if (e.touches.length === 2 && state.isPinching) {
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist > 0 && state.touchStartDist > 0) {
             const factor = dist / state.touchStartDist;
-            state.zoomX = Math.max(0.1, Math.min(20, state.touchStartScaleX * factor));
-            state.zoomY = Math.max(0.1, Math.min(20, state.touchStartScaleY * factor));
+            state.zoomX = Math.max(0.5, Math.min(20, state.touchStartScaleX * factor));
+            state.zoomY = Math.max(0.5, Math.min(20, state.touchStartScaleY * factor));
         }
     }
 }
