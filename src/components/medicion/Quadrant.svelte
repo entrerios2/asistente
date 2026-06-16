@@ -1000,7 +1000,14 @@
     }
 
     function handleMouseUp() {
-        interactionHandleMouseUp(interactionState);
+        interactionHandleMouseUp(
+            interactionState,
+            containerWidth,
+            containerHeight,
+            hasTimeDomainActive,
+            activeMetrics,
+            metricConfigs
+        );
     }
 
     function handleTouchStart(e: TouchEvent) {
@@ -1014,7 +1021,14 @@
     }
 
     function handleTouchEnd() {
-        interactionHandleTouchEnd(interactionState);
+        interactionHandleTouchEnd(
+            interactionState,
+            containerWidth,
+            containerHeight,
+            hasTimeDomainActive,
+            activeMetrics,
+            metricConfigs
+        );
     }
 
     function handleDoubleClick() {

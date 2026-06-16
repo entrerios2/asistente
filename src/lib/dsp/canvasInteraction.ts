@@ -71,15 +71,14 @@ export function clampPan(
     metricType: string,
     metricConfigs: Record<string, any>
 ): void {
-    // --- Clamp eje X (solo en modo frecuencia) ---
+    // Clamp eje X (solo en modo frecuencia)
     if (!hasTimeDomainActive) {
         const xMin = valToX(freqMin, width, false, state);
         const xMax = valToX(freqMax, width, false, state);
         if (xMin > 0) state.offsetX -= xMin;
         if (xMax < width) state.offsetX += width - xMax;
     }
-
-    // --- Clamp eje Y (±60 dB) ---
+    // Clamp eje Y (±80 dB)
     const yTop = valToY(dbPanMax, height, metricType, metricConfigs, state);
     const yBottom = valToY(dbPanMin, height, metricType, metricConfigs, state);
     if (yTop > 0) state.offsetY -= yTop;
@@ -324,17 +323,37 @@ export function handleTouchMove(
             state.zoomX = Math.max(0.5, Math.min(4, state.touchStartScaleX * factor));
             state.zoomY = Math.max(0.5, Math.min(4, state.touchStartScaleY * factor));
         }
+        const refMetric = activeMetrics.find(m => m !== "Phase") || "Magnitude";
+        clampPan(state, rect.width, rect.height, false, refMetric, metricConfigs);
     }
 }
 
-export function handleTouchEnd(state: InteractionState) {
+export function handleTouchEnd(
+    state: InteractionState,
+    width: number,
+    height: number,
+    hasTimeDomainActive: boolean,
+    activeMetrics: string[],
+    metricConfigs: Record<string, any>
+) {
     state.isDragging = false;
     state.isPinching = false;
     state.showCrosshair = false;
+    const refMetric = activeMetrics.find(m => m !== "Phase") || "Magnitude";
+    clampPan(state, width, height, hasTimeDomainActive, refMetric, metricConfigs);
 }
 
-export function handleMouseUp(state: InteractionState): void {
+export function handleMouseUp(
+    state: InteractionState,
+    width: number,
+    height: number,
+    hasTimeDomainActive: boolean,
+    activeMetrics: string[],
+    metricConfigs: Record<string, any>
+): void {
     state.isDragging = false;
+    const refMetric = activeMetrics.find(m => m !== "Phase") || "Magnitude";
+    clampPan(state, width, height, hasTimeDomainActive, refMetric, metricConfigs);
 }
 
 export function handleDoubleClick(state: InteractionState): void {
