@@ -112,11 +112,14 @@
     });
 
     let showZoomMenu = $state(false);
+    let showLayerDropdown = $state(false);
+    let showAddLayerMenu = $state(false);
 
     // Motor de interpolación
     const interpEngine = new InterpolationEngine();
 
     const quadrantLayers = $derived(traceManager.layers.filter(l => l.quadrantId === id));
+    const activeLayer = $derived(quadrantLayers.find(l => l.id === uiStore.activeLayerId));
     const myLayers = $derived(
         traceManager.layers.filter(l => l.quadrantId === id && l.visible)
     );
@@ -1232,74 +1235,93 @@
                     </button>
                 {/each}
             </div>
+        </div>
 
-            <!-- Pills de Capas con soporte Drag & Drop (Prompt 6) -->
-            <div class="active-layers-badges flex items-center gap-2 border-l border-[#1a1a24] pl-2">
-                {#each quadrantLayers as layer}
-                    <div 
-                        class="layer-badge-pill flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-[11px] font-semibold transition-all border cursor-grab select-none
-                               {layer.id === uiStore.activeLayerId ? 'bg-[#00ff88]/10 border-[#00ff88] text-[#00ff88]' : 'bg-[#121216] border-[#222] text-gray-300'}"
-                        draggable="true"
-                        ondragstart={(e) => onLayerDragStart(e, layer.id)}
-                        onclick={() => {
-                            uiStore.activeLayerId = layer.id;
-                        }}
-                    >
-                        <span class="material-symbols-outlined text-[11px]">layers</span>
-                        <span>{layer.name}</span>
-                        
-                        <!-- Toggle visibilidad rápido -->
-                        <button
-                            class="layer-pill-btn text-gray-500 hover:text-white flex items-center"
-                            onclick={(e) => {
-                                e.stopPropagation();
-                                layer.visible = !layer.visible;
-                            }}
-                        >
-                            <span class="material-symbols-outlined text-[13px]">
-                                {layer.visible ? 'visibility' : 'visibility_off'}
-                            </span>
-                        </button>
+        <!-- ETIQUETA DE CAPA ACTIVA + BOTÓN DE CAPAS CON BADGE -->
+        <div class="flex items-center gap-1.5">
+            <!-- Etiqueta de capa activa (siempre visible) -->
+            {#if activeLayer}
+                <span class="text-[9px] text-gray-400 truncate max-w-[80px]" title={activeLayer.name}>
+                    {#if activeLayer.isCalculated}<span class="text-[#a855f7] font-mono">∑</span>{/if}
+                    {activeLayer.name}
+                </span>
+            {/if}
 
-                        <!-- Botón duplicar -->
-                        <button
-                            class="layer-pill-btn text-gray-500 hover:text-emerald-400 flex items-center"
-                            onclick={(e) => {
-                                e.stopPropagation();
-                                traceManager.duplicateLayer(layer.id);
-                            }}
-                            title="Duplicar Capa"
-                        >
-                            <span class="material-symbols-outlined text-[13px]">content_copy</span>
-                        </button>
-
-                        <!-- Botón eliminar -->
-                        <button
-                            class="layer-pill-btn text-gray-500 hover:text-red-400 flex items-center"
-                            onclick={(e) => {
-                                e.stopPropagation();
-                                traceManager.deleteLayer(layer.id);
-                            }}
-                            title="Eliminar Capa"
-                        >
-                            <span class="material-symbols-outlined text-[13px]">delete</span>
-                        </button>
-                    </div>
-                {/each}
-
-                <!-- Botón Añadir Capa -->
+            <div class="relative">
                 <button
-                    class="add-layer-btn text-[#00ff88] hover:text-[#00ffbb] flex items-center"
-                    onclick={() => {
-                        const name = prompt("Nombre de la nueva capa:", `Capa ${traceManager.layers.length + 1}`);
-                        if (name) {
-                            traceManager.addLayer(name, id, 'live');
-                        }
-                    }}
-                    title="Añadir Nueva Capa"
+                    class="flex items-center justify-center w-8 h-8 rounded-lg border border-[#1a1a24] text-gray-400 hover:text-gray-200 transition-all cursor-pointer hover:bg-[#121216] relative"
+                    onclick={(e) => { e.stopPropagation(); showLayerDropdown = !showLayerDropdown; }}
+                    title="Gestionar Capas"
                 >
-                    <span class="material-symbols-outlined text-[16px]">add_circle</span>
+                    <span class="material-symbols-outlined text-[16px]">layers</span>
+                    {#if quadrantLayers.length > 0}
+                        <span class="absolute -top-1 -right-1 bg-[#00ff88] text-black text-[8px] font-black w-3.5 h-3.5 rounded-full flex items-center justify-center">
+                            {quadrantLayers.filter(l => l.visible).length}
+                        </span>
+                    {/if}
                 </button>
+
+                {#if showLayerDropdown}
+                    <div class="fixed inset-0 z-40" onclick={() => showLayerDropdown = false}></div>
+                    <div class="absolute right-0 mt-1 bg-[#0c0c0e] border border-[#1a1a24] rounded-xl p-3 shadow-[0_10px_30px_#000] z-50 min-w-[200px] flex flex-col gap-1.5 select-none text-[11px]"
+                         onmousedown={(e) => e.stopPropagation()}
+                         onclick={(e) => e.stopPropagation()}
+                         onwheel={(e) => e.stopPropagation()}>
+                        <div class="flex items-center justify-between border-b border-[#1a1a24] pb-1.5 mb-1">
+                            <span class="font-bold text-gray-300 text-[10px] uppercase tracking-wider">Capas</span>
+                            <button onclick={() => showLayerDropdown = false} class="text-gray-500 hover:text-gray-300">
+                                <span class="material-symbols-outlined text-xs">close</span>
+                            </button>
+                        </div>
+
+                        {#each quadrantLayers as layer}
+                            <div class="flex items-center justify-between gap-2 py-1 px-1 rounded hover:bg-[#121216] group"
+                                 draggable="true"
+                                 ondragstart={(e) => onLayerDragStart(e, layer.id)}>
+                                <span class="text-[10px] truncate flex-1 cursor-pointer {layer.id === uiStore.activeLayerId ? 'text-[#00ff88] font-bold' : 'text-gray-300'}"
+                                      onclick={() => uiStore.activeLayerId = layer.id}>
+                                    {#if layer.isCalculated}<span class="text-[#a855f7] font-mono mr-1">∑</span>{/if}
+                                    {layer.name}
+                                </span>
+                                <div class="flex items-center gap-0.5">
+                                    <button class="p-0.5 text-gray-500 hover:text-white" onclick={() => layer.visible = !layer.visible}>
+                                        <span class="material-symbols-outlined text-[13px]">{layer.visible ? 'visibility' : 'visibility_off'}</span>
+                                    </button>
+                                    <button class="p-0.5 text-gray-500 hover:text-red-400" onclick={() => traceManager.deleteLayer(layer.id)}>
+                                        <span class="material-symbols-outlined text-[13px]">delete</span>
+                                    </button>
+                                </div>
+                            </div>
+                        {/each}
+
+                        <!-- Botón único "Agregar" con sub-menú desplegable -->
+                        <div class="border-t border-[#1a1a24] pt-1.5 mt-1 relative">
+                            <button
+                                class="w-full text-left px-2 py-1.5 rounded text-[10px] text-[#00ff88] hover:bg-[#00ff88]/5 font-semibold flex items-center gap-1 cursor-pointer"
+                                onclick={(e) => { e.stopPropagation(); showAddLayerMenu = !showAddLayerMenu; }}>
+                                <span class="material-symbols-outlined text-[12px]">add</span>
+                                Agregar capa
+                                <span class="material-symbols-outlined text-[10px] ml-auto">expand_more</span>
+                            </button>
+                            {#if showAddLayerMenu}
+                                <div class="absolute left-0 bottom-full mb-1 bg-[#0c0c0e] border border-[#1a1a24] rounded-lg shadow-lg z-50 min-w-[160px] py-1">
+                                    <button
+                                        class="w-full text-left px-3 py-1.5 text-[10px] text-[#00ff88] hover:bg-[#00ff88]/5 flex items-center gap-1.5 cursor-pointer"
+                                        onclick={() => { traceManager.addLayer(`Capa ${traceManager.layers.length + 1}`, id, 'live'); showAddLayerMenu = false; showLayerDropdown = false; }}>
+                                        <span class="material-symbols-outlined text-[12px]">add</span>
+                                        Nueva Capa
+                                    </button>
+                                    <button
+                                        class="w-full text-left px-3 py-1.5 text-[10px] text-[#a855f7] hover:bg-[#a855f7]/5 flex items-center gap-1.5 cursor-pointer"
+                                        onclick={() => { traceManager.addCalculatedLayer('Avg', id, 'average'); showAddLayerMenu = false; showLayerDropdown = false; }}>
+                                        <span class="material-symbols-outlined text-[12px]">functions</span>
+                                        Capa Calculada
+                                    </button>
+                                </div>
+                            {/if}
+                        </div>
+                    </div>
+                {/if}
             </div>
         </div>
 
@@ -1316,49 +1338,7 @@
     <!-- CANVAS DEL GRÁFICO -->
     <canvas bind:this={canvas} style="cursor: {interactionState.isDragging ? 'grabbing' : 'grab'}"></canvas>
 
-    <!-- HUD DE CAPAS (PROMPT 11) -->
-    <div class="absolute left-3 bottom-3 flex flex-col gap-1 z-20 select-none pointer-events-none">
-        <div class="bg-[#0c0c0e]/80 border border-[#1a1a24] rounded-lg p-2 flex flex-col gap-1.5 shadow-xl min-w-[120px] pointer-events-auto">
-            <div class="flex items-center justify-between border-b border-[#1a1a24] pb-1 mb-0.5">
-                <span class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">Capas en Escena</span>
-                <span class="material-symbols-outlined text-[10px] text-gray-600">layers</span>
-            </div>
-            {#each quadrantLayers as layer}
-                <div 
-                    class="flex items-center justify-between gap-3 group cursor-grab"
-                    draggable="true"
-                    ondragstart={(e) => onLayerDragStart(e, layer.id)}
-                >
-                    <span class="text-[10px] truncate {layer.id === uiStore.activeLayerId ? 'text-[#00ff88] font-bold' : 'text-gray-400'}">
-                        {#if layer.isCalculated}
-                            <span class="text-[8px] text-[#a855f7] font-mono mr-1">∑</span>
-                        {/if}
-                        {layer.name}
-                    </span>
-                    <div class="flex items-center gap-1">
-                        <button 
-                            class="text-gray-500 hover:text-white transition-colors cursor-pointer"
-                            onclick={() => layer.visible = !layer.visible}
-                        >
-                            <span class="material-symbols-outlined text-[12px]">
-                                {layer.visible ? 'visibility' : 'visibility_off'}
-                            </span>
-                        </button>
-                    </div>
-                </div>
-            {/each}
 
-            <!-- Botón para agregar capa calculada -->
-            <button
-                class="flex items-center gap-1 text-[9px] text-gray-500 hover:text-[#a855f7] transition-colors cursor-pointer mt-1 px-1 py-0.5 rounded hover:bg-[#a855f7]/5"
-                onclick={() => traceManager.addCalculatedLayer('Avg', id, 'average')}
-                title="Agregar capa calculada (promedio de capas visibles)"
-            >
-                <span class="material-symbols-outlined text-[12px]">functions</span>
-                <span>+ Calculada</span>
-            </button>
-        </div>
-    </div>
 
     <!-- BOTÓN ÚNICO DE ZOOM CON MENÚ -->
     <div class="absolute right-3 bottom-3 z-20 select-none">
