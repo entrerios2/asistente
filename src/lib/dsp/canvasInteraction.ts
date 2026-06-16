@@ -54,8 +54,8 @@ export function xToVal(x: number, width: number, hasTimeDomainActive: boolean, s
 }
 
 /** Límites absolutos de pan en Y (dB). El usuario no puede hacer pan más allá de estos valores. */
-export const dbPanMin = -60; // dB
-export const dbPanMax = 60;  // dB
+export const dbPanMin = -80; // dB - límite de pan/zoom
+export const dbPanMax = 80;  // dB - límite de pan/zoom
 
 /**
  * Clamp de pan: impide que el usuario haga pan más allá de los límites.
@@ -215,7 +215,7 @@ export function handleWheel(
 
     if (zoomX) {
         const valBefore = xToVal(mX, containerWidth, hasTimeDomainActive, state);
-        state.zoomX = Math.max(0.5, Math.min(20, state.zoomX * delta));
+        state.zoomX = Math.max(0.5, Math.min(4, state.zoomX * delta));
         const xAfter = valToX(valBefore, containerWidth, hasTimeDomainActive, state);
         state.offsetX += mX - xAfter;
     }
@@ -223,7 +223,7 @@ export function handleWheel(
     if (zoomY) {
         const refMetric = activeMetrics.find(m => m !== "Phase") || "Magnitude";
         const valBefore = yToVal(mY, containerHeight, refMetric, state);
-        state.zoomY = Math.max(0.5, Math.min(20, state.zoomY * delta));
+        state.zoomY = Math.max(0.5, Math.min(4, state.zoomY * delta));
         const yAfter = valToY(valBefore, containerHeight, refMetric, metricConfigs, state);
         state.offsetY += mY - yAfter;
     }
@@ -321,8 +321,8 @@ export function handleTouchMove(
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist > 0 && state.touchStartDist > 0) {
             const factor = dist / state.touchStartDist;
-            state.zoomX = Math.max(0.5, Math.min(20, state.touchStartScaleX * factor));
-            state.zoomY = Math.max(0.5, Math.min(20, state.touchStartScaleY * factor));
+            state.zoomX = Math.max(0.5, Math.min(4, state.touchStartScaleX * factor));
+            state.zoomY = Math.max(0.5, Math.min(4, state.touchStartScaleY * factor));
         }
     }
 }

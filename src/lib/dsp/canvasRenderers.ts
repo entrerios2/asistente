@@ -84,8 +84,8 @@ export function drawGrid(
             (m) => m !== "Phase" && m !== "Level" && m !== "Numeric",
         ) || activeMetrics[0];
     if (mainMetric && mainMetric !== "Spectrogram" && mainMetric !== "Nyquist") {
-        let min = dbMin,
-            max = dbMax,
+        let min = -60,
+            max = 60,
             step = 10,
             unit = "dB";
         if (mainMetric === "Spectrum") {
