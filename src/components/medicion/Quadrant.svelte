@@ -1168,7 +1168,7 @@
          onwheel={(e) => e.stopPropagation()}
          ondblclick={(e) => e.stopPropagation()}>
         <div class="quadrant-title-group flex items-center gap-3">
-            <span class="quadrant-id font-bold text-[14px] text-emerald-400">{id.replace(/[qQ]/g, '')}</span>
+            <span class="quadrant-id font-bold text-[14px] text-emerald-400">{id.replace(/[qQ]-?/g, '')}</span>
             
             <!-- Botón "+ Métrica" -->
             <div class="relative inline-block">
