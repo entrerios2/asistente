@@ -563,12 +563,11 @@
             try {
                 const config = JSON.parse(stored);
                 if (config.layout) uiStore.setLayout(config.layout);
-                if (config.isDarkMode !== undefined) {
-                    uiStore.isDarkMode = config.isDarkMode;
-                    document.documentElement.classList.toggle(
-                        "dark",
-                        config.isDarkMode,
-                    );
+                if (config.themeMode) {
+                    uiStore.setThemeMode(config.themeMode);
+                } else if (config.isDarkMode !== undefined) {
+                    // Migración: valor antiguo
+                    uiStore.setThemeMode(config.isDarkMode ? 'dark' : 'light');
                 }
                 if (config.audioInDevice)
                     uiStore.audioInDevice = config.audioInDevice;
@@ -594,7 +593,7 @@
     $effect(() => {
         const dataToSave = {
             layout: uiStore.layout,
-            isDarkMode: uiStore.isDarkMode,
+            themeMode: uiStore.themeMode,
             audioInDevice: uiStore.audioInDevice,
             audioOutDevice: uiStore.audioOutDevice,
             inChannels: $state.snapshot(uiStore.inChannels),
@@ -2544,44 +2543,28 @@
                         class="flex justify-between items-center pt-2 border-t border-[#1a1a24]/20"
                     >
                         <div class="flex flex-col gap-0.5">
-                            <span class="text-xs font-semibold text-gray-300"
-                                >Tema Visual</span
-                            >
-                            <span class="text-[10px] text-gray-500"
-                                >Alterna entre Modo Oscuro y Claro</span
-                            >
+                            <span class="text-xs font-semibold text-gray-300">Tema Visual</span>
+                            <span class="text-[10px] text-gray-500">Apariencia de la interfaz</span>
                         </div>
 
-                        <!-- Custom Theme Selector Toggle -->
-                        <button
-                            class="flex items-center gap-1.5 bg-[#121216] border border-[#1a1a24] p-1 rounded-lg cursor-pointer transition-all duration-200 min-h-[32px]"
-                            onclick={() => uiStore.toggleTheme()}
-                        >
-                            <span
-                                class="p-1 rounded-md flex items-center justify-center transition-all duration-200
-                                         {!uiStore.isDarkMode
-                                    ? 'bg-amber-500/10 text-amber-500 font-bold'
-                                    : 'text-gray-500'}"
-                                title="Modo Claro"
-                            >
-                                <span
-                                    class="material-symbols-outlined text-[16px]"
-                                    >light_mode</span
+                        <div class="flex items-center bg-[#121216] border border-[#1a1a24] p-0.5 rounded-lg gap-0.5">
+                            {#each [
+                                { mode: 'system', icon: 'computer', label: 'Auto' },
+                                { mode: 'light', icon: 'light_mode', label: 'Claro' },
+                                { mode: 'dark', icon: 'dark_mode', label: 'Oscuro' },
+                            ] as opt}
+                                <button
+                                    class="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-md text-[10px] font-semibold transition-all cursor-pointer
+                                           {uiStore.themeMode === opt.mode
+                                        ? 'bg-[#3b82f6]/10 text-[#3b82f6]'
+                                        : 'text-gray-500 hover:text-gray-300'}"
+                                    onclick={() => uiStore.setThemeMode(opt.mode)}
                                 >
-                            </span>
-                            <span
-                                class="p-1 rounded-md flex items-center justify-center transition-all duration-200
-                                         {uiStore.isDarkMode
-                                    ? 'bg-[#3b82f6]/10 text-[#3b82f6] font-bold'
-                                    : 'text-gray-500'}"
-                                title="Modo Oscuro"
-                            >
-                                <span
-                                    class="material-symbols-outlined text-[16px]"
-                                    >dark_mode</span
-                                >
-                            </span>
-                        </button>
+                                    <span class="material-symbols-outlined text-[14px]">{opt.icon}</span>
+                                    {opt.label}
+                                </button>
+                            {/each}
+                        </div>
                     </div>
                 </div>
             </div>

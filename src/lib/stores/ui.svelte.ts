@@ -5,7 +5,7 @@
 class UIStore {
     layout = $state('1x1'); // '1x1' | '1x2' | '2x1' | '2x2' | '3x1' | '3x2'
     showSnapshots = $state(true); // Aunque ahora esté en el sidebar, mantenemos el control
-    isDarkMode = $state(true);
+    themeMode = $state<'system' | 'light' | 'dark'>('system');
     showSidebar = $state(true);
     
     // Configuración de Audio
@@ -56,6 +56,20 @@ class UIStore {
     sourceWindowWidthMs = $state(10.0);
     sourceWindowOffsetMs = $state(0.0);
 
+    constructor() {
+        if (typeof window !== 'undefined') {
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+                if (this.themeMode === 'system') {
+                    this.applyTheme();
+                }
+            });
+            // Esperar a que se cargue la configuración de localStorage si existe
+            setTimeout(() => {
+                this.applyTheme();
+            }, 0);
+        }
+    }
+
     toggleSnapshots() {
         this.showSnapshots = !this.showSnapshots;
     }
@@ -64,8 +78,21 @@ class UIStore {
         this.layout = newLayout;
     }
 
-    toggleTheme() {
-        this.isDarkMode = !this.isDarkMode;
+    get isDarkMode(): boolean {
+        if (this.themeMode === 'system') {
+            return typeof window !== 'undefined'
+                ? window.matchMedia('(prefers-color-scheme: dark)').matches
+                : true;
+        }
+        return this.themeMode === 'dark';
+    }
+
+    setThemeMode(mode: 'system' | 'light' | 'dark') {
+        this.themeMode = mode;
+        this.applyTheme();
+    }
+
+    applyTheme() {
         if (typeof document !== 'undefined') {
             document.documentElement.classList.toggle('dark', this.isDarkMode);
         }

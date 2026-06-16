@@ -1,2 +1,27 @@
 @import 'tailwindcss';
 @config '../../tailwind.config.js';
+
+/* Scrollbar estilizada para toda la app */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #1a1a24;
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #2a2a35;
+}
+
+/* Firefox */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #1a1a24 transparent;
+}
