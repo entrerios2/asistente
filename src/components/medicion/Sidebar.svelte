@@ -707,10 +707,10 @@
     <div class="flex items-center bg-[#050507] border-b border-[#1a1a24]/50 px-2 py-1.5 gap-0.5 h-[60px] flex-shrink-0">
         <nav class="flex-1 flex items-center gap-0.5">
             {#each [
-                { id: 'medicion', icon: 'podcasts', label: 'Med' },
-                { id: 'eq', icon: 'cadence', label: 'EQ' },
-                { id: 'snaps', icon: 'photo_camera', label: 'Inst' },
-                { id: 'config', icon: 'settings', label: 'Cfg' },
+                { id: 'medicion', icon: 'podcasts', label: 'MEDIR' },
+                { id: 'eq', icon: 'cadence', label: 'ECUALIZAR' },
+                { id: 'snaps', icon: 'photo_camera', label: 'INSTANTÁNEA' },
+                { id: 'config', icon: 'settings', label: 'CONFIG' },
             ] as tab}
                 <button
                     class="flex-1 h-[48px] rounded-lg flex flex-col items-center justify-center transition-all duration-200 cursor-pointer gap-0.5
@@ -721,7 +721,7 @@
                     title={tab.label}
                 >
                     <span class="material-symbols-outlined text-[20px]">{tab.icon}</span>
-                    <span class="text-[8px] font-bold uppercase tracking-wider leading-none">{tab.label}</span>
+                    <span class="text-[7px] font-bold uppercase tracking-wider leading-none">{tab.label}</span>
                 </button>
             {/each}
         </nav>
