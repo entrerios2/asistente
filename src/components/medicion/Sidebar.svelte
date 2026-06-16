@@ -59,7 +59,7 @@
         { freq: 16000, gain: 0 },
     ]);
 
-    let numParametricFilters = $state(4);
+
     interface ParametricFilter {
         id: number;
         freq: number;
@@ -149,7 +149,6 @@
             }));
         } else if (eqType === "parametrico") {
             traceManager.eqBands = parametricFilters
-                .slice(0, numParametricFilters)
                 .map((f) => ({
                     freq: f.freq,
                     gain: f.gain,
@@ -189,7 +188,6 @@
                 });
             } else if (eqType === "parametrico") {
                 parametricFilters
-                    .slice(0, numParametricFilters)
                     .forEach((f) => {
                         f.gain = Math.round((Math.random() * 10 - 5) * 10) / 10;
                         f.q = Math.round((0.5 + Math.random() * 2) * 10) / 10;
@@ -1349,39 +1347,32 @@
                     <!-- MODO PARAMÉTRICO -->
                     {#if eqType === "parametrico"}
                         <div class="flex flex-col gap-3">
-                            <div
-                                class="flex justify-between items-center bg-[#121216]/20 border border-[#1a1a24]/30 rounded-lg p-2.5"
-                            >
-                                <label class="text-xs text-gray-400"
-                                    >Cantidad de filtros</label
-                                >
-                                <select
-                                    bind:value={numParametricFilters}
-                                    class="bg-[#121216] border border-[#1a1a24] rounded px-2 py-1 text-xs text-gray-200"
-                                >
-                                    {#each Array.from({ length: 6 }, (_, i) => i + 1) as fNum}
-                                        <option value={fNum}
-                                            >{fNum}
-                                            {fNum === 1
-                                                ? "Filtro"
-                                                : "Filtros"}</option
-                                        >
-                                    {/each}
-                                </select>
+                            <div class="flex justify-between items-center bg-[#121216]/20 border border-[#1a1a24]/30 rounded-lg p-2.5">
+                                <label class="text-xs text-gray-400">{parametricFilters.length} filtro{parametricFilters.length !== 1 ? 's' : ''}</label>
+                                <button
+                                    class="text-[9px] text-red-400/60 hover:text-red-400 cursor-pointer"
+                                    onclick={() => parametricFilters.forEach(f => { f.gain = 0; f.freq = 1000; f.q = 1.0; })}
+                                    title="Resetear todos los filtros"
+                                >Resetear</button>
                             </div>
-
-                            <div class="flex flex-col gap-3">
-                                {#each parametricFilters.slice(0, numParametricFilters) as filter}
-                                    <div
-                                        class="border border-[#1a1a24] bg-[#121216]/20 rounded-lg p-3 flex flex-col gap-3"
-                                    >
-                                        <div
-                                            class="flex justify-between items-center"
-                                        >
-                                            <span
-                                                class="text-xs font-bold text-[#3b82f6]"
-                                                >Filtro {filter.id}</span
+                                    <div class="flex flex-col gap-3">
+                                        {#each parametricFilters as filter}
+                                            <div
+                                                class="border border-[#1a1a24] bg-[#121216]/20 rounded-lg p-3 flex flex-col gap-3"
                                             >
+                                                <div
+                                                    class="flex justify-between items-center"
+                                                >
+                                                    <div class="flex items-center gap-2">
+                                                        <span class="text-xs font-bold text-[#3b82f6]">Filtro {filter.id}</span>
+                                                        <button
+                                                            class="text-gray-500 hover:text-red-400 cursor-pointer flex items-center justify-center"
+                                                            onclick={() => parametricFilters = parametricFilters.filter(f => f.id !== filter.id)}
+                                                            title="Eliminar filtro"
+                                                        >
+                                                            <span class="material-symbols-outlined text-[14px]">close</span>
+                                                        </button>
+                                                    </div>
 
                                             <!-- Configuración del Filtro (tipos soportados) -->
                                             <div class="relative">
@@ -1608,6 +1599,24 @@
                                     </div>
                                 {/each}
                             </div>
+                            <button
+                                class="w-full py-2 px-3 rounded-lg border border-dashed border-[#1a1a24] text-[#3b82f6] hover:bg-[#3b82f6]/5 text-[10px] font-semibold transition-all cursor-pointer flex items-center justify-center gap-1"
+                                onclick={() => {
+                                    const newId = parametricFilters.length > 0 ? Math.max(...parametricFilters.map(f => f.id)) + 1 : 1;
+                                    parametricFilters = [...parametricFilters, {
+                                        id: newId,
+                                        type: 'peaking',
+                                        freq: 1000,
+                                        gain: 0,
+                                        q: 1.0,
+                                        supportedTypes: ['peaking', 'lowpass', 'highpass', 'shelving', 'notch', 'bandpass'],
+                                        showConfig: false
+                                    }];
+                                }}
+                            >
+                                <span class="material-symbols-outlined text-[12px]">add</span>
+                                Agregar Filtro
+                            </button>
                         </div>
                     {/if}
                 {:else}
