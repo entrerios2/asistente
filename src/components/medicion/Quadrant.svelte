@@ -1169,7 +1169,7 @@
     }}
 >
     <!-- CABECERA PREMIUM DE CADA CUADRANTE -->
-    <div class="quadrant-header flex items-center justify-between bg-[#08080a] border-b border-[#1a1a24] px-3 py-1.5 min-h-[40px]"
+    <div class="quadrant-header flex items-center gap-2 bg-[#08080a] border-b border-[#1a1a24] px-3 py-1.5 min-h-[40px]"
          onmousedown={(e) => e.stopPropagation()}
          onmouseup={(e) => e.stopPropagation()}
          onclick={(e) => e.stopPropagation()}
@@ -1241,8 +1241,8 @@
             </div>
         </div>
 
-        <!-- ETIQUETA DE CAPA ACTIVA + BOTÓN DE CAPAS CON BADGE -->
-        <div class="flex items-center gap-1.5">
+        <!-- ETIQUETA DE CAPA ACTIVA + BOTÓN DE CAPAS CON BADGE (CON ML-AUTO Y BOTÓN SETTINGS INTEGRADO) -->
+        <div class="flex items-center gap-1.5 ml-auto">
             <!-- Etiqueta de capa activa (siempre visible) -->
             {#if activeLayer}
                 <span class="text-[9px] text-gray-400 truncate max-w-[80px]" title={activeLayer.name}>
@@ -1268,9 +1268,9 @@
                 {#if showLayerDropdown}
                     <div class="fixed inset-0 z-40" onclick={() => showLayerDropdown = false}></div>
                     <div class="absolute right-0 mt-1 bg-[#0c0c0e] border border-[#1a1a24] rounded-xl p-3 shadow-[0_10px_30px_#000] z-50 min-w-[200px] flex flex-col gap-1.5 select-none text-[11px]"
-                         onmousedown={(e) => e.stopPropagation()}
-                         onclick={(e) => e.stopPropagation()}
-                         onwheel={(e) => e.stopPropagation()}>
+                          onmousedown={(e) => e.stopPropagation()}
+                          onclick={(e) => e.stopPropagation()}
+                          onwheel={(e) => e.stopPropagation()}>
                         <div class="flex items-center justify-between border-b border-[#1a1a24] pb-1.5 mb-1">
                             <span class="font-bold text-gray-300 text-[10px] uppercase tracking-wider">Capas</span>
                             <button onclick={() => showLayerDropdown = false} class="text-gray-500 hover:text-gray-300">
@@ -1327,16 +1327,17 @@
                     </div>
                 {/if}
             </div>
-        </div>
 
-        <button
-            bind:this={settingsBtn}
-            class="settings-btn flex items-center justify-center w-8 h-8 rounded-lg border border-[#1a1a24] text-gray-400 hover:text-gray-200 transition-all cursor-pointer hover:bg-[#121216]"
-            onclick={toggleSelector}
-            title="Configuración Global del Gráfico"
-        >
-            <span class="material-symbols-outlined text-[16px]">settings</span>
-        </button>
+            <!-- Botón settings (MOVIDO AQUÍ) -->
+            <button
+                bind:this={settingsBtn}
+                class="settings-btn flex items-center justify-center w-8 h-8 rounded-lg border border-[#1a1a24] text-gray-400 hover:text-gray-200 transition-all cursor-pointer hover:bg-[#121216]"
+                onclick={toggleSelector}
+                title="Configuración Global del Gráfico"
+            >
+                <span class="material-symbols-outlined text-[16px]">settings</span>
+            </button>
+        </div>
     </div>
 
     <!-- CANVAS DEL GRÁFICO -->
