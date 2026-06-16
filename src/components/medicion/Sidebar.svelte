@@ -39,6 +39,7 @@
     });
     let showEQ = $state(true); // Switch Mostrar Ecualización
     let numGraphicBands = $state(10); // 5 | 10 | 15
+    let customBandCount = $state(false);
     let isCalculatingAutoEQ = $state(false);
 
     interface GraphicBand {
@@ -168,23 +169,23 @@
         }
     });
 
+    function generateGraphicBands(count: number): GraphicBand[] {
+        const logMin = Math.log10(20);
+        const logMax = Math.log10(20000);
+        return Array.from({ length: count }, (_, i) => {
+            const freq = Math.round(Math.pow(10, logMin + (i / (count - 1)) * (logMax - logMin)));
+            return { freq, gain: 0 };
+        });
+    }
+
     // Ajustar número de bandas en modo gráfico
     $effect(() => {
-        let freqs: number[] = [];
-        if (numGraphicBands === 5) {
-            freqs = [80, 250, 1000, 4000, 12000];
-        } else if (numGraphicBands === 10) {
-            freqs = [31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
-        } else if (numGraphicBands === 15) {
-            freqs = [
-                25, 40, 63, 100, 160, 250, 400, 630, 1000, 1600, 2500, 4000,
-                6300, 10000, 16000,
-            ];
-        }
+        const count = numGraphicBands;
         const currentGraphicBands = untrack(() => graphicBands);
-        graphicBands = freqs.map((f) => {
-            const prev = currentGraphicBands.find((b) => b.freq === f);
-            return { freq: f, gain: prev ? prev.gain : 0 };
+        const newBands = generateGraphicBands(count);
+        graphicBands = newBands.map((nb) => {
+            const prev = currentGraphicBands.find((b) => Math.abs(b.freq - nb.freq) < 2);
+            return { freq: nb.freq, gain: prev ? prev.gain : 0 };
         });
     });
 
@@ -1288,20 +1289,42 @@
                     <!-- MODO GRÁFICO -->
                     {#if eqType === "grafico"}
                         <div class="flex flex-col gap-4">
-                            <div
-                                class="flex justify-between items-center bg-[#121216]/20 border border-[#1a1a24]/30 rounded-lg p-2.5"
-                            >
-                                <label class="text-xs text-gray-400"
-                                    >Cantidad de bandas</label
-                                >
-                                <select
-                                    bind:value={numGraphicBands}
-                                    class="bg-[#121216] border border-[#1a1a24] rounded px-2 py-1 text-xs text-gray-200 focus:outline-none"
-                                >
-                                    <option value={5}>5 Bandas</option>
-                                    <option value={10}>10 Bandas</option>
-                                    <option value={15}>15 Bandas</option>
-                                </select>
+                            <div class="flex justify-between items-center bg-[#121216]/20 border border-[#1a1a24]/30 rounded-lg p-2.5">
+                                <label class="text-xs text-gray-400">Bandas</label>
+                                {#if customBandCount}
+                                    <div class="flex items-center gap-1">
+                                        <input
+                                            type="number"
+                                            min="3"
+                                            max="31"
+                                            bind:value={numGraphicBands}
+                                            class="w-14 bg-[#121216] border border-[#1a1a24] rounded px-2 py-1 text-xs text-gray-200 text-center"
+                                        />
+                                        <button
+                                            class="text-[9px] text-gray-500 hover:text-white cursor-pointer"
+                                            onclick={() => customBandCount = false}
+                                        >Presets</button>
+                                    </div>
+                                {:else}
+                                    <div class="flex items-center gap-1">
+                                        <select
+                                            bind:value={numGraphicBands}
+                                            class="bg-[#121216] border border-[#1a1a24] rounded px-2 py-1 text-xs text-gray-200 focus:outline-none"
+                                        >
+                                            <option value={10}>1 oct (10)</option>
+                                            <option value={15}>2/3 oct (15)</option>
+                                            <option value={20}>1/2 oct (20)</option>
+                                            <option value={31}>1/3 oct (31)</option>
+                                        </select>
+                                        <button
+                                            class="text-[9px] text-gray-500 hover:text-white cursor-pointer px-1"
+                                            onclick={() => customBandCount = true}
+                                            title="Número personalizado de bandas"
+                                        >
+                                            <span class="material-symbols-outlined text-[12px]">tune</span>
+                                        </button>
+                                    </div>
+                                {/if}
                             </div>
 
                             <div
