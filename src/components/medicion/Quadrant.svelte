@@ -119,6 +119,7 @@
     let showZoomMenu = $state(false);
     let showLayerDropdown = $state(false);
     let showAddLayerMenu = $state(false);
+    let showSnapshotSubmenu = $state(false);
 
     // Motor de interpolación
     const interpEngine = new InterpolationEngine();
@@ -1308,18 +1309,50 @@
                                 <span class="material-symbols-outlined text-[10px] ml-auto">expand_more</span>
                             </button>
                             {#if showAddLayerMenu}
-                                <div class="absolute left-0 bottom-full mb-1 bg-[#0c0c0e] border border-[#1a1a24] rounded-lg shadow-lg z-50 min-w-[160px] py-1">
+                                <div class="absolute left-0 bottom-full mb-1 bg-[#0c0c0e] border border-[#1a1a24] rounded-lg shadow-lg z-50 min-w-[180px] py-1">
                                     <button
                                         class="w-full text-left px-3 py-1.5 text-[10px] text-[#00ff88] hover:bg-[#00ff88]/5 flex items-center gap-1.5 cursor-pointer"
                                         onclick={() => { traceManager.addLayer(`Capa ${traceManager.layers.length + 1}`, id, 'live'); showAddLayerMenu = false; showLayerDropdown = false; }}>
-                                        <span class="material-symbols-outlined text-[12px]">add</span>
-                                        Nueva Capa
+                                        <span class="material-symbols-outlined text-[12px]">podcasts</span>
+                                        Medición
                                     </button>
+                                    <div class="relative">
+                                        <button
+                                            class="w-full text-left px-3 py-1.5 text-[10px] text-[#3b82f6] hover:bg-[#3b82f6]/5 flex items-center gap-1.5 cursor-pointer"
+                                            onclick={(e) => { e.stopPropagation(); showSnapshotSubmenu = !showSnapshotSubmenu; }}>
+                                            <span class="material-symbols-outlined text-[12px]">photo_camera</span>
+                                            Instantánea
+                                            <span class="material-symbols-outlined text-[10px] ml-auto">{showSnapshotSubmenu ? 'expand_less' : 'expand_more'}</span>
+                                        </button>
+                                        {#if showSnapshotSubmenu}
+                                            <div class="bg-[#0a0a0e] border-t border-[#1a1a24] py-0.5">
+                                                {#each traceManager.instantaneas as inst}
+                                                    <button
+                                                        class="w-full text-left px-4 py-1 text-[9px] text-gray-300 hover:bg-[#3b82f6]/5 hover:text-white cursor-pointer truncate"
+                                                        onclick={() => {
+                                                            const layer = traceManager.addLayer(inst.name, id, 'snapshot');
+                                                            if (layer && inst.data) {
+                                                                traceManager.setLayerSource(layer.id, 'snapshot', inst.data);
+                                                            }
+                                                            showSnapshotSubmenu = false;
+                                                            showAddLayerMenu = false;
+                                                            showLayerDropdown = false;
+                                                        }}
+                                                        title={inst.name}
+                                                    >
+                                                        {inst.name}
+                                                    </button>
+                                                {:else}
+                                                    <span class="block px-4 py-1 text-[9px] text-gray-600 italic">Sin instantáneas</span>
+                                                {/each}
+                                            </div>
+                                        {/if}
+                                    </div>
                                     <button
                                         class="w-full text-left px-3 py-1.5 text-[10px] text-[#a855f7] hover:bg-[#a855f7]/5 flex items-center gap-1.5 cursor-pointer"
                                         onclick={() => { traceManager.addCalculatedLayer('Avg', id, 'average'); showAddLayerMenu = false; showLayerDropdown = false; }}>
                                         <span class="material-symbols-outlined text-[12px]">functions</span>
-                                        Capa Calculada
+                                        Calculada
                                     </button>
                                 </div>
                             {/if}
