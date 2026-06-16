@@ -21,6 +21,10 @@
         rebuildFrequencyLUT,
         freqMin,
         freqMax,
+        xToVal,
+        valToX,
+        yToVal,
+        valToY,
         type InteractionState
     } from "$lib/dsp/canvasInteraction";
 
@@ -106,6 +110,8 @@
         mouseY: 0,
         showCrosshair: false
     });
+
+    let showZoomMenu = $state(false);
 
     // Motor de interpolación
     const interpEngine = new InterpolationEngine();
@@ -1008,13 +1014,23 @@
         interactionHandleDoubleClick(interactionState);
     }
 
-    function zoomTactile(axis: "XY" | "X" | "Y") {
-        const factor = 1.25;
-        if (axis === "XY" || axis === "X") {
-            interactionState.zoomX = Math.max(0.1, Math.min(20, interactionState.zoomX * factor));
+    function zoomTactile(axis: 'XY' | 'X' | 'Y') {
+        const factor = 1.3;
+        const cX = containerWidth / 2;
+        const cY = containerHeight / 2;
+
+        if (axis === 'X' || axis === 'XY') {
+            const valBefore = xToVal(cX, containerWidth, hasTimeDomainActive, interactionState);
+            interactionState.zoomX = Math.max(0.5, Math.min(20, interactionState.zoomX * factor));
+            const xAfter = valToX(valBefore, containerWidth, hasTimeDomainActive, interactionState);
+            interactionState.offsetX += cX - xAfter;
         }
-        if (axis === "XY" || axis === "Y") {
-            interactionState.zoomY = Math.max(0.1, Math.min(20, interactionState.zoomY * factor));
+        if (axis === 'Y' || axis === 'XY') {
+            const refMetric = activeMetrics.find(m => m !== "Phase") || "Magnitude";
+            const valBefore = yToVal(cY, containerHeight, refMetric, interactionState);
+            interactionState.zoomY = Math.max(0.5, Math.min(20, interactionState.zoomY * factor));
+            const yAfter = valToY(valBefore, containerHeight, refMetric, metricConfigs, interactionState);
+            interactionState.offsetY += cY - yAfter;
         }
     }
 
@@ -1361,36 +1377,31 @@
         </div>
     </div>
 
-    <!-- BOTONERA DE ZOOM FLOTANTE (PROMPT 11) -->
-    <div class="absolute right-3 bottom-3 flex flex-col gap-1 z-20 select-none opacity-40 hover:opacity-100 transition-opacity">
-        <button
-            class="flex items-center justify-center w-7 h-7 rounded bg-[#0c0c0e]/80 border border-[#1a1a24] text-[9px] font-bold text-gray-400 hover:text-white hover:border-[#00ff88] transition-all cursor-pointer shadow-lg"
-            onclick={() => zoomTactile("XY")}
-            title="Zoom Ambos Ejes (+)"
-        >
-            XY
-        </button>
-        <button
-            class="flex items-center justify-center w-7 h-7 rounded bg-[#0c0c0e]/80 border border-[#1a1a24] text-[9px] font-bold text-gray-400 hover:text-white hover:border-[#00ff88] transition-all cursor-pointer shadow-lg"
-            onclick={() => zoomTactile("X")}
-            title="Zoom Eje X (+)"
-        >
-            X
-        </button>
-        <button
-            class="flex items-center justify-center w-7 h-7 rounded bg-[#0c0c0e]/80 border border-[#1a1a24] text-[9px] font-bold text-gray-400 hover:text-white hover:border-[#00ff88] transition-all cursor-pointer shadow-lg"
-            onclick={() => zoomTactile("Y")}
-            title="Zoom Eje Y (+)"
-        >
-            Y
-        </button>
-        <button
-            class="flex items-center justify-center w-7 h-7 rounded bg-[#0c0c0e]/80 border border-[#1a1a24] text-gray-400 hover:text-white hover:border-[#00ff88] transition-all cursor-pointer shadow-lg"
-            onclick={() => handleDoubleClick()}
-            title="Restaurar Zoom"
-        >
-            <span class="material-symbols-outlined text-[14px]">restart_alt</span>
-        </button>
+    <!-- BOTÓN ÚNICO DE ZOOM CON MENÚ -->
+    <div class="absolute right-3 bottom-3 z-20 select-none">
+        <div class="relative">
+            {#if showZoomMenu}
+                <div class="fixed inset-0 z-40" onclick={() => showZoomMenu = false}></div>
+                <div class="absolute right-0 bottom-10 bg-[#0c0c0e] border border-[#1a1a24] rounded-lg p-1.5 shadow-xl z-50 min-w-[100px] flex flex-col gap-0.5">
+                    <button class="px-3 py-1.5 text-[10px] font-bold text-gray-300 hover:text-white hover:bg-[#121216] rounded transition-all cursor-pointer text-left"
+                        onclick={() => { zoomTactile('XY'); showZoomMenu = false; }}>Zoom XY</button>
+                    <button class="px-3 py-1.5 text-[10px] font-bold text-gray-300 hover:text-white hover:bg-[#121216] rounded transition-all cursor-pointer text-left"
+                        onclick={() => { zoomTactile('X'); showZoomMenu = false; }}>Zoom X</button>
+                    <button class="px-3 py-1.5 text-[10px] font-bold text-gray-300 hover:text-white hover:bg-[#121216] rounded transition-all cursor-pointer text-left"
+                        onclick={() => { zoomTactile('Y'); showZoomMenu = false; }}>Zoom Y</button>
+                    <div class="border-t border-[#1a1a24] my-0.5"></div>
+                    <button class="px-3 py-1.5 text-[10px] font-bold text-[#00ff88] hover:bg-[#00ff88]/10 rounded transition-all cursor-pointer text-left"
+                        onclick={() => { handleDoubleClick(); showZoomMenu = false; }}>Restaurar</button>
+                </div>
+            {/if}
+            <button
+                class="flex items-center justify-center w-8 h-8 rounded-lg bg-[#0c0c0e] border border-[#1a1a24] text-gray-400 hover:text-white hover:border-[#00ff88] transition-all cursor-pointer shadow-lg opacity-40 hover:opacity-100"
+                onclick={() => showZoomMenu = !showZoomMenu}
+                title="Opciones de Zoom"
+            >
+                <span class="material-symbols-outlined text-[16px]">zoom_in</span>
+            </button>
+        </div>
     </div>
 
     <!-- POPOVER FLOTANTE ABSOLUTO OSM (CONFIGURACIÓN GLOBAL) -->
