@@ -588,6 +588,7 @@
 
             // Para cada métrica activa en este cuadrante, dibujamos los datos de la capa
             activeMetrics.forEach((metric) => {
+                if (metricConfigs[metric]?.hidden) return;
                 if (hasTimeDomainActive && !["Impulse", "Step"].includes(metric)) return;
                 if (!hasTimeDomainActive && ["Impulse", "Step"].includes(metric)) return;
 
@@ -684,6 +685,7 @@
             ctx.globalAlpha = op;
 
             activeMetrics.forEach((metric) => {
+                if (metricConfigs[metric]?.hidden) return;
                 if (hasTimeDomainActive && !["Impulse", "Step"].includes(metric)) return;
                 if (!hasTimeDomainActive && ["Impulse", "Step"].includes(metric)) return;
 
@@ -1173,13 +1175,11 @@
             <!-- Botón "+ Métrica" -->
             <div class="relative inline-block">
                 <button
-                    class="add-metric-btn bg-[#121216] hover:bg-[#181822] text-[#00ff88] hover:text-[#00ffbb] border border-[#222] hover:border-[#00ff88]/30 px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer select-none"
-                    onclick={(e) => {
-                        e.stopPropagation();
-                        showAddDropdown = !showAddDropdown;
-                    }}
+                    class="w-6 h-6 flex items-center justify-center rounded border border-[#222] text-[#00ff88] hover:bg-[#00ff88]/10 hover:border-[#00ff88]/30 transition-all cursor-pointer text-sm font-bold"
+                    onclick={(e) => { e.stopPropagation(); showAddDropdown = !showAddDropdown; }}
+                    title="Agregar Métrica"
                 >
-                    <span class="material-symbols-outlined text-xs">add</span> Métrica
+                    +
                 </button>
                 
                 {#if showAddDropdown}
@@ -1212,41 +1212,24 @@
                 {/if}
             </div>
 
-            <!-- Pills Interactivos -->
-            <div class="active-metrics-badges flex items-center gap-2">
+            <!-- Pills compactos de métricas (solo texto, clic = config) -->
+            <div class="active-metrics-badges flex items-center gap-1">
                 {#each activeMetrics as m}
-                    <div 
-                        class="metric-badge-pill flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-[11px] font-semibold transition-all border select-none
-                               {soloMetric === m ? 'bg-[#00ff88]/20 border-[#00ff88] text-[#00ff88]' : 'bg-[#121216] border-[#222] text-gray-300'}"
+                    {@const isHidden = metricConfigs[m]?.hidden}
+                    <button
+                        class="px-2 py-0.5 rounded text-[10px] font-semibold transition-all border cursor-pointer select-none
+                               {soloMetric === m ? 'bg-[#00ff88]/20 border-[#00ff88] text-[#00ff88]'
+                                : isHidden ? 'bg-[#0a0a0e] border-[#1a1a24] text-gray-600 opacity-50'
+                                : 'bg-[#121216] border-[#222] text-gray-300 hover:border-[#444]'}
+                               {isHidden ? 'line-through' : ''}"
                         onmouseenter={() => (hoverMetric = m)}
                         onmouseleave={() => (hoverMetric = null)}
-                        onclick={() => (soloMetric = soloMetric === m ? null : m)}
-                        title="Clic para modo Solo, Hover para destacar"
+                        onclick={() => activeConfigMetric = activeConfigMetric === m ? null : m}
+                        ondblclick={() => (soloMetric = soloMetric === m ? null : m)}
+                        title="{isHidden ? '(Oculta) ' : ''}Clic: configurar · Doble clic: modo solo"
                     >
-                        <span>{m}</span>
-                        {#if metricConfigs[m]}
-                            <button
-                                class="metric-pill-btn text-gray-500 hover:text-emerald-400 transition-colors flex items-center"
-                                onclick={(e) => {
-                                    e.stopPropagation();
-                                    activeConfigMetric = activeConfigMetric === m ? null : m;
-                                }}
-                                title="Configurar {m}"
-                            >
-                                <span class="material-symbols-outlined text-[13px]">tune</span>
-                            </button>
-                        {/if}
-                        <button
-                            class="metric-pill-btn text-gray-500 hover:text-red-400 transition-colors flex items-center"
-                            onclick={(e) => {
-                                e.stopPropagation();
-                                removeMetric(m);
-                            }}
-                            title="Eliminar {m}"
-                        >
-                            <span class="material-symbols-outlined text-[13px]">delete</span>
-                        </button>
-                    </div>
+                        {m}
+                    </button>
                 {/each}
             </div>
 
@@ -1695,6 +1678,32 @@
                     </div>
                 </div>
             {/if}
+
+            <!-- Toggle Visibilidad de la Métrica -->
+            <div class="flex items-center justify-between mt-2 pt-2 border-t border-[#1a1a24]">
+                <span class="text-[10px] text-gray-400">Visible en gráfico</span>
+                <button
+                    class="w-8 h-4 rounded-full transition-all cursor-pointer {metricConfigs[activeConfigMetric!]?.hidden ? 'bg-gray-700' : 'bg-[#00ff88]'}"
+                    onclick={() => {
+                        if (!metricConfigs[activeConfigMetric!]) metricConfigs[activeConfigMetric!] = {};
+                        metricConfigs[activeConfigMetric!].hidden = !metricConfigs[activeConfigMetric!].hidden;
+                    }}
+                >
+                    <div class="w-3 h-3 rounded-full bg-white shadow transition-transform {metricConfigs[activeConfigMetric!]?.hidden ? 'translate-x-0.5' : 'translate-x-4'}"></div>
+                </button>
+            </div>
+
+            <!-- Botón Eliminar Métrica -->
+            <button
+                class="w-full mt-2 py-1.5 px-3 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 text-[10px] font-semibold transition-all cursor-pointer flex items-center justify-center gap-1"
+                onclick={() => {
+                    removeMetric(activeConfigMetric!);
+                    activeConfigMetric = null;
+                }}
+            >
+                <span class="material-symbols-outlined text-[12px]">delete</span>
+                Eliminar {activeConfigMetric}
+            </button>
         </div>
     {/if}
 </div>
