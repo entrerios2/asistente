@@ -21,10 +21,6 @@
         rebuildFrequencyLUT,
         freqMin,
         freqMax,
-        xToVal,
-        valToX,
-        yToVal,
-        valToY,
         type InteractionState
     } from "$lib/dsp/canvasInteraction";
 
@@ -1035,25 +1031,7 @@
         interactionHandleDoubleClick(interactionState);
     }
 
-    function zoomTactile(axis: 'XY' | 'X' | 'Y') {
-        const factor = 1.3;
-        const cX = containerWidth / 2;
-        const cY = containerHeight / 2;
 
-        if (axis === 'X' || axis === 'XY') {
-            const valBefore = xToVal(cX, containerWidth, hasTimeDomainActive, interactionState);
-            interactionState.zoomX = Math.max(0.5, Math.min(20, interactionState.zoomX * factor));
-            const xAfter = valToX(valBefore, containerWidth, hasTimeDomainActive, interactionState);
-            interactionState.offsetX += cX - xAfter;
-        }
-        if (axis === 'Y' || axis === 'XY') {
-            const refMetric = activeMetrics.find(m => m !== "Phase") || "Magnitude";
-            const valBefore = yToVal(cY, containerHeight, refMetric, interactionState);
-            interactionState.zoomY = Math.max(0.5, Math.min(20, interactionState.zoomY * factor));
-            const yAfter = valToY(valBefore, containerHeight, refMetric, metricConfigs, interactionState);
-            interactionState.offsetY += cY - yAfter;
-        }
-    }
 
     function getMetricAlpha(metric: string): number {
         if (soloMetric) {
@@ -1155,6 +1133,7 @@
     });
 </script>
 
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
     class="quadrant-container"
     style="cursor: {interactionState.isDragging ? 'grabbing' : 'grab'}; background: {uiStore.isDarkMode ? '#060608' : '#f8f8fa'}; touch-action: none;"
@@ -1360,13 +1339,19 @@
         <div class="relative">
             {#if showZoomMenu}
                 <div class="fixed inset-0 z-40" onclick={() => showZoomMenu = false}></div>
-                <div class="absolute right-0 bottom-10 bg-[#0c0c0e] border border-[#1a1a24] rounded-lg p-1.5 shadow-xl z-50 min-w-[100px] flex flex-col gap-0.5">
-                    <button class="px-3 py-1.5 text-[10px] font-bold text-gray-300 hover:text-white hover:bg-[#121216] rounded transition-all cursor-pointer text-left"
-                        onclick={() => { zoomTactile('XY'); showZoomMenu = false; }}>Zoom XY</button>
-                    <button class="px-3 py-1.5 text-[10px] font-bold text-gray-300 hover:text-white hover:bg-[#121216] rounded transition-all cursor-pointer text-left"
-                        onclick={() => { zoomTactile('X'); showZoomMenu = false; }}>Zoom X</button>
-                    <button class="px-3 py-1.5 text-[10px] font-bold text-gray-300 hover:text-white hover:bg-[#121216] rounded transition-all cursor-pointer text-left"
-                        onclick={() => { zoomTactile('Y'); showZoomMenu = false; }}>Zoom Y</button>
+                <div class="absolute right-0 bottom-10 bg-[#0c0c0e] border border-[#1a1a24] rounded-lg p-1.5 shadow-xl z-50 min-w-[110px] flex flex-col gap-0.5">
+                    {#each [
+                        { mode: 'XY' as const, label: 'Libre (XY)', icon: 'open_with' },
+                        { mode: 'X' as const, label: 'Solo Eje X', icon: 'swap_horiz' },
+                        { mode: 'Y' as const, label: 'Solo Eje Y', icon: 'swap_vert' },
+                    ] as opt}
+                        <button class="px-3 py-1.5 text-[10px] font-bold rounded transition-all cursor-pointer text-left flex items-center gap-1.5
+                                       {interactionState.zoomMode === opt.mode ? 'text-[#00ff88] bg-[#00ff88]/10' : 'text-gray-300 hover:text-white hover:bg-[#121216]'}"
+                            onclick={() => { interactionState.zoomMode = opt.mode; showZoomMenu = false; }}>
+                            <span class="material-symbols-outlined text-[14px]">{opt.icon}</span>
+                            {opt.label}
+                        </button>
+                    {/each}
                     <div class="border-t border-[#1a1a24] my-0.5"></div>
                     <button class="px-3 py-1.5 text-[10px] font-bold text-[#00ff88] hover:bg-[#00ff88]/10 rounded transition-all cursor-pointer text-left"
                         onclick={() => { handleDoubleClick(); showZoomMenu = false; }}>Restaurar</button>
@@ -1377,7 +1362,9 @@
                 onclick={() => showZoomMenu = !showZoomMenu}
                 title="Opciones de Zoom"
             >
-                <span class="material-symbols-outlined text-[16px]">zoom_in</span>
+                <span class="material-symbols-outlined text-[16px]">
+                    {interactionState.zoomMode === 'X' ? 'swap_horiz' : interactionState.zoomMode === 'Y' ? 'swap_vert' : 'open_with'}
+                </span>
             </button>
         </div>
     </div>

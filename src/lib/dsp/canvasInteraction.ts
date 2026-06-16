@@ -207,9 +207,9 @@ export function handleWheel(
     } else if (e.shiftKey) {
         zoomX = true;
     } else {
-        // Área central: zoom XY proporcional
-        zoomX = true;
-        zoomY = true;
+        // Área central: respetar el modo anclado
+        zoomX = state.zoomMode === 'XY' || state.zoomMode === 'X';
+        zoomY = state.zoomMode === 'XY' || state.zoomMode === 'Y';
     }
 
     if (zoomX) {
