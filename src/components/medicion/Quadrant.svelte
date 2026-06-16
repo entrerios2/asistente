@@ -1176,7 +1176,6 @@
          onwheel={(e) => e.stopPropagation()}
          ondblclick={(e) => e.stopPropagation()}>
         <div class="quadrant-title-group flex items-center gap-3">
-            <span class="quadrant-id font-bold text-[14px] text-emerald-400">{id.replace(/[qQ]-?/g, '')}</span>
             
             <!-- Botón "+ Métrica" -->
             <div class="relative inline-block">
@@ -1341,14 +1340,21 @@
     <!-- CANVAS DEL GRÁFICO -->
     <canvas bind:this={canvas} style="cursor: {cursorStyle}"></canvas>
 
+    <!-- WATERMARK ID DEL CUADRANTE -->
+    <span class="absolute bottom-2 right-3 text-[108px] font-black pointer-events-none select-none leading-none"
+          style="color: {uiStore.isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'};
+                 -webkit-text-stroke: 1.5px {uiStore.isDarkMode ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'};">
+        {id.replace(/[qQ]-?/g, '')}
+    </span>
+
 
 
     <!-- BOTÓN ÚNICO DE ZOOM CON MENÚ -->
-    <div class="absolute right-3 bottom-3 z-20 select-none">
+    <div class="absolute left-3 bottom-3 z-20 select-none">
         <div class="relative">
             {#if showZoomMenu}
                 <div class="fixed inset-0 z-40" onclick={() => showZoomMenu = false}></div>
-                <div class="absolute right-0 bottom-10 bg-[#0c0c0e] border border-[#1a1a24] rounded-lg p-1.5 shadow-xl z-50 min-w-[110px] flex flex-col gap-0.5">
+                <div class="absolute left-0 bottom-10 bg-[#0c0c0e] border border-[#1a1a24] rounded-lg p-1.5 shadow-xl z-50 min-w-[110px] flex flex-col gap-0.5">
                     {#each [
                         { mode: 'XY' as const, label: 'Libre (XY)', icon: 'open_with' },
                         { mode: 'X' as const, label: 'Solo Eje X', icon: 'swap_horiz' },
