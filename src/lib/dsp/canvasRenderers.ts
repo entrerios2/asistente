@@ -765,29 +765,25 @@ export function drawSimulatedMagnitudePath(
     
     const cfg = metricConfigs["Simulated Magnitude"] || { modeY: "dB", smoothingPPO: 48, enableCoherence: false, coherenceThreshold: 0.5 };
     
-    const pathSim = new Path2D();
-    let firstSim = true;
+    const path = new Path2D();
     const sr = 48000;
     const binWidth = sr / 2 / bins;
 
-    for (let x = 0; x < width; x++) {
-        const binIndex = frequencyLUT[x];
-        if (binIndex === undefined) continue;
+    const points: {x: number, y: number}[] = [];
 
-        // Coherence masking
-        if (cfg.enableCoherence && interpCoherence[binIndex] < cfg.coherenceThreshold) {
-            firstSim = true;
-            continue;
-        }
+    for (let bin = 0; bin < bins; bin++) {
+        const freq = bin * binWidth;
+        if (freq < freqMin || freq > freqMax) continue;
+        const x = valToX(freq, width, false, state);
+        if (x < -10 || x > width + 10) continue;
 
-        // Smooth data log based on PPO config
-        let val = getPPOSmoothedValue(binIndex, interpMagnitude, cfg.smoothingPPO);
-        const f = binIndex * binWidth || 1e-6;
+        if (cfg.enableCoherence && interpCoherence[bin] < cfg.coherenceThreshold) continue;
+
+        let val = getPPOSmoothedValue(bin, interpMagnitude, cfg.smoothingPPO);
+        const f = bin * binWidth || 1e-6;
         const eqGain = getEQResponseCached(f);
-        
         val = val + eqGain;
 
-        // Mode Y transformations
         if (cfg.modeY === "Linear") {
             val = Math.pow(10, val / 20);
         } else if (cfg.modeY === "Impedance") {
@@ -795,15 +791,23 @@ export function drawSimulatedMagnitudePath(
         }
 
         const y = valToY(val, height, "Simulated Magnitude", metricConfigs, state) + (cfg.yShift || 0);
+        points.push({ x, y });
+    }
 
-        if (firstSim) {
-            pathSim.moveTo(x, y);
-            firstSim = false;
-        } else {
-            pathSim.lineTo(x, y);
+    if (points.length > 0) {
+        path.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length - 1; i++) {
+            const midX = (points[i].x + points[i + 1].x) / 2;
+            const midY = (points[i].y + points[i + 1].y) / 2;
+            path.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+        }
+        if (points.length > 1) {
+            const last = points[points.length - 1];
+            path.lineTo(last.x, last.y);
         }
     }
-    ctx.stroke(pathSim);
+
+    ctx.stroke(path);
     ctx.setLineDash([]);
 }
 
