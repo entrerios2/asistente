@@ -3,13 +3,13 @@
  * Implementado con runas de Svelte 5 ($state, $derived).
  */
 
-import { peakingCoeffs, lowShelfCoeffs, highShelfCoeffs, biquadResponse } from '../dsp/biquad';
+import { peakingCoeffs, lowShelfCoeffs, highShelfCoeffs, lowpassCoeffs, highpassCoeffs, notchCoeffs, bandpassCoeffs, biquadResponse } from '../dsp/biquad';
 
 export interface EQFilter {
     frequency: number;
     gain: number; // en dB
     q: number;
-    type: 'peaking' | 'highshelf' | 'lowshelf';
+    type: 'peaking' | 'highshelf' | 'lowshelf' | 'high_shelf' | 'low_shelf' | 'lowpass' | 'highpass' | 'notch' | 'bandpass';
     enabled: boolean;
 }
 
@@ -81,14 +81,16 @@ export class CalibrationStore {
         const Q = filter.q;
         const fs = this.sampleRate;
 
-        if (filter.type === 'peaking') {
-            return peakingCoeffs(fc, G, Q, fs);
-        } else if (filter.type === 'lowshelf') {
-            return lowShelfCoeffs(fc, G, Q, fs);
-        } else if (filter.type === 'highshelf') {
-            return highShelfCoeffs(fc, G, Q, fs);
+        switch (filter.type) {
+            case 'peaking':                        return peakingCoeffs(fc, G, Q, fs);
+            case 'lowshelf':   case 'low_shelf':   return lowShelfCoeffs(fc, G, Q, fs);
+            case 'highshelf':  case 'high_shelf':  return highShelfCoeffs(fc, G, Q, fs);
+            case 'lowpass':                        return lowpassCoeffs(fc, G, Q, fs);
+            case 'highpass':                       return highpassCoeffs(fc, G, Q, fs);
+            case 'notch':                          return notchCoeffs(fc, G, Q, fs);
+            case 'bandpass':                       return bandpassCoeffs(fc, G, Q, fs);
+            default:                               return null;
         }
-        return null;
     }
 
     /**
