@@ -4,6 +4,7 @@
  * Shares results to avoid redundant calculations and implements adaptive throttling.
  */
 
+import { untrack } from 'svelte';
 import { traceManager } from './traceManager.svelte';
 import { uiStore } from './ui.svelte';
 import { meterStore } from './meterStore.svelte';
@@ -29,7 +30,7 @@ class MathOrchestrator {
     lastMathTime = 0;
 
     activeMetricsByQuadrant = $state<Record<string, string[]>>({});
-    private BINS = 4096;
+    BINS = 4096;
     private FFT_SIZE = 8192;
 
     // Bridge for unused imports check
@@ -92,7 +93,8 @@ class MathOrchestrator {
 
         $effect.root(() => {
             $effect(() => {
-                this.reallocateBuffers(uiStore.fftSize);
+                const fftSize = uiStore.fftSize;
+                untrack(() => this.reallocateBuffers(fftSize));
             });
             $effect(() => {
                 this.startTimer(uiStore.dspUpdateRate);
@@ -169,6 +171,10 @@ class MathOrchestrator {
     });
 
     reallocateBuffers(newFftSize: number) {
+        // Guard: skip if size hasn't changed and buffers are already allocated
+        if (newFftSize === this.FFT_SIZE && this.outputMagnitude.length === newFftSize / 2) {
+            return;
+        }
         this.FFT_SIZE = newFftSize;
         this.BINS = newFftSize / 2;
 
@@ -397,7 +403,7 @@ class MathOrchestrator {
                 BINS: this.BINS,
                 FFT_SIZE: this.FFT_SIZE,
                 eqResponseCache: this.eqResponseCache,
-                eqBands: $state.snapshot(traceManager.eqBands),
+                eqBands: [],  // EQ must NOT enter measurement pipeline — it's visualization only
                 calibrationFilters: $state.snapshot(calibrationStore.suggestedFilters),
                 calibrationPoints: $state.snapshot(calibrationStore.calibrationPoints),
                 inputGain: uiStore.inputGain,

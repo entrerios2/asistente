@@ -1274,6 +1274,7 @@
     }}
 >
     <!-- CABECERA PREMIUM DE CADA CUADRANTE -->
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
     <div class="quadrant-header flex items-center gap-2 border-b border-[#1a1a24] px-3 py-1.5 min-h-[40px]"
          style="background: var(--bg-primary)"
          onmousedown={(e) => e.stopPropagation()}
@@ -1456,7 +1457,10 @@
                                                         onclick={() => {
                                                             const layer = traceManager.addLayer(inst.name, id, 'snapshot');
                                                             if (layer && inst.data) {
-                                                                traceManager.setLayerSource(layer.id, 'snapshot', inst.data);
+                                                                const firstMetric = Object.values(inst.data)[0];
+                                                                if (firstMetric) {
+                                                                    traceManager.setLayerSource(layer.id, 'snapshot', firstMetric);
+                                                                }
                                                             }
                                                             showSnapshotSubmenu = false;
                                                             showAddLayerMenu = false;
@@ -1513,6 +1517,7 @@
     <div class="absolute left-3 bottom-3 z-20 select-none">
         <div class="relative">
             {#if showZoomMenu}
+                <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
                 <div class="fixed inset-0 z-40" onclick={() => showZoomMenu = false}></div>
                 <div class="absolute left-0 bottom-10 rounded-lg p-1.5 shadow-xl z-50 min-w-[110px] flex flex-col gap-0.5"
                      style="background: var(--bg-surface); border: 1px solid var(--border-primary)">
@@ -1554,6 +1559,7 @@
             onclick={() => (showSelector = false)}
         ></div>
 
+        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
         <div class="selector-popover absolute right-[10px] top-[46px] rounded-xl p-4 shadow-[0_10px_30px_#000000] z-50 min-w-[200px] flex flex-col gap-3 select-none text-[11px] text-gray-200"
              style="background: var(--bg-surface); border: 1px solid var(--border-primary)"
              onmousedown={(e) => e.stopPropagation()}
@@ -1629,8 +1635,10 @@
     <!-- POPOVER DE CONFIGURACIÓN POR MÉTRICA (OSM PARIDAD) -->
     {#if activeConfigMetric}
         <!-- Backdrop para cerrar con un click fuera -->
+        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
         <div class="fixed inset-0 z-40" onclick={() => activeConfigMetric = null}></div>
         
+        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
         <div class="absolute top-[46px] left-[16px] rounded-xl p-4 shadow-[0_10px_30px_#000000] z-50 min-w-[240px] flex flex-col gap-3 select-none text-[11px] text-gray-200"
              style="background: var(--bg-surface); border: 1px solid var(--border-primary)"
              onmousedown={(e) => e.stopPropagation()}
@@ -2180,50 +2188,6 @@
         font-family: "Outfit", sans-serif;
         font-size: 7px;
         font-weight: 800;
-        background: rgba(239, 68, 68, 0.18);
-        border: 1px solid rgba(239, 68, 68, 0.3);
-        color: #ef4444;
-        padding: 0.5px 4px;
-        border-radius: 3px;
-        text-transform: uppercase;
-    }
-
-    .divider {
-        height: 1px;
-        background: rgba(255, 255, 255, 0.06);
-    }
-
-    .popover-controls-group {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-    }
-
-    .smoothing-options {
-        display: flex;
-        gap: 3px;
-        margin-top: 3px;
-    }
-
-    .smoothing-btn {
-        flex: 1;
-        background: rgba(255, 255, 255, 0.02);
-        border: 1px solid rgba(255, 255, 255, 0.05);
-        color: #888;
-        padding: 4px 0;
-        border-radius: 5px;
-        cursor: pointer;
-        font-size: 8px;
-        font-family: "Inter", sans-serif;
-        transition: all 0.15s ease;
-    }
-
-    .smoothing-btn:hover {
-        background: rgba(255, 255, 255, 0.05);
-        color: #ccc;
-    }
-
-    .smoothing-btn.active {
         background: #00ff88;
         color: #050507;
         border-color: #00ff88;
@@ -2321,20 +2285,160 @@
 
     .style-toggle-btn {
         background: rgba(255, 255, 255, 0.02);
-        border: 1px solid rgba(255, 255, 255, 0.05);
-        color: #888;
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-size: 7px;
+        transition: all 0.15s ease;
+        background: rgba(255, 255, 255, 0.015);
+        border: 1px solid rgba(255, 255, 255, 0.02);
+        position: relative;
+    }
+
+    .metric-checkbox-item input {
+        display: none; /* Esconder checkbox nativo */
+    }
+
+    .checkbox-custom {
+        width: 10px;
+        height: 10px;
+        border-radius: 3px;
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        margin-right: 8px;
+        display: inline-block;
+        transition: all 0.15s ease;
+        flex-shrink: 0;
+    }
+
+    .metric-name-text {
         font-family: "Inter", sans-serif;
+        font-size: 10px;
+        color: #9ca3af;
+        transition: color 0.15s ease;
+    }
+
+    .metric-checkbox-item:hover:not(.disabled) {
+        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(255, 255, 255, 0.08);
+    }
+
+    .metric-checkbox-item:hover:not(.disabled) .metric-name-text {
+        color: #fff;
+    }
+
+    .metric-checkbox-item.active .metric-name-text {
+        color: #fff;
+        font-weight: 600;
+    }
+
+    .metric-checkbox-item.disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+        background: transparent;
+    }
+
+    .disabled-badge {
+        position: absolute;
+        right: 6px;
+        font-family: "Outfit", sans-serif;
+        font-size: 7px;
+        font-weight: 800;
+        background: rgba(239, 68, 68, 0.18);
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        color: #ef4444;
+        padding: 0.5px 4px;
+        border-radius: 3px;
+        text-transform: uppercase;
+    }
+
+    .divider {
+        height: 1px;
+        background: rgba(255, 255, 255, 0.06);
+    }
+
+    .popover-controls-group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .action-btn {
+        background: rgba(255, 255, 255, 0.05);
+        color: #e5e7eb;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        padding: 6px;
+        border-radius: 6px;
+        font-weight: 700;
         cursor: pointer;
+        font-size: 9px;
+        font-family: "Outfit", sans-serif;
+        transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .action-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+        border-color: rgba(255, 255, 255, 0.18);
+        color: #fff;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .mini-style-edit-btn {
+        background: transparent;
+        border: none;
+        color: rgba(255, 255, 255, 0.4);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2px;
+        margin-left: auto;
+        border-radius: 4px;
         transition: all 0.15s ease;
     }
 
-    .style-toggle-btn.active {
-        background: rgba(0, 255, 136, 0.12);
-        border-color: #00ff88;
-        color: #00ff88;
+    .mini-style-edit-btn:hover {
+        color: #fff;
+        background: rgba(255, 255, 255, 0.1);
+    }
+
+    .style-customizer-panel {
+        background: rgba(0, 0, 0, 0.35);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+        padding: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-top: 2px;
+        margin-bottom: 4px;
+        box-sizing: border-box;
+    }
+
+    .customizer-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+    .customizer-label {
+        font-family: "Outfit", sans-serif;
+        font-size: 8px;
+        color: rgba(255, 255, 255, 0.6);
+        text-transform: uppercase;
         font-weight: 700;
+    }
+
+    .color-picker-input {
+        background: transparent;
+        border: none;
+        width: 24px;
+        height: 18px;
+        cursor: pointer;
+        padding: 0;
+    }
+
+    .width-slider {
+        flex: 1;
+        max-width: 90px;
+        accent-color: #00ff88;
+        height: 3px;
+        cursor: pointer;
     }
 </style>

@@ -80,6 +80,8 @@ export class InterpolationEngine {
         const now = performance.now();
         const throttleMs = mathOrchestrator.throttleMs;
         const timeElapsed = now - mathOrchestrator.lastMathTime;
+        // If no new data for >2 intervals, freeze display (don't decay to stale data)
+        if (!snap && timeElapsed > throttleMs * 2) return;
         const t = snap ? 1.0 : Math.max(0, Math.min(1.0, timeElapsed / throttleMs));
 
         for (let i = 0; i < this.BINS; i++) {
@@ -88,6 +90,7 @@ export class InterpolationEngine {
             this.interpCoherence[i] = this.prevCoherence[i] * (1 - t) + mathOrchestrator.outputCoherence[i] * t;
             this.interpGroupDelay[i] = this.prevGroupDelay[i] * (1 - t) + mathOrchestrator.outputGroupDelay[i] * t;
         }
+
 
         const factor = snap ? 1.0 : this.SMOOTHING_FACTOR;
         for (let i = 0; i < this.FFT_SIZE; i++) {
