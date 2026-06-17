@@ -45,6 +45,7 @@
     let customBandCount = $state(false);
     let isCalculatingAutoEQ = $state(false);
     let autoEQSourceLayer = $state<string>('active');
+    const deviationTarget = $derived(traceManager.getTargetCurve(mathOrchestrator.BINS, 48000));
 
     function computeDeviationWithEQ(
         magnitude: Float32Array,
@@ -1376,9 +1377,8 @@
                         </thead>
                         <tbody>
                             {#each traceManager.layers.filter(l => l.visible && l.data && l.data.length > 0) as layer}
-                                {@const target = traceManager.getTargetCurve(mathOrchestrator.BINS, 48000)}
-                                {@const orig = computeDeviation(layer.data, target, mathOrchestrator.outputCoherence, mathOrchestrator.BINS)}
-                                {@const eqd = computeDeviationWithEQ(layer.data, target, mathOrchestrator.outputCoherence, mathOrchestrator.BINS)}
+                                {@const orig = computeDeviation(layer.data, deviationTarget, mathOrchestrator.outputCoherence, mathOrchestrator.BINS)}
+                                {@const eqd = computeDeviationWithEQ(layer.data, deviationTarget, mathOrchestrator.outputCoherence, mathOrchestrator.BINS)}
                                 <tr class="border-b" style="border-color: var(--border-primary)">
                                     <td class="py-1 truncate max-w-[80px]" title={layer.name}>{layer.name}</td>
                                     <td class="text-right py-1 font-mono">

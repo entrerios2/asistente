@@ -976,12 +976,12 @@
         // Draw Target Trace overlay if active (Prompt 10)
         drawTargetTrace(ctx, width, height, targetTrace, interactionState, hasTimeDomainActive);
 
-        if (showEQOverlay) {
+        if (showEQOverlay && traceManager.eqBands.length > 0) {
             drawEQOverlayPath(
                 ctx, width, height,
                 { color: '#fbbf24', lineWidth: 2, lineDash: [] },
                 metricConfigs, interactionState,
-                (f) => mathOrchestrator.getEQResponseCached(f),
+                mathOrchestrator.getEQResponseCached.bind(mathOrchestrator),
                 mathOrchestrator.BINS
             );
 
@@ -1066,19 +1066,21 @@
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
 
-        // Hit-test nodos EQ
-        if (showEQOverlay && draggingEQNode === null) {
+        // Hit-test nodos EQ (solo si overlay visible y hay bandas)
+        if (showEQOverlay && draggingEQNode === null && traceManager.eqBands.length > 0) {
             let found = -1;
-            for (let i = 0; i < traceManager.eqBands.length; i++) {
-                const band = traceManager.eqBands[i];
-                const nx = valToX(band.freq, containerWidth, false, interactionState);
-                const gain = mathOrchestrator.getEQResponseCached(band.freq);
+            const bands = traceManager.eqBands;
+            for (let i = 0; i < bands.length; i++) {
+                const nx = valToX(bands[i].freq, containerWidth, false, interactionState);
+                const gain = mathOrchestrator.getEQResponseCached(bands[i].freq);
                 const ny = valToY(gain, containerHeight, "Magnitude", metricConfigs, interactionState);
                 const dx = mouseX - nx;
                 const dy = mouseY - ny;
-                if (Math.sqrt(dx*dx + dy*dy) < 12) { found = i; break; }
+                if (dx*dx + dy*dy < 144) { found = i; break; } // 144 = 12^2, evita sqrt
             }
             hoveringEQNode = found >= 0 ? found : null;
+        } else if (!showEQOverlay) {
+            hoveringEQNode = null;
         }
 
         // Drag activo de nodo EQ

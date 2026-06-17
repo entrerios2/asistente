@@ -89,7 +89,15 @@ class TraceManager {
     targetCurveType = $state<'flat' | 'house' | 'bk' | 'harman' | 'custom'>('flat');
     targetCurveCustom = $state<Float32Array | null>(null);
 
+    private _targetCurveCache: Float32Array | null = null;
+    private _targetCurveCacheKey: string = '';
+
     getTargetCurve(bins: number, sampleRate: number = 48000): Float32Array {
+        const key = `${this.targetCurveType}_${bins}_${sampleRate}`;
+        if (this._targetCurveCache && this._targetCurveCacheKey === key) {
+            return this._targetCurveCache;
+        }
+
         const target = new Float32Array(bins);
         const binWidth = (sampleRate / 2) / bins;
 
@@ -130,6 +138,9 @@ class TraceManager {
                 }
                 break;
         }
+
+        this._targetCurveCache = target;
+        this._targetCurveCacheKey = key;
         return target;
     }
 

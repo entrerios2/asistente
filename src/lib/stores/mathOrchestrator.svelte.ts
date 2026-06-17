@@ -224,12 +224,20 @@ class MathOrchestrator {
             const measuring = uiStore.isMeasuring;
             const simulating = uiStore.isSimulating;
 
-            if (bandsHash !== this.lastBandsHash || measuring !== this.lastMeasuring || simulating !== this.lastSimulating) {
+            // EQ-only change: just update cache. The canvas render loop already runs
+            // at 60fps via requestAnimationFrame and reads getEQResponseCached() directly.
+            // Do NOT set dirty=true or version++ — dirty triggers the full DSP pipeline,
+            // and version++ triggers interpolation reset (causing magnitude to "fall from 0dB").
+            if (bandsHash !== this.lastBandsHash) {
                 this.lastBandsHash = bandsHash;
+                this.updateEQCache();
+            }
+
+            // State changes that require full DSP reprocessing
+            if (measuring !== this.lastMeasuring || simulating !== this.lastSimulating) {
                 this.lastMeasuring = measuring;
                 this.lastSimulating = simulating;
                 this.dirty = true;
-                this.updateEQCache();
             }
         } catch (e) {
             // Ignorar ReferenceError temporal durante la carga ESM

@@ -769,20 +769,23 @@ export function drawSimulatedMagnitudePath(
     const sr = 48000;
     const binWidth = sr / 2 / bins;
 
-    const points: {x: number, y: number}[] = [];
+    // Pixel-distance based decimation: adapts to log scale
+    let started = false;
+    let prevX = -100;
 
     for (let bin = 0; bin < bins; bin++) {
         const freq = bin * binWidth;
         if (freq < freqMin || freq > freqMax) continue;
         const x = valToX(freq, width, false, state);
         if (x < -10 || x > width + 10) continue;
+        if (x - prevX < 2 && prevX > -100) continue;
+        prevX = x;
 
         if (cfg.enableCoherence && interpCoherence[bin] < cfg.coherenceThreshold) continue;
 
         let val = getPPOSmoothedValue(bin, interpMagnitude, cfg.smoothingPPO);
-        const f = bin * binWidth || 1e-6;
-        const eqGain = getEQResponseCached(f);
-        val = val + eqGain;
+        const f = freq || 1e-6;
+        val = val + getEQResponseCached(f);
 
         if (cfg.modeY === "Linear") {
             val = Math.pow(10, val / 20);
@@ -791,19 +794,12 @@ export function drawSimulatedMagnitudePath(
         }
 
         const y = valToY(val, height, "Simulated Magnitude", metricConfigs, state) + (cfg.yShift || 0);
-        points.push({ x, y });
-    }
-
-    if (points.length > 0) {
-        path.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length - 1; i++) {
-            const midX = (points[i].x + points[i + 1].x) / 2;
-            const midY = (points[i].y + points[i + 1].y) / 2;
-            path.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
-        }
-        if (points.length > 1) {
-            const last = points[points.length - 1];
-            path.lineTo(last.x, last.y);
+        
+        if (!started) {
+            path.moveTo(x, y);
+            started = true;
+        } else {
+            path.lineTo(x, y);
         }
     }
 
@@ -1058,43 +1054,55 @@ export function drawEQOverlayPath(
     const path = new Path2D();
     const sr = 48000;
     const binWidth = sr / 2 / bins;
-    const points: { x: number; y: number }[] = [];
+
+    // Pixel-distance based decimation: skip bins closer than 2px (adapts to log scale)
+    let pointCount = 0;
+    let prevX = -100;
+
+    // First pass: stroke path
+    let started = false;
+
+    // Collect points for fill
+    const xs: number[] = [];
+    const ys: number[] = [];
 
     for (let bin = 1; bin < bins; bin++) {
         const freq = bin * binWidth;
         if (freq < freqMin || freq > freqMax) continue;
         const x = valToX(freq, width, false, state);
         if (x < -10 || x > width + 10) continue;
+        // Skip if less than 2px apart (at high freqs many bins map to same pixel)
+        if (x - prevX < 2 && prevX > -100) continue;
+        prevX = x;
 
         const val = getEQResponseCached(freq);
         const y = valToY(val, height, "Magnitude", metricConfigs, state);
-        points.push({ x, y });
+
+        if (!started) {
+            path.moveTo(x, y);
+            started = true;
+        } else {
+            path.lineTo(x, y);
+        }
+        xs.push(x);
+        ys.push(y);
+        pointCount++;
     }
 
-    if (points.length > 0) {
-        path.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length - 1; i++) {
-            const midX = (points[i].x + points[i + 1].x) / 2;
-            const midY = (points[i].y + points[i + 1].y) / 2;
-            path.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
-        }
-        if (points.length > 1) {
-            path.lineTo(points[points.length - 1].x, points[points.length - 1].y);
-        }
-    }
+    if (pointCount > 0) {
+        ctx.stroke(path);
 
-    ctx.stroke(path);
-
-    // Fill semitransparente bajo la curva hasta 0dB
-    const zeroY = valToY(0, height, "Magnitude", metricConfigs, state);
-    if (points.length > 1) {
-        const fillPath = new Path2D();
-        fillPath.moveTo(points[0].x, zeroY);
-        for (const p of points) fillPath.lineTo(p.x, p.y);
-        fillPath.lineTo(points[points.length - 1].x, zeroY);
-        fillPath.closePath();
-        ctx.fillStyle = 'rgba(251, 191, 36, 0.08)';
-        ctx.fill(fillPath);
+        // Fill semitransparente bajo la curva hasta 0dB
+        const zeroY = valToY(0, height, "Magnitude", metricConfigs, state);
+        if (pointCount > 1) {
+            const fillPath = new Path2D();
+            fillPath.moveTo(xs[0], zeroY);
+            for (let i = 0; i < pointCount; i++) fillPath.lineTo(xs[i], ys[i]);
+            fillPath.lineTo(xs[pointCount - 1], zeroY);
+            fillPath.closePath();
+            ctx.fillStyle = 'rgba(251, 191, 36, 0.08)';
+            ctx.fill(fillPath);
+        }
     }
 
     ctx.setLineDash([]);
