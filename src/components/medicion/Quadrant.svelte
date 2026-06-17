@@ -55,6 +55,12 @@
 
     // Lista de métricas activas
     let activeMetrics = $state<string[]>(["Magnitude"]);
+    $effect(() => {
+        const req = uiStore.simulatedMagnitudeRequest;
+        if (req > 0 && !activeMetrics.includes("Simulated Magnitude")) {
+            activeMetrics = [...activeMetrics, "Simulated Magnitude"];
+        }
+    });
     let smoothing = $state(1 / 48);
     let showSelector = $state(false);
 

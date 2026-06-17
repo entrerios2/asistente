@@ -1225,41 +1225,33 @@
                 id="panel-eq"
             >
                 <!-- Controles Superiores -->
-                <div
-                    class="flex flex-col gap-3 bg-[#121216]/40 border border-[#1a1a24]/50 rounded-lg p-4"
-                >
+                <div class="flex flex-col gap-3 rounded-lg p-4"
+                     style="background: var(--bg-tertiary); border: 1px solid var(--border-primary)">
                     <div class="flex justify-between items-center">
-                        <label
-                            class="text-xs font-semibold text-gray-300 cursor-pointer"
-                            for="eq-toggle"
-                        >
-                            Habilitar Ecualización
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                bind:checked={showEQ}
+                                class="accent-[#fbbf24] w-3.5 h-3.5 cursor-pointer"
+                            />
+                            <span class="text-[10px] font-semibold" style="color: {showEQ ? '#fbbf24' : 'var(--text-muted)'}">
+                                <span class="material-symbols-outlined text-[12px] align-middle mr-0.5">equalizer</span>
+                                Capa de ecualizador
+                            </span>
                         </label>
-                        <input
-                            id="eq-toggle"
-                            type="checkbox"
-                            bind:checked={showEQ}
-                            class="accent-[#00ff88] w-4 h-4 cursor-pointer"
-                        />
-                    </div>
-
-                    <button
-                        class="w-full min-h-[38px] bg-[#00ff88]/10 text-[#00ff88] hover:bg-[#00ff88]/20 border border-[#00ff88]/20 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-40"
-                        onclick={runAutoEQ}
-                        disabled={!showEQ || isCalculatingAutoEQ}
-                    >
-                        <span class="material-symbols-outlined text-sm"
-                            >{isCalculatingAutoEQ
-                                ? "sync"
-                                : "auto_awesome"}</span
+                        <button
+                            class="flex items-center gap-1 px-2 py-1 rounded text-[9px] font-semibold transition-all cursor-pointer"
+                            style="color: #00ffff; background: #00ffff10; border: 1px solid #00ffff20"
+                            onclick={() => uiStore.addSimulatedMagnitudeToAll()}
+                            title="Agregar pill de respuesta simulada a todos los cuadrantes"
                         >
-                        {isCalculatingAutoEQ
-                            ? "Procesando AutoEQ..."
-                            : "Calcular Ecualización (AutoEQ)"}
-                    </button>
+                            <span class="material-symbols-outlined text-[11px]">insights</span>
+                            + Resp. Simulada
+                        </button>
+                    </div>
                 </div>
 
-                {#if showEQ}
+
                     <!-- Selector de Tipo de Ecualizador -->
                     <div class="flex flex-col gap-1.5">
                         <label class="text-[10px] font-bold uppercase tracking-wider" style="color: var(--text-muted)">Tipo de Ecualizador</label>
@@ -1624,44 +1616,7 @@
                             </button>
                         </div>
                     {/if}
-                {:else}
-                    <div
-                        class="flex-1 flex flex-col items-center justify-center p-6 text-center border border-dashed border-[#1a1a24] rounded-lg bg-[#121216]/5"
-                    >
-                        <span
-                            class="material-symbols-outlined text-gray-600 text-3xl mb-2"
-                            >equalizer</span
-                        >
-                        <p class="text-xs text-gray-500">
-                            Active el switch superior para habilitar el
-                            procesamiento de ecualización y simular la curva
-                            predictiva.
-                        </p>
-                    </div>
-                {/if}
 
-                <!-- BOTÓN ANCLADO AL FONDO -->
-                <div
-                    class="mt-auto pt-4 border-t border-[#1a1a24]/50 flex flex-col gap-2"
-                >
-                    <button
-                        class="w-full min-h-[48px] border transition-all duration-300 rounded-lg font-bold flex items-center justify-center gap-2 cursor-pointer shadow-lg
-                               {uiStore.isSimulating
-                            ? 'bg-[#3b82f6]/10 hover:bg-[#3b82f6]/20 border-[#3b82f6]/30 text-[#3b82f6]'
-                            : 'bg-transparent hover:bg-white/5 border-white/10 text-gray-400'}"
-                        onclick={() =>
-                            (uiStore.isSimulating = !uiStore.isSimulating)}
-                    >
-                        <span class="material-symbols-outlined"
-                            >{uiStore.isSimulating
-                                ? "analytics"
-                                : "insights"}</span
-                        >
-                        {uiStore.isSimulating
-                            ? "Detener Simulación"
-                            : "Simular Respuesta"}
-                    </button>
-                </div>
             </div>
         {:else if uiStore.activeTab === "snaps"}
             <div

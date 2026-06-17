@@ -97,6 +97,12 @@ class UIStore {
             document.documentElement.classList.toggle('dark', this.isDarkMode);
         }
     }
+
+    simulatedMagnitudeRequest = $state(0);
+
+    addSimulatedMagnitudeToAll() {
+        this.simulatedMagnitudeRequest = (this.simulatedMagnitudeRequest || 0) + 1;
+    }
 }
 
 export const uiStore = new UIStore();
