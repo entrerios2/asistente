@@ -45,15 +45,6 @@
         uiStore.genActive = !uiStore.genActive;
     }
 
-    function openManualMeasurement() {
-        uiStore.activeTab = "medicion";
-        uiStore.measurementMode = "manual";
-    }
-
-    function openModeMeasurement() {
-        uiStore.activeTab = "medicion";
-    }
-
     function toggleMeasurement() {
         uiStore.isMeasuring = !uiStore.isMeasuring;
     }
@@ -95,100 +86,56 @@
 
     <!-- ESTRUCTURA CENTRO/DERECHA (CONSOLA DE ACCESOS RÁPIDOS) -->
     <div class="header-right">
-        <!-- ACCESOS RÁPIDOS DE CONTROL -->
-        <div
-            class="flex items-center gap-3 p-1.5 px-3 rounded-xl"
-            style="background: var(--bg-tertiary); border: 1px solid var(--border-primary);"
+        <!-- Generador -->
+        <button
+            class="header-btn"
+            style="color: {uiStore.genActive ? '#00ff88' : 'var(--text-muted)'};"
+            onclick={toggleGenerator}
+            title={uiStore.genActive
+                ? `Generador: ${signalNames[uiStore.generatorType]} (activo)`
+                : "Iniciar generador"}
         >
-            <!-- CONTROL GENERADOR RÁPIDO -->
-            <div
-                class="flex items-center gap-1.5 pr-3 border-r border-[#1a1a24]/50"
-            >
-                <button
-                    class="flex items-center justify-center p-1.5 rounded-lg border transition-all cursor-pointer min-h-[30px] min-w-[30px]"
-                    style="background: {uiStore.genActive ? 'rgba(0,255,136,0.15)' : 'var(--bg-secondary)'};
-                           border-color: {uiStore.genActive ? '#00ff88' : 'var(--border-primary)'};
-                           color: {uiStore.genActive ? '#00ff88' : 'var(--text-muted)'};"
-                    onclick={toggleGenerator}
-                    title={uiStore.genActive
-                        ? "Detener Generador"
-                        : "Iniciar Generador"}
-                >
-                    <span class="material-symbols-outlined text-[16px]">
-                        {uiStore.genActive ? "volume_up" : "volume_mute"}
-                    </span>
-                </button>
+            <span class="material-symbols-outlined text-[16px]">
+                {uiStore.genActive ? 'volume_up' : 'volume_mute'}
+            </span>
+        </button>
 
-                <!-- svelte-ignore a11y_click_events_have_key_events -->
-                <div
-                    class="flex flex-col cursor-pointer select-none group"
-                    onclick={openManualMeasurement}
-                    title="Configurar señal en el Sidebar"
-                >
-                    <span
-                        class="text-[8px] font-bold text-gray-500 uppercase tracking-widest leading-none"
-                        >Generador</span
-                    >
-                    <span
-                        class="text-[11px] font-semibold text-gray-300 group-hover:text-[#00ff88] transition-colors leading-tight"
-                    >
-                        {signalNames[uiStore.generatorType] || "Desactivado"}
-                    </span>
-                </div>
-            </div>
+        <div class="header-sep"></div>
 
-            <!-- CONTROL MEDICIÓN RÁPIDA -->
-            <div class="flex items-center gap-2">
-                <!-- Icono de Modo de Medición -->
-                <!-- svelte-ignore a11y_click_events_have_key_events -->
-                <button
-                    class="flex items-center justify-center p-1.5 rounded-lg border text-gray-400 hover:text-gray-200 transition-all cursor-pointer min-h-[30px] min-w-[30px]"
-                    style="background: var(--bg-secondary); border-color: var(--border-primary);"
-                    onclick={openModeMeasurement}
-                    title="Abrir panel de medición"
-                >
-                    <span class="material-symbols-outlined text-[16px]">
-                        {uiStore.measurementMode === "manual"
-                            ? "hearing"
-                            : "lists"}
-                    </span>
-                </button>
+        <!-- Medir -->
+        <button
+            class="header-btn {uiStore.isMeasuring ? 'measuring' : ''}"
+            onclick={toggleMeasurement}
+            title={uiStore.isMeasuring ? "Detener medición" : "Iniciar medición"}
+        >
+            <span class="material-symbols-outlined text-[16px]">podcasts</span>
+        </button>
 
-                <!-- Botón Medir / Detener -->
-                <button
-                    class="flex items-center gap-1.5 p-1.5 px-3 rounded-lg border transition-all duration-300 font-bold text-xs cursor-pointer min-h-[30px]"
-                    style="{uiStore.isMeasuring
-                        ? 'background: rgba(239,68,68,0.15); border-color: #ef4444; color: #ef4444; box-shadow: 0 0 12px rgba(239,68,68,0.25);'
-                        : 'background: var(--bg-secondary); border-color: var(--border-primary); color: var(--text-primary);'}"
-                    onclick={toggleMeasurement}
-                >
-                    <span class="material-symbols-outlined text-[14px]"
-                        >podcasts</span
-                    >
-                    <span>{uiStore.isMeasuring ? "Midiendo" : "Medir"}</span>
-                </button>
-            </div>
-        </div>
+        <div class="header-sep"></div>
 
-        <!-- SELECTOR DE GRILLA VISUAL (ESTILO WORD) -->
+        <!-- EQ -->
+        <button
+            class="header-btn"
+            style="color: var(--text-muted);"
+            onclick={() => { uiStore.activeTab = 'eq'; }}
+            title="Ecualización"
+        >
+            <span class="material-symbols-outlined text-[16px]">equalizer</span>
+        </button>
+
+        <div class="header-sep"></div>
+
+        <!-- Grilla -->
         <div class="relative">
             <button
-                class="flex items-center gap-1.5 hover:border-[#1b1b26] p-1.5 px-3 rounded-xl transition-all text-xs font-semibold cursor-pointer min-h-[40px] text-gray-400 hover:text-gray-200"
-                style="background: var(--bg-tertiary); border: 1px solid var(--border-primary);"
+                class="header-btn"
                 onclick={() => (showGridDropdown = !showGridDropdown)}
-                title="Configurar visualización multi-cuadrante"
+                title="Configurar grilla ({uiStore.layout})"
             >
-                <span class="material-symbols-outlined text-[18px]"
-                    >grid_view</span
-                >
-                <span class="font-mono text-[11px] font-bold text-gray-300"
-                    >{uiStore.layout}</span
-                >
+                <span class="material-symbols-outlined text-[16px]">grid_view</span>
             </button>
 
             {#if showGridDropdown}
-                <!-- Backdrop invisible para cerrar con un click fuera -->
-                <!-- svelte-ignore a11y_click_events_have_key_events -->
                 <div
                     class="fixed inset-0 z-40"
                     onclick={() => (showGridDropdown = false)}
@@ -198,92 +145,66 @@
                     class="absolute right-0 mt-2 rounded-xl p-3 shadow-[0_10px_30px_#000000] z-50 min-w-[140px] flex flex-col gap-2"
                     style="background: var(--bg-surface); border: 1px solid var(--border-primary);"
                 >
-                    <div
-                        class="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1 select-none"
-                    >
+                    <div class="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1 select-none">
                         Configurar Rejilla
                     </div>
 
-                    <!-- Matriz interactiva de cuadrados de 2x3 (2 col, 3 filas) -->
                     <div
                         class="grid grid-cols-2 gap-1.5 p-2 rounded-lg cursor-pointer transition-colors"
                         style="background: var(--bg-tertiary); border: 1px solid var(--border-primary);"
-                        onmouseleave={() => {
-                            hoverCol = 0;
-                            hoverRow = 0;
-                        }}
+                        onmouseleave={() => { hoverCol = 0; hoverRow = 0; }}
                     >
                         {#each [1, 2, 3] as row}
                             {#each [1, 2] as col}
-                                <!-- Celda Individual -->
-                                <!-- svelte-ignore a11y_click_events_have_key_events -->
                                 <div
                                     class="w-6 h-6 rounded-[4px] border transition-all duration-150"
                                     style="{isHighlighted(col, row)
                                         ? 'background: rgba(0,255,136,0.2); border-color: #00ff88; box-shadow: 0 0 8px rgba(0,255,136,0.15); transform: scale(1.05);'
                                         : 'background: var(--bg-secondary); border-color: var(--border-primary);'}"
-                                    onmouseenter={() => {
-                                        hoverCol = col;
-                                        hoverRow = row;
-                                    }}
+                                    onmouseenter={() => { hoverCol = col; hoverRow = row; }}
                                     onclick={() => selectLayout(col, row)}
                                 ></div>
                             {/each}
                         {/each}
                     </div>
 
-                    <!-- Etiqueta informativa del layout -->
-                    <div
-                        class="text-[9px] font-mono text-center font-bold text-[#00ff88] mt-1 bg-[#001a0e] py-1.5 rounded border border-[#004d29] tracking-wide select-none"
-                    >
+                    <div class="text-[9px] font-mono text-center font-bold text-[#00ff88] mt-1 bg-[#001a0e] py-1.5 rounded border border-[#004d29] tracking-wide select-none">
                         {getLayoutLabel()}
                     </div>
                 </div>
             {/if}
         </div>
 
-        <!-- VÚMETRO INTEGRADO (CON LED INTELIGENTE DE CALIBRACIÓN) -->
-        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <div class="header-sep"></div>
+
+        <!-- Vúmetro compacto -->
         <div
             class="vu-outer-container cursor-pointer"
-            onclick={() => {
-                uiStore.activeTab = "config";
-            }}
+            onclick={() => { uiStore.activeTab = "config"; }}
             title="Hacer clic para ir a Configuración de Audio"
         >
             <div class="vu-container">
-                <!-- Entrada -->
                 <div class="vu-group">
                     <span class="vu-label">IN</span>
                     <div class="vu-bars">
                         {#each meterStore.inLevels as level}
                             <div class="vu-track">
-                                <div
-                                    class="vu-fill in"
-                                    style="width: {getVuWidth(level)}%"
-                                ></div>
+                                <div class="vu-fill in" style="width: {getVuWidth(level)}%"></div>
                             </div>
                         {/each}
                     </div>
                 </div>
-
-                <!-- Salida -->
                 <div class="vu-group">
                     <span class="vu-label">OUT</span>
                     <div class="vu-bars">
                         {#each meterStore.outLevels as level}
                             <div class="vu-track">
-                                <div
-                                    class="vu-fill out"
-                                    style="width: {getVuWidth(level)}%"
-                                ></div>
+                                <div class="vu-fill out" style="width: {getVuWidth(level)}%"></div>
                             </div>
                         {/each}
                     </div>
                 </div>
             </div>
-
-            <!-- LED Central de Calibración -->
             <div class="led-container">
                 <div
                     class="led-indicator {isCalibrated ? 'active' : ''}"
@@ -298,7 +219,7 @@
 
 <style>
     .global-header {
-        height: 54px;
+        height: 38px;
         background: var(--bg-primary);
         border-bottom: 1px solid var(--border-primary);
         display: flex;
@@ -338,10 +259,10 @@
         gap: 12px;
         background: var(--bg-tertiary);
         border: 1px solid var(--border-primary);
-        padding: 6px 12px;
+        padding: 4px 8px;
         border-radius: 12px;
         transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-        min-height: 40px;
+        min-height: 30px;
     }
 
     .vu-outer-container:hover {
@@ -438,5 +359,40 @@
             0 0 10px #00ff88,
             0 0 4px #00ff88;
         transform: scale(1.1);
+    }
+
+    .header-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        color: var(--text-muted);
+    }
+
+    .header-btn:hover {
+        background: var(--bg-tertiary);
+    }
+
+    .header-btn.measuring {
+        color: #ef4444;
+        animation: pulse-measure 1.5s infinite;
+    }
+
+    @keyframes pulse-measure {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.6; }
+    }
+
+    .header-sep {
+        width: 1px;
+        height: 18px;
+        background: var(--border-primary);
+        flex-shrink: 0;
     }
 </style>

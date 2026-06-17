@@ -214,7 +214,7 @@ export function handleWheel(
 
     if (zoomX) {
         const valBefore = xToVal(mX, containerWidth, hasTimeDomainActive, state);
-        state.zoomX = Math.max(0.5, Math.min(4, state.zoomX * delta));
+        state.zoomX = Math.max(1, Math.min(4, state.zoomX * delta));
         const xAfter = valToX(valBefore, containerWidth, hasTimeDomainActive, state);
         state.offsetX += mX - xAfter;
     }
@@ -320,7 +320,7 @@ export function handleTouchMove(
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist > 0 && state.touchStartDist > 0) {
             const factor = dist / state.touchStartDist;
-            state.zoomX = Math.max(0.5, Math.min(4, state.touchStartScaleX * factor));
+            state.zoomX = Math.max(1, Math.min(4, state.touchStartScaleX * factor));
             state.zoomY = Math.max(0.5, Math.min(4, state.touchStartScaleY * factor));
         }
         const refMetric = activeMetrics.find(m => m !== "Phase") || "Magnitude";
