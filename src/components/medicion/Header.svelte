@@ -308,7 +308,6 @@
         color: #fff;
         flex-shrink: 0;
         z-index: 1000;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
     }
 
     .header-left {
