@@ -21,6 +21,10 @@
         rebuildFrequencyLUT,
         freqMin,
         freqMax,
+        valToX,
+        valToY,
+        xToVal,
+        yToVal,
         type InteractionState
     } from "$lib/dsp/canvasInteraction";
 
@@ -99,6 +103,8 @@
     let containerHeight = $state(0);
 
     let cursorStyle = $derived.by(() => {
+        if (draggingEQNode !== null) return 'grabbing';
+        if (hoveringEQNode !== null) return 'grab';
         if (interactionState.isDragging) return 'grabbing';
         const mX = interactionState.mouseX;
         const mY = interactionState.mouseY;
@@ -979,6 +985,45 @@
                 (f) => mathOrchestrator.getEQResponseCached(f),
                 mathOrchestrator.BINS
             );
+
+            // Dibujar nodos de filtros
+            const bands = traceManager.eqBands;
+            for (let i = 0; i < bands.length; i++) {
+                const band = bands[i];
+                const x = valToX(band.freq, containerWidth, false, interactionState);
+                const gain = mathOrchestrator.getEQResponseCached(band.freq);
+                const y = valToY(gain, containerHeight, "Magnitude", metricConfigs, interactionState);
+
+                const isHovered = hoveringEQNode === i;
+                const isDragging = draggingEQNode === i;
+                const radius = isDragging ? 8 : isHovered ? 7 : 5;
+
+                ctx.shadowColor = '#fbbf24';
+                ctx.shadowBlur = isDragging ? 12 : isHovered ? 8 : 0;
+
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, Math.PI * 2);
+                ctx.fillStyle = isDragging ? '#fbbf24' : isHovered ? '#fcd34d' : '#f59e0b';
+                ctx.fill();
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+
+                if (isHovered || isDragging) {
+                    ctx.font = '10px monospace';
+                    ctx.fillStyle = '#fbbf24';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(
+                        `${band.freq >= 1000 ? (band.freq/1000).toFixed(1)+'k' : band.freq}Hz`,
+                        x, y - radius - 12
+                    );
+                    ctx.fillText(
+                        `${band.gain > 0 ? '+' : ''}${band.gain.toFixed(1)}dB`,
+                        x, y - radius - 2
+                    );
+                }
+            }
         }
 
         // 4. Overlays Especiales
@@ -1018,14 +1063,53 @@
     }
 
     function handleMouseMove(e: MouseEvent) {
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        // Hit-test nodos EQ
+        if (showEQOverlay && draggingEQNode === null) {
+            let found = -1;
+            for (let i = 0; i < traceManager.eqBands.length; i++) {
+                const band = traceManager.eqBands[i];
+                const nx = valToX(band.freq, containerWidth, false, interactionState);
+                const gain = mathOrchestrator.getEQResponseCached(band.freq);
+                const ny = valToY(gain, containerHeight, "Magnitude", metricConfigs, interactionState);
+                const dx = mouseX - nx;
+                const dy = mouseY - ny;
+                if (Math.sqrt(dx*dx + dy*dy) < 12) { found = i; break; }
+            }
+            hoveringEQNode = found >= 0 ? found : null;
+        }
+
+        // Drag activo de nodo EQ
+        if (draggingEQNode !== null) {
+            const freq = xToVal(mouseX, containerWidth, false, interactionState);
+            const gain = yToVal(mouseY, containerHeight, "Magnitude", interactionState);
+            const clampedFreq = Math.max(20, Math.min(20000, Math.round(freq)));
+            const clampedGain = Math.max(-30, Math.min(30, parseFloat(gain.toFixed(1))));
+            traceManager.updateEQBand(draggingEQNode, 'freq', clampedFreq);
+            traceManager.updateEQBand(draggingEQNode, 'gain', clampedGain);
+        }
+
         interactionHandleMouseMove(e, interactionState, canvas, containerWidth, containerHeight, hasTimeDomainActive, activeMetrics, metricConfigs);
     }
 
     function handleMouseDown(e: MouseEvent) {
+        if (showEQOverlay && hoveringEQNode !== null) {
+            draggingEQNode = hoveringEQNode;
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
         interactionHandleMouseDown(e, interactionState, showSelector, settingsBtn);
     }
 
     function handleMouseUp() {
+        if (draggingEQNode !== null) {
+            draggingEQNode = null;
+            return;
+        }
         interactionHandleMouseUp(
             interactionState,
             containerWidth,
