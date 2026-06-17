@@ -62,6 +62,39 @@
         return computeDeviation(adjusted, target, coherence, bins, sampleRate);
     }
 
+    function importTargetCurve() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.onchange = async (e) => {
+            const file = (e.target as HTMLInputElement).files?.[0];
+            if (!file) return;
+            const text = await file.text();
+            const data = JSON.parse(text);
+            const points: {freq: number, dB: number}[] = data.points || data;
+            const bins = mathOrchestrator.BINS;
+            const curve = new Float32Array(bins);
+            const binWidth = 24000 / bins;
+            for (let i = 0; i < bins; i++) {
+                const freq = i * binWidth;
+                // Interpolación lineal entre puntos
+                let lo = points[0], hi = points[points.length - 1];
+                for (let p = 0; p < points.length - 1; p++) {
+                    if (points[p].freq <= freq && points[p + 1].freq >= freq) {
+                        lo = points[p];
+                        hi = points[p + 1];
+                        break;
+                    }
+                }
+                if (hi.freq === lo.freq) { curve[i] = lo.dB; }
+                else { curve[i] = lo.dB + (hi.dB - lo.dB) * (freq - lo.freq) / (hi.freq - lo.freq); }
+            }
+            traceManager.targetCurveCustom = curve;
+        };
+        input.click();
+    }
+
+
     interface GraphicBand {
         freq: number;
         gain: number;
@@ -1275,6 +1308,31 @@
                      style="background: var(--bg-tertiary); border: 1px solid var(--border-primary)">
                     <span class="text-[9px] font-bold uppercase tracking-wider"
                           style="color: var(--text-muted)">Cálculo de ecualización</span>
+
+                    <div class="flex flex-col gap-1">
+                        <label class="text-[9px] font-bold uppercase" style="color: var(--text-muted)">Curva de referencia</label>
+                        <div class="flex gap-1">
+                            <select
+                                class="flex-1 rounded-md text-xs py-1.5 px-2"
+                                style="background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-primary)"
+                                bind:value={traceManager.targetCurveType}>
+                                <option value="flat">Flat (0dB)</option>
+                                <option value="house">House curve</option>
+                                <option value="bk">B&K cinema</option>
+                                <option value="harman">Harman 2019</option>
+                                <option value="custom">Personalizada</option>
+                            </select>
+                            {#if traceManager.targetCurveType === 'custom'}
+                                <button
+                                    class="px-2 py-1 rounded text-[9px] font-semibold cursor-pointer flex items-center justify-center"
+                                    style="color: var(--text-muted); border: 1px solid var(--border-primary)"
+                                    onclick={importTargetCurve}
+                                    title="Importar curva target desde JSON">
+                                    <span class="material-symbols-outlined text-[11px]">upload</span>
+                                </button>
+                            {/if}
+                        </div>
+                    </div>
 
                     <div class="flex flex-col gap-1">
                         <label class="text-[9px] font-bold uppercase" style="color: var(--text-muted)">Capa fuente</label>

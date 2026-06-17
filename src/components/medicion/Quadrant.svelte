@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onMount } from "svelte";
+    import { onMount, untrack } from "svelte";
     import { traceManager } from "$lib/stores/traceManager.svelte";
     import { uiStore } from "$lib/stores/ui.svelte";
     import { meterStore } from "$lib/stores/meterStore.svelte";
@@ -62,8 +62,12 @@
     let activeMetrics = $state<string[]>(["Magnitude"]);
     $effect(() => {
         const req = uiStore.simulatedMagnitudeRequest;
-        if (req > 0 && !activeMetrics.includes("Simulated Magnitude")) {
-            activeMetrics = [...activeMetrics, "Simulated Magnitude"];
+        if (req > 0) {
+            untrack(() => {
+                if (!activeMetrics.includes("Simulated Magnitude")) {
+                    activeMetrics = [...activeMetrics, "Simulated Magnitude"];
+                }
+            });
         }
     });
     let showEQOverlay = $state(true);
@@ -178,23 +182,18 @@
     
     // Puente reactivo de Svelte 5 para marcar dirty = true
     // Sincronización desde el panel lateral hacia el cuadrante
+    // Sincronización bidireccional global ↔ local de Simulated Magnitude
+    // Usamos untrack para evitar que el effect se re-dispare por su propia escritura
     $effect(() => {
         const isSimulatingGlobal = uiStore.isSimulating;
-        const hasPill = activeMetrics.includes("Simulated Magnitude");
-        
-        if (isSimulatingGlobal && !hasPill) {
-            activeMetrics = [...activeMetrics, "Simulated Magnitude"];
-        } else if (!isSimulatingGlobal && hasPill) {
-            activeMetrics = activeMetrics.filter(m => m !== "Simulated Magnitude");
-        }
-    });
-
-    // Sincronización desde el cuadrante hacia el panel lateral
-    $effect(() => {
-        const hasPill = activeMetrics.includes("Simulated Magnitude");
-        if (hasPill !== uiStore.isSimulating) {
-            uiStore.isSimulating = hasPill;
-        }
+        untrack(() => {
+            const hasPill = activeMetrics.includes("Simulated Magnitude");
+            if (isSimulatingGlobal && !hasPill) {
+                activeMetrics = [...activeMetrics, "Simulated Magnitude"];
+            } else if (!isSimulatingGlobal && hasPill) {
+                activeMetrics = activeMetrics.filter(m => m !== "Simulated Magnitude");
+            }
+        });
     });
 
     $effect(() => {
