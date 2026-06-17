@@ -1040,3 +1040,62 @@ export function drawPhaseDelay(
     }
     ctx.stroke();
 }
+
+export function drawEQOverlayPath(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    style: { color: string, lineWidth: number, lineDash: number[] },
+    metricConfigs: Record<string, any>,
+    state: InteractionState,
+    getEQResponseCached: (f: number) => number,
+    bins: number
+) {
+    ctx.setLineDash(style.lineDash || []);
+    ctx.strokeStyle = style.color;
+    ctx.lineWidth = style.lineWidth;
+
+    const path = new Path2D();
+    const sr = 48000;
+    const binWidth = sr / 2 / bins;
+    const points: { x: number; y: number }[] = [];
+
+    for (let bin = 1; bin < bins; bin++) {
+        const freq = bin * binWidth;
+        if (freq < freqMin || freq > freqMax) continue;
+        const x = valToX(freq, width, false, state);
+        if (x < -10 || x > width + 10) continue;
+
+        const val = getEQResponseCached(freq);
+        const y = valToY(val, height, "Magnitude", metricConfigs, state);
+        points.push({ x, y });
+    }
+
+    if (points.length > 0) {
+        path.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length - 1; i++) {
+            const midX = (points[i].x + points[i + 1].x) / 2;
+            const midY = (points[i].y + points[i + 1].y) / 2;
+            path.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+        }
+        if (points.length > 1) {
+            path.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+        }
+    }
+
+    ctx.stroke(path);
+
+    // Fill semitransparente bajo la curva hasta 0dB
+    const zeroY = valToY(0, height, "Magnitude", metricConfigs, state);
+    if (points.length > 1) {
+        const fillPath = new Path2D();
+        fillPath.moveTo(points[0].x, zeroY);
+        for (const p of points) fillPath.lineTo(p.x, p.y);
+        fillPath.lineTo(points[points.length - 1].x, zeroY);
+        fillPath.closePath();
+        ctx.fillStyle = 'rgba(251, 191, 36, 0.08)';
+        ctx.fill(fillPath);
+    }
+
+    ctx.setLineDash([]);
+}

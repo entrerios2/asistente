@@ -39,7 +39,8 @@
         drawTargetTrace,
         drawScope,
         drawCrestFactor,
-        drawPhaseDelay
+        drawPhaseDelay,
+        drawEQOverlayPath
     } from "$lib/dsp/canvasRenderers";
 
 
@@ -61,6 +62,9 @@
             activeMetrics = [...activeMetrics, "Simulated Magnitude"];
         }
     });
+    let showEQOverlay = $state(true);
+    let draggingEQNode = $state<number | null>(null);
+    let hoveringEQNode = $state<number | null>(null);
     let smoothing = $state(1 / 48);
     let showSelector = $state(false);
 
@@ -967,6 +971,16 @@
         // Draw Target Trace overlay if active (Prompt 10)
         drawTargetTrace(ctx, width, height, targetTrace, interactionState, hasTimeDomainActive);
 
+        if (showEQOverlay) {
+            drawEQOverlayPath(
+                ctx, width, height,
+                { color: '#fbbf24', lineWidth: 2, lineDash: [] },
+                metricConfigs, interactionState,
+                (f) => mathOrchestrator.getEQResponseCached(f),
+                mathOrchestrator.BINS
+            );
+        }
+
         // 4. Overlays Especiales
         if (activeMetrics.includes("Level")) {
             drawLevelOverlay(ctx, width, height, meterStore);
@@ -1287,6 +1301,22 @@
                                 <span class="material-symbols-outlined text-xs">close</span>
                             </button>
                         </div>
+
+                        <!-- Capa fija de EQ (siempre presente) -->
+                        <div class="flex items-center gap-1.5 px-2 py-1 rounded text-[10px]"
+                             style="background: {showEQOverlay ? '#fbbf2410' : 'transparent'}">
+                            <button
+                                class="w-4 h-4 flex items-center justify-center cursor-pointer"
+                                onclick={() => showEQOverlay = !showEQOverlay}
+                                title={showEQOverlay ? 'Ocultar ecualizador' : 'Mostrar ecualizador'}>
+                                <span class="material-symbols-outlined text-[12px]" style="color: {showEQOverlay ? '#fbbf24' : 'var(--text-muted)'}">
+                                    {showEQOverlay ? 'visibility' : 'visibility_off'}
+                                </span>
+                            </button>
+                            <span class="material-symbols-outlined text-[12px]" style="color: #fbbf24">equalizer</span>
+                            <span class="font-semibold" style="color: {showEQOverlay ? '#fbbf24' : 'var(--text-muted)'}">Ecualizador</span>
+                        </div>
+                        <div class="border-t my-0.5" style="border-color: var(--border-primary)"></div>
 
                         {#each quadrantLayers as layer}
                             <div class="flex items-center justify-between gap-2 py-1 px-1 rounded hover:bg-[#121216] group"
