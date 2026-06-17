@@ -1260,19 +1260,23 @@
                 {#if showEQ}
                     <!-- Selector de Tipo de Ecualizador -->
                     <div class="flex flex-col gap-1.5">
-                        <label
-                            class="text-[10px] font-bold text-gray-500 uppercase tracking-wider"
-                            >Tipo de Ecualizador</label
-                        >
-                        <select
-                            bind:value={eqType}
-                            class="w-full bg-[#121216] border border-[#1a1a24] rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#3b82f6]"
-                        >
-                            <option value="grafico">Ecualizador Gráfico</option>
-                            <option value="parametrico"
-                                >Ecualizador Paramétrico</option
-                            >
-                        </select>
+                        <label class="text-[10px] font-bold uppercase tracking-wider" style="color: var(--text-muted)">Tipo de Ecualizador</label>
+                        <div class="flex items-center p-0.5 rounded-lg gap-0.5" style="background: var(--bg-tertiary); border: 1px solid var(--border-primary)">
+                            <button
+                                class="flex-1 px-3 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer
+                                       {eqType === 'grafico' ? 'bg-[#3b82f6]/10 text-[#3b82f6]' : 'hover:text-gray-300'}"
+                                style="{eqType !== 'grafico' ? 'color: var(--text-muted)' : ''}"
+                                onclick={() => eqType = 'grafico'}>
+                                Gráfico
+                            </button>
+                            <button
+                                class="flex-1 px-3 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer
+                                       {eqType === 'parametrico' ? 'bg-[#3b82f6]/10 text-[#3b82f6]' : 'hover:text-gray-300'}"
+                                style="{eqType !== 'parametrico' ? 'color: var(--text-muted)' : ''}"
+                                onclick={() => eqType = 'parametrico'}>
+                                Paramétrico
+                            </button>
+                        </div>
                     </div>
 
                     <!-- MODO GRÁFICO -->
@@ -1473,37 +1477,38 @@
 
                                         <div class="grid grid-cols-2 gap-2">
                                             <!-- Tipo Activo -->
-                                            <div
-                                                class="flex flex-col gap-1 col-span-2"
-                                            >
-                                                <label
-                                                    class="text-[9px] text-gray-500 font-bold uppercase"
-                                                    >Tipo de Filtro</label
-                                                >
-                                                <select
-                                                    bind:value={filter.type}
-                                                    class="w-full bg-[#121216] border border-[#1a1a24] rounded px-2 py-1 text-xs text-gray-200"
-                                                >
+                                            <div class="flex flex-col gap-1 col-span-2">
+                                                <label class="text-[9px] font-bold uppercase" style="color: var(--text-muted)">Tipo de Filtro</label>
+                                                <div class="flex flex-wrap gap-1">
                                                     {#each filter.supportedTypes as type}
-                                                        <option value={type}>
-                                                            {type === "peaking"
-                                                                ? "Campana (Peaking)"
-                                                                : type ===
-                                                                    "lowpass"
-                                                                  ? "Paso Bajo (Lowpass)"
-                                                                  : type ===
-                                                                      "highpass"
-                                                                    ? "Paso Alto (Highpass)"
-                                                                    : type ===
-                                                                        "shelving"
-                                                                      ? "Shelving"
-                                                                      : type ===
-                                                                          "notch"
-                                                                        ? "Notch"
-                                                                        : "Paso Banda (Bandpass)"}
-                                                        </option>
+                                                        {@const icons = {
+                                                            peaking: 'graphic_eq',
+                                                            lowpass: 'arrow_downward',
+                                                            highpass: 'arrow_upward',
+                                                            shelving: 'trending_up',
+                                                            notch: 'filter_center_focus',
+                                                            bandpass: 'tune',
+                                                        }}
+                                                        {@const labels = {
+                                                            peaking: 'Peak',
+                                                            lowpass: 'LP',
+                                                            highpass: 'HP',
+                                                            shelving: 'Shelf',
+                                                            notch: 'Notch',
+                                                            bandpass: 'BP',
+                                                        }}
+                                                        <button
+                                                            class="flex flex-col items-center justify-center w-10 h-10 rounded-md text-[8px] font-bold transition-all cursor-pointer
+                                                                   {filter.type === type ? 'bg-[#3b82f6]/15 text-[#3b82f6] border border-[#3b82f6]/30' : 'border'}"
+                                                            style="{filter.type !== type ? 'background: var(--bg-tertiary); color: var(--text-muted); border-color: var(--border-primary)' : ''}"
+                                                            onclick={() => filter.type = type}
+                                                            title={type}
+                                                        >
+                                                            <span class="material-symbols-outlined text-[16px]">{icons[type] || 'tune'}</span>
+                                                            {labels[type] || type}
+                                                        </button>
                                                     {/each}
-                                                </select>
+                                                </div>
                                             </div>
 
                                             <!-- Frecuencia (Prompt 7) -->
