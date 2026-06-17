@@ -35,7 +35,7 @@ class UIStore {
 
     // ESTADOS AVANZADOS COMPORTAMIENTO HAL Y CAPAS
     autoSaveSnapshotOnStop = $state(false);
-    linkGeneratorToMeasurement = $state(false);
+    linkGeneratorToMeasurement = $state(true);
     activeLayerId = $state('');
     eqType = $state<'grafico' | 'parametrico'>('grafico'); // 'grafico' | 'parametrico'
 

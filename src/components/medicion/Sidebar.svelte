@@ -627,7 +627,8 @@
             uiStore.setLayout("1x1");
         }
 
-        ensureMockSnapshots();
+
+
     });
 
     $effect(() => {

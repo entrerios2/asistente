@@ -70,7 +70,7 @@
             });
         }
     });
-    let showEQOverlay = $state(true);
+    let showEQOverlay = $state(false);
     let draggingEQNode = $state<number | null>(null);
     let hoveringEQNode = $state<number | null>(null);
     let smoothing = $state(1 / 48);
