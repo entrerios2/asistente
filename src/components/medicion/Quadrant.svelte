@@ -197,8 +197,7 @@
     });
 
     $effect(() => {
-        // Observar cambios en variables que alteran el cálculo
-        JSON.stringify(traceManager.eqBands);
+        // Observar cambios en variables que alteran el cálculo DSP completo
         activeMetrics.join(",");
         uiStore.isMeasuring;
         uiStore.isSimulating;
@@ -463,12 +462,12 @@
             interpEngine.updateHistory();
         }
 
-        // Realizar la interpolación temporal (Exponential Smoothing) a 60+ FPS
-        // Si dirty es true, forzamos un snap instantáneo para que la UI responda de inmediato
+        // Interpolación temporal a 60+ FPS (suaviza transiciones entre resultados del worker)
         interpEngine.interpolateBuffers(dirty, mathOrchestrator);
         if (dirty) {
             dirty = false;
         }
+
 
         // Pre-suavizar las curvas para esta animación a 60FPS (incluyendo las transiciones de interpolación)
         const magPPO = metricConfigs["Magnitude"]?.smoothingPPO || 48;

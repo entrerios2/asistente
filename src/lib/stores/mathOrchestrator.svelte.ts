@@ -250,25 +250,59 @@ class MathOrchestrator {
                 return;
             }
             const sr = 48000;
+            const nyquist = sr / 2;
+
+            // 1. Precompute coefficients ONCE per band (avoids recalculating sin/cos 4096× per band)
+            const bandCoeffs: number[][] = [];
+            for (let b = 0; b < traceManager.eqBands.length; b++) {
+                const band = traceManager.eqBands[b];
+                if (band.gain !== 0 || !['peaking', 'low_shelf', 'high_shelf'].includes(band.type)) {
+                    bandCoeffs.push(getCoeffsForType(band.type, band.freq, band.gain, band.q, sr));
+                }
+            }
+
+            // Precompute calibration filter coefficients
+            const calCoeffs: number[][] = [];
+            for (const filter of calibrationStore.suggestedFilters) {
+                if (filter.enabled) {
+                    calCoeffs.push(getCoeffsForType(
+                        filter.type || 'peaking', filter.frequency, filter.gain, filter.q, sr
+                    ));
+                }
+            }
+
+            const TWO_PI = 2 * Math.PI;
+            const invBins = nyquist / this.BINS;
+
+            // 2. Single pass over bins, evaluating all precomputed filters
             for (let i = 0; i < this.BINS; i++) {
-                const freq = (i * sr) / 2 / this.BINS || 1e-6;
+                const freq = i * invBins || 1e-6;
+                const w = TWO_PI * freq / sr;
+                const cosW = Math.cos(w);
+                const sinW = Math.sin(w);
+                const cos2W = 2 * cosW * cosW - 1;  // cos(2w) = 2cos²(w) - 1 (avoids extra trig)
+                const sin2W = 2 * sinW * cosW;       // sin(2w) = 2sin(w)cos(w)
+
                 let totalGain = 0;
 
-                // 1. Evaluar las bandas de EQ de traceManager (Playground) analíticamente usando biquads (Prompt 7)
-                for (let b = 0; b < traceManager.eqBands.length; b++) {
-                    const band = traceManager.eqBands[b];
-                    if (band.gain !== 0 || !['peaking', 'low_shelf', 'high_shelf'].includes(band.type)) {
-                        const coeffs = getCoeffsForType(band.type, band.freq, band.gain, band.q, sr);
-                        const [magDb] = biquadResponse(coeffs, freq, sr);
-                        totalGain += magDb;
-                    }
+                // Evaluate each EQ band
+                for (let b = 0; b < bandCoeffs.length; b++) {
+                    const c = bandCoeffs[b];
+                    const nR = c[0] + c[1] * cosW + c[2] * cos2W;
+                    const nI = -(c[1] * sinW + c[2] * sin2W);
+                    const dR = c[3] + c[4] * cosW + c[5] * cos2W;
+                    const dI = -(c[4] * sinW + c[5] * sin2W);
+                    totalGain += 10 * Math.log10((nR * nR + nI * nI) / (dR * dR + dI * dI + 1e-20));
                 }
 
-                // 2. Evaluar los filtros paramétricos de calibrationStore analíticamente usando biquads (Prompt 7)
-                for (const filter of calibrationStore.suggestedFilters) {
-                    if (filter.enabled) {
-                        totalGain += calibrationStore.calculateFilterGainAt(filter, freq);
-                    }
+                // Evaluate each calibration filter
+                for (let c2 = 0; c2 < calCoeffs.length; c2++) {
+                    const c = calCoeffs[c2];
+                    const nR = c[0] + c[1] * cosW + c[2] * cos2W;
+                    const nI = -(c[1] * sinW + c[2] * sin2W);
+                    const dR = c[3] + c[4] * cosW + c[5] * cos2W;
+                    const dI = -(c[4] * sinW + c[5] * sin2W);
+                    totalGain += 10 * Math.log10((nR * nR + nI * nI) / (dR * dR + dI * dI + 1e-20));
                 }
 
                 this.eqResponseCache[i] = totalGain;
