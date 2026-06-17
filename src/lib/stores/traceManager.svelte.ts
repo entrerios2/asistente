@@ -86,6 +86,53 @@ class TraceManager {
 
     eqBandsVersion = $state(0);
 
+    targetCurveType = $state<'flat' | 'house' | 'bk' | 'harman' | 'custom'>('flat');
+    targetCurveCustom = $state<Float32Array | null>(null);
+
+    getTargetCurve(bins: number, sampleRate: number = 48000): Float32Array {
+        const target = new Float32Array(bins);
+        const binWidth = (sampleRate / 2) / bins;
+
+        switch (this.targetCurveType) {
+            case 'flat':
+                break;
+            case 'house':
+                for (let i = 0; i < bins; i++) {
+                    const freq = Math.max(i * binWidth, 1);
+                    const logPos = (Math.log10(freq) - Math.log10(20)) / (Math.log10(20000) - Math.log10(20));
+                    target[i] = 3 - 6 * logPos;
+                }
+                break;
+            case 'bk':
+                for (let i = 0; i < bins; i++) {
+                    const freq = Math.max(i * binWidth, 1);
+                    if (freq > 2000) {
+                        target[i] = -3.32 * Math.log10(freq / 2000);
+                    }
+                }
+                break;
+            case 'harman':
+                for (let i = 0; i < bins; i++) {
+                    const freq = Math.max(i * binWidth, 1);
+                    let gain = 0;
+                    if (freq < 200) gain += 4 * (1 - Math.log10(freq / 20) / Math.log10(200 / 20));
+                    if (freq > 1500 && freq < 5000) {
+                        const dist = Math.abs(Math.log2(freq / 3000));
+                        if (dist < 1.5) gain -= 1 * (1 - dist / 1.5);
+                    }
+                    if (freq > 8000) gain -= 2 * Math.log10(freq / 8000) / Math.log10(20000 / 8000);
+                    target[i] = gain;
+                }
+                break;
+            case 'custom':
+                if (this.targetCurveCustom && this.targetCurveCustom.length === bins) {
+                    target.set(this.targetCurveCustom);
+                }
+                break;
+        }
+        return target;
+    }
+
     updateEQBand(index: number, field: 'freq' | 'gain' | 'q' | 'type', value: number | string) {
         (this.eqBands[index] as any)[field] = value;
         this.eqBandsVersion++;

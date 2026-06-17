@@ -3,6 +3,8 @@
     import { traceManager } from "$lib/stores/traceManager.svelte";
     import { calibrationStore } from "$lib/stores/calibrationStore.svelte";
     import { filterSvgIcons } from '$lib/icons/filterIcons';
+    import { mathOrchestrator } from '$lib/stores/mathOrchestrator.svelte';
+    import { computeDeviation, type DeviationResult } from '$lib/dsp/deviationMetrics';
     import { getAudioProvider } from "$lib/hal";
     import { onMount, untrack } from "svelte";
 
@@ -43,6 +45,22 @@
     let customBandCount = $state(false);
     let isCalculatingAutoEQ = $state(false);
     let autoEQSourceLayer = $state<string>('active');
+
+    function computeDeviationWithEQ(
+        magnitude: Float32Array,
+        target: Float32Array | null,
+        coherence: Float32Array | null,
+        bins: number
+    ): DeviationResult {
+        const sampleRate = 48000;
+        const binWidth = (sampleRate / 2) / bins;
+        const adjusted = new Float32Array(bins);
+        for (let i = 0; i < bins; i++) {
+            const freq = i * binWidth || 1e-6;
+            adjusted[i] = (magnitude[i] || 0) + mathOrchestrator.getEQResponseCached(freq);
+        }
+        return computeDeviation(adjusted, target, coherence, bins, sampleRate);
+    }
 
     interface GraphicBand {
         freq: number;
@@ -1282,6 +1300,45 @@
                             ? "Calculando..."
                             : "Calcular ecualización"}
                     </button>
+                </div>
+
+                <!-- Tabla de desviación -->
+                <div class="flex flex-col gap-1.5 rounded-lg p-3"
+                     style="background: var(--bg-tertiary); border: 1px solid var(--border-primary)">
+                    <span class="text-[9px] font-bold uppercase tracking-wider"
+                          style="color: var(--text-muted)">Desviación vs target</span>
+
+                    <table class="w-full text-[9px]" style="color: var(--text-secondary)">
+                        <thead>
+                            <tr class="border-b" style="border-color: var(--border-primary)">
+                                <th class="text-left py-1 font-semibold" style="color: var(--text-muted)">Capa</th>
+                                <th class="text-right py-1 font-semibold" style="color: var(--text-muted)">Original</th>
+                                <th class="text-right py-1 font-semibold" style="color: var(--text-muted)">Ecualizada</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {#each traceManager.layers.filter(l => l.visible && l.data && l.data.length > 0) as layer}
+                                {@const target = traceManager.getTargetCurve(mathOrchestrator.BINS, 48000)}
+                                {@const orig = computeDeviation(layer.data, target, mathOrchestrator.outputCoherence, mathOrchestrator.BINS)}
+                                {@const eqd = computeDeviationWithEQ(layer.data, target, mathOrchestrator.outputCoherence, mathOrchestrator.BINS)}
+                                <tr class="border-b" style="border-color: var(--border-primary)">
+                                    <td class="py-1 truncate max-w-[80px]" title={layer.name}>{layer.name}</td>
+                                    <td class="text-right py-1 font-mono">
+                                        <span style="color: {orig.rms > 6 ? '#ff4444' : orig.rms > 3 ? '#fbbf24' : '#00ff88'}">{orig.rms.toFixed(1)}</span>
+                                        <span style="color: var(--text-muted)">rms</span>
+                                        / <span>{orig.peak.toFixed(1)}</span>
+                                        <span style="color: var(--text-muted)">p</span>
+                                    </td>
+                                    <td class="text-right py-1 font-mono">
+                                        <span style="color: {eqd.rms > 6 ? '#ff4444' : eqd.rms > 3 ? '#fbbf24' : '#00ff88'}">{eqd.rms.toFixed(1)}</span>
+                                        <span style="color: var(--text-muted)">rms</span>
+                                        / <span>{eqd.peak.toFixed(1)}</span>
+                                        <span style="color: var(--text-muted)">p</span>
+                                    </td>
+                                </tr>
+                            {/each}
+                        </tbody>
+                    </table>
                 </div>
 
 
