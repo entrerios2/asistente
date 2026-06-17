@@ -2,6 +2,7 @@
     import { uiStore } from "$lib/stores/ui.svelte";
     import { traceManager } from "$lib/stores/traceManager.svelte";
     import { calibrationStore } from "$lib/stores/calibrationStore.svelte";
+    import { filterSvgIcons } from '$lib/icons/filterIcons';
     import { getAudioProvider } from "$lib/hal";
     import { onMount, untrack } from "svelte";
 
@@ -65,7 +66,7 @@
         freq: number;
         gain: number;
         q: number;
-        type: string; // 'peaking' | 'lowpass' | 'highpass' | 'shelving' | 'notch' | 'bandpass'
+        type: string; // 'peaking' | 'lowpass' | 'highpass' | 'low_shelf' | 'high_shelf' | 'notch' | 'bandpass'
         supportedTypes: string[];
         showConfig: boolean;
     }
@@ -80,7 +81,8 @@
                 "peaking",
                 "lowpass",
                 "highpass",
-                "shelving",
+                "low_shelf",
+                "high_shelf",
                 "notch",
                 "bandpass",
             ],
@@ -92,7 +94,7 @@
             gain: 0,
             q: 1.0,
             type: "peaking",
-            supportedTypes: ["peaking", "shelving", "notch"],
+            supportedTypes: ["peaking", "low_shelf", "high_shelf", "notch"],
             showConfig: false,
         },
         {
@@ -110,7 +112,7 @@
             gain: 0,
             q: 1.0,
             type: "peaking",
-            supportedTypes: ["peaking", "lowpass", "shelving"],
+            supportedTypes: ["peaking", "lowpass", "low_shelf", "high_shelf"],
             showConfig: false,
         },
         {
@@ -1406,7 +1408,7 @@
                                                             class="text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-1"
                                                             >Tipos Soportados</span
                                                         >
-                                                        {#each ["peaking", "lowpass", "highpass", "shelving", "notch", "bandpass"] as type}
+                                                        {#each ["peaking", "lowpass", "highpass", "low_shelf", "high_shelf", "notch", "bandpass"] as type}
                                                             <label
                                                                 class="flex items-center gap-2 text-[11px] text-gray-300 cursor-pointer"
                                                             >
@@ -1452,22 +1454,19 @@
                                                                     }}
                                                                     class="accent-[#3b82f6]"
                                                                 />
-                                                                {type ===
-                                                                "peaking"
+                                                                {type === "peaking"
                                                                     ? "Campana"
-                                                                    : type ===
-                                                                        "lowpass"
+                                                                    : type === "lowpass"
                                                                       ? "Paso Bajo"
-                                                                      : type ===
-                                                                          "highpass"
+                                                                      : type === "highpass"
                                                                         ? "Paso Alto"
-                                                                        : type ===
-                                                                            "shelving"
-                                                                          ? "Shelving"
-                                                                          : type ===
-                                                                              "notch"
-                                                                            ? "Notch"
-                                                                            : "Paso Banda"}
+                                                                        : type === "low_shelf"
+                                                                          ? "Low Shelf"
+                                                                          : type === "high_shelf"
+                                                                            ? "High Shelf"
+                                                                            : type === "notch"
+                                                                              ? "Notch"
+                                                                              : "Paso Banda"}
                                                             </label>
                                                         {/each}
                                                     </div>
@@ -1481,19 +1480,12 @@
                                                 <label class="text-[9px] font-bold uppercase" style="color: var(--text-muted)">Tipo de Filtro</label>
                                                 <div class="flex flex-wrap gap-1">
                                                     {#each filter.supportedTypes as type}
-                                                        {@const icons = {
-                                                            peaking: 'graphic_eq',
-                                                            lowpass: 'arrow_downward',
-                                                            highpass: 'arrow_upward',
-                                                            shelving: 'trending_up',
-                                                            notch: 'filter_center_focus',
-                                                            bandpass: 'tune',
-                                                        }}
-                                                        {@const labels = {
+                                                        {@const labels: Record<string, string> = {
                                                             peaking: 'Peak',
                                                             lowpass: 'LP',
                                                             highpass: 'HP',
-                                                            shelving: 'Shelf',
+                                                            low_shelf: 'LS',
+                                                            high_shelf: 'HS',
                                                             notch: 'Notch',
                                                             bandpass: 'BP',
                                                         }}
@@ -1504,7 +1496,9 @@
                                                             onclick={() => filter.type = type}
                                                             title={type}
                                                         >
-                                                            <span class="material-symbols-outlined text-[16px]">{icons[type] || 'tune'}</span>
+                                                            <span class="w-5 h-3 inline-flex items-center justify-center">
+                                                                {@html filterSvgIcons[type] || ''}
+                                                            </span>
                                                             {labels[type] || type}
                                                         </button>
                                                     {/each}
@@ -1581,7 +1575,7 @@
                                             </div>
 
                                             <!-- Ganancia (Solo si es peaking/shelving) (Prompt 7) -->
-                                            {#if ["peaking", "shelving"].includes(filter.type)}
+                                            {#if ["peaking", "low_shelf", "high_shelf"].includes(filter.type)}
                                                 <div
                                                     class="flex flex-col gap-1 col-span-2 mt-1"
                                                 >
@@ -1620,7 +1614,7 @@
                                         freq: 1000,
                                         gain: 0,
                                         q: 1.0,
-                                        supportedTypes: ['peaking', 'lowpass', 'highpass', 'shelving', 'notch', 'bandpass'],
+                                        supportedTypes: ['peaking', 'lowpass', 'highpass', 'low_shelf', 'high_shelf', 'notch', 'bandpass'],
                                         showConfig: false
                                     }];
                                 }}
