@@ -42,6 +42,7 @@
     let numGraphicBands = $state(10); // 5 | 10 | 15
     let customBandCount = $state(false);
     let isCalculatingAutoEQ = $state(false);
+    let autoEQSourceLayer = $state<string>('active');
 
     interface GraphicBand {
         freq: number;
@@ -1249,6 +1250,38 @@
                             + Resp. Simulada
                         </button>
                     </div>
+                </div>
+
+                <!-- Sección: Cálculo de ecualización -->
+                <div class="flex flex-col gap-2 rounded-lg p-3"
+                     style="background: var(--bg-tertiary); border: 1px solid var(--border-primary)">
+                    <span class="text-[9px] font-bold uppercase tracking-wider"
+                          style="color: var(--text-muted)">Cálculo de ecualización</span>
+
+                    <div class="flex flex-col gap-1">
+                        <label class="text-[9px] font-bold uppercase" style="color: var(--text-muted)">Capa fuente</label>
+                        <select
+                            class="w-full rounded-md text-xs py-1.5 px-2"
+                            style="background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-primary)"
+                            bind:value={autoEQSourceLayer}>
+                            <option value="active">Capa activa</option>
+                            {#each traceManager.layers as layer}
+                                <option value={layer.id}>{layer.name}</option>
+                            {/each}
+                        </select>
+                    </div>
+
+                    <button
+                        class="w-full min-h-[38px] bg-[#00ff88]/10 text-[#00ff88] hover:bg-[#00ff88]/20 border border-[#00ff88]/20 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-40"
+                        onclick={runAutoEQ}
+                        disabled={!showEQ || isCalculatingAutoEQ}
+                    >
+                        <span class="material-symbols-outlined text-sm"
+                            >{isCalculatingAutoEQ ? "sync" : "auto_awesome"}</span>
+                        {isCalculatingAutoEQ
+                            ? "Calculando..."
+                            : "Calcular ecualización"}
+                    </button>
                 </div>
 
 
