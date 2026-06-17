@@ -2526,3 +2526,52 @@
         {/if}
     </div>
 </aside>
+
+<style>
+    /* Theme overrides for Sidebar */
+    aside :global(.bg-\[\#121216\]) {
+        background-color: var(--bg-tertiary) !important;
+    }
+    aside :global(.bg-\[\#121216\]\/5) {
+        background-color: color-mix(in srgb, var(--bg-tertiary) 5%, transparent) !important;
+    }
+    aside :global(.bg-\[\#121216\]\/20) {
+        background-color: color-mix(in srgb, var(--bg-tertiary) 20%, transparent) !important;
+    }
+    aside :global(.bg-\[\#121216\]\/30) {
+        background-color: color-mix(in srgb, var(--bg-tertiary) 30%, transparent) !important;
+    }
+    aside :global(.bg-\[\#121216\]\/40) {
+        background-color: color-mix(in srgb, var(--bg-tertiary) 40%, transparent) !important;
+    }
+    aside :global(.bg-\[\#0c0c0e\]) {
+        background-color: var(--bg-surface) !important;
+    }
+    aside :global(.border-\[\#1a1a24\]) {
+        border-color: var(--border-primary) !important;
+    }
+    aside :global(.border-\[\#1a1a24\]\/20) {
+        border-color: color-mix(in srgb, var(--border-primary) 20%, transparent) !important;
+    }
+    aside :global(.border-\[\#1a1a24\]\/30) {
+        border-color: color-mix(in srgb, var(--border-primary) 30%, transparent) !important;
+    }
+    aside :global(.border-\[\#1a1a24\]\/40) {
+        border-color: color-mix(in srgb, var(--border-primary) 40%, transparent) !important;
+    }
+    aside :global(.border-\[\#1a1a24\]\/50) {
+        border-color: color-mix(in srgb, var(--border-primary) 50%, transparent) !important;
+    }
+    aside :global(.border-t) {
+        border-top-color: var(--border-primary) !important;
+    }
+    aside :global(.border-b) {
+        border-bottom-color: var(--border-primary) !important;
+    }
+    aside :global(.text-gray-200) {
+        color: var(--text-primary) !important;
+    }
+    aside :global(.text-gray-500) {
+        color: var(--text-muted) !important;
+    }
+</style>
