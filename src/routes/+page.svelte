@@ -62,7 +62,7 @@
     :global(body) {
         margin: 0;
         padding: 0;
-        background-color: #000;
+        background-color: var(--bg-primary);
         overflow: hidden;
         font-family: 'Inter', -apple-system, sans-serif;
     }
@@ -80,7 +80,7 @@
         display: flex;
         flex: 1;
         overflow: hidden;
-        background: #000;
+        background: var(--bg-secondary);
     }
 
     .main-viewport {

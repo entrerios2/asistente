@@ -701,10 +701,11 @@
 </script>
 
 <aside
-    class="w-[380px] h-full bg-[#0a0a0c] border-r border-[#1a1a24]/50 flex flex-col text-gray-200 select-none"
+    class="w-[380px] h-full border-r flex flex-col select-none"
+    style="background: var(--bg-secondary); border-color: var(--border-primary); color: var(--text-primary)"
 >
     <!-- CABECERA DE PESTAÑAS Y CONTROL (PROMPT 11) -->
-    <div class="flex items-center bg-[#050507] border-b border-[#1a1a24]/50 px-2 py-1.5 gap-0.5 h-[60px] flex-shrink-0">
+    <div class="flex items-center border-b px-2 py-1.5 gap-0.5 h-[60px] flex-shrink-0" style="background: var(--bg-primary); border-color: var(--border-primary)">
         <nav class="flex-1 flex items-center gap-0.5">
             {#each [
                 { id: 'medicion', icon: 'podcasts', label: 'MEDIR' },
@@ -728,7 +729,7 @@
     </div>
 
     <!-- Contenido Principal del Sidebar -->
-    <div class="flex-1 h-full overflow-hidden flex flex-col bg-[#0a0a0c]">
+    <div class="flex-1 h-full overflow-hidden flex flex-col" style="background: var(--bg-secondary)">
         {#if uiStore.activeTab === "medicion"}
             <div
                 class="flex-1 p-5 overflow-y-auto flex flex-col gap-5"
@@ -736,7 +737,8 @@
             >
                 <!-- Selector de Modo (Segmented Control) -->
                 <div
-                    class="flex bg-[#121216] p-1 rounded-lg border border-[#1a1a24]/50"
+                    class="flex p-1 rounded-lg border"
+                    style="background: var(--bg-tertiary); border-color: var(--border-primary)"
                 >
                     <button
                         class="flex-1 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer min-h-[36px]
@@ -768,10 +770,10 @@
                 {#if uiStore.measurementMode === "manual"}
                     <div class="flex flex-col gap-4">
                         <!-- AUTOMATIZACIÓN DE MEDICIÓN (F27) -->
-                        <div class="flex flex-col gap-2 bg-[#121216]/40 border border-[#1a1a24]/50 rounded-xl p-3 mt-3">
-                            <div class="flex items-center gap-2 border-b border-[#1a1a24]/30 pb-1.5">
+                        <div class="flex flex-col gap-2 border rounded-xl p-3 mt-3" style="background: var(--bg-tertiary); opacity: 0.8; border-color: var(--border-primary)">
+                            <div class="flex items-center gap-2 border-b pb-1.5" style="border-color: var(--border-primary)">
                                 <span class="material-symbols-outlined text-[#a855f7] text-sm">bolt</span>
-                                <h3 class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Automatización</h3>
+                                <h3 class="text-[10px] font-bold uppercase tracking-wider" style="color: var(--text-muted)">Automatización</h3>
                             </div>
 
                             <label class="flex items-center gap-2.5 cursor-pointer group py-1">
@@ -815,7 +817,8 @@
                             >
                             <select
                                 bind:value={uiStore.generatorType}
-                                class="w-full bg-[#121216] border border-[#1a1a24] rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#3b82f6]"
+                                class="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-[#3b82f6]"
+                                style="background: var(--bg-tertiary); border-color: var(--border-primary); color: var(--text-primary)"
                             >
                                 <option value="pink">Ruido Rosa</option>
                                 <option value="white">Ruido Blanco</option>
@@ -831,7 +834,8 @@
 
                         <!-- Opciones Dinámicas Reactivas -->
                         <div
-                            class="bg-[#121216]/50 border border-[#1a1a24]/30 rounded-lg p-3 flex flex-col gap-3"
+                            class="border rounded-lg p-3 flex flex-col gap-3"
+                            style="background: var(--bg-tertiary); border-color: var(--border-primary)"
                         >
                             {#if uiStore.generatorType === "sine"}
                                 <div class="flex flex-col gap-1">
@@ -844,7 +848,8 @@
                                         bind:value={uiStore.genFreq}
                                         min="10"
                                         max="22000"
-                                        class="w-full bg-[#121216] border border-[#1a1a24] rounded-md px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-[#3b82f6]"
+                                        class="w-full border rounded-md px-3 py-1.5 text-sm focus:outline-none focus:border-[#3b82f6]"
+                                        style="background: var(--bg-tertiary); border-color: var(--border-primary); color: var(--text-primary)"
                                     />
                                 </div>
                             {:else if uiStore.generatorType === "sweep"}
@@ -857,7 +862,8 @@
                                         <input
                                             type="number"
                                             bind:value={sweepF1}
-                                            class="w-full bg-[#121216] border border-[#1a1a24] rounded-md px-2 py-1 text-sm text-gray-200"
+                                            class="w-full border rounded-md px-2 py-1 text-sm"
+                                            style="background: var(--bg-tertiary); border-color: var(--border-primary); color: var(--text-primary)"
                                         />
                                     </div>
                                     <div class="flex flex-col gap-1">

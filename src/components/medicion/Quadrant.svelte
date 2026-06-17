@@ -1146,7 +1146,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
     class="quadrant-container"
-    style="cursor: {cursorStyle}; background: {uiStore.isDarkMode ? '#060608' : '#f8f8fa'}; touch-action: none;"
+    style="cursor: {cursorStyle}; background: var(--bg-primary); touch-action: none;"
     bind:this={container}
     onmousemove={handleMouseMove}
     onmousedown={handleMouseDown}
@@ -1170,7 +1170,8 @@
     }}
 >
     <!-- CABECERA PREMIUM DE CADA CUADRANTE -->
-    <div class="quadrant-header flex items-center gap-2 bg-[#08080a] border-b border-[#1a1a24] px-3 py-1.5 min-h-[40px]"
+    <div class="quadrant-header flex items-center gap-2 border-b border-[#1a1a24] px-3 py-1.5 min-h-[40px]"
+         style="background: var(--bg-primary)"
          onmousedown={(e) => e.stopPropagation()}
          onmouseup={(e) => e.stopPropagation()}
          onclick={(e) => e.stopPropagation()}
@@ -1192,7 +1193,8 @@
                     <!-- Backdrop para cerrar con un click fuera -->
                     <div class="fixed inset-0 z-40" onclick={() => showAddDropdown = false}></div>
                     
-                    <div class="absolute left-0 mt-1 bg-[#0d0d12] border border-[#222] rounded-lg p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.8)] z-50 min-w-[170px] flex flex-col gap-0.5 select-none"
+                    <div class="absolute left-0 mt-1 rounded-lg p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.8)] z-50 min-w-[170px] flex flex-col gap-0.5 select-none"
+                         style="background: var(--bg-surface); border: 1px solid var(--border-primary)"
                          onmousedown={(e) => e.stopPropagation()} onclick={(e) => e.stopPropagation()}>
                         {#each allMetrics as m}
                             {@const active = activeMetrics.includes(m.name)}
@@ -1268,11 +1270,12 @@
 
                 {#if showLayerDropdown}
                     <div class="fixed inset-0 z-40" onclick={() => showLayerDropdown = false}></div>
-                    <div class="absolute right-0 mt-1 bg-[#0c0c0e] border border-[#1a1a24] rounded-xl p-3 shadow-[0_10px_30px_#000] z-50 min-w-[200px] flex flex-col gap-1.5 select-none text-[11px]"
+                    <div class="absolute right-0 mt-1 rounded-xl p-3 shadow-[0_10px_30px_#000] z-50 min-w-[200px] flex flex-col gap-1.5 select-none text-[11px]"
+                          style="background: var(--bg-surface); border: 1px solid var(--border-primary)"
                           onmousedown={(e) => e.stopPropagation()}
                           onclick={(e) => e.stopPropagation()}
                           onwheel={(e) => e.stopPropagation()}>
-                        <div class="flex items-center justify-between border-b border-[#1a1a24] pb-1.5 mb-1">
+                        <div class="flex items-center justify-between border-b pb-1.5 mb-1" style="border-color: var(--border-primary)">
                             <span class="font-bold text-gray-300 text-[10px] uppercase tracking-wider">Capas</span>
                             <button onclick={() => showLayerDropdown = false} class="text-gray-500 hover:text-gray-300">
                                 <span class="material-symbols-outlined text-xs">close</span>
@@ -1300,7 +1303,7 @@
                         {/each}
 
                         <!-- Botón único "Agregar" con sub-menú desplegable -->
-                        <div class="border-t border-[#1a1a24] pt-1.5 mt-1 relative">
+                        <div class="border-t pt-1.5 mt-1 relative" style="border-color: var(--border-primary)">
                             <button
                                 class="w-full text-left px-2 py-1.5 rounded text-[10px] text-[#00ff88] hover:bg-[#00ff88]/5 font-semibold flex items-center gap-1 cursor-pointer"
                                 onclick={(e) => { e.stopPropagation(); showAddLayerMenu = !showAddLayerMenu; }}>
@@ -1309,7 +1312,8 @@
                                 <span class="material-symbols-outlined text-[10px] ml-auto">expand_more</span>
                             </button>
                             {#if showAddLayerMenu}
-                                <div class="absolute left-0 bottom-full mb-1 bg-[#0c0c0e] border border-[#1a1a24] rounded-lg shadow-lg z-50 min-w-[180px] py-1">
+                                <div class="absolute left-0 bottom-full mb-1 rounded-lg shadow-lg z-50 min-w-[180px] py-1"
+                                     style="background: var(--bg-surface); border: 1px solid var(--border-primary)">
                                     <button
                                         class="w-full text-left px-3 py-1.5 text-[10px] text-[#00ff88] hover:bg-[#00ff88]/5 flex items-center gap-1.5 cursor-pointer"
                                         onclick={() => { traceManager.addLayer(`Capa ${traceManager.layers.length + 1}`, id, 'live'); showAddLayerMenu = false; showLayerDropdown = false; }}>
@@ -1325,7 +1329,7 @@
                                             <span class="material-symbols-outlined text-[10px] ml-auto">{showSnapshotSubmenu ? 'expand_less' : 'expand_more'}</span>
                                         </button>
                                         {#if showSnapshotSubmenu}
-                                            <div class="bg-[#0a0a0e] border-t border-[#1a1a24] py-0.5">
+                                            <div class="bg-[#0a0a0e] border-t py-0.5" style="border-color: var(--border-primary)">
                                                 {#each traceManager.instantaneas as inst}
                                                     <button
                                                         class="w-full text-left px-4 py-1 text-[9px] text-gray-300 hover:bg-[#3b82f6]/5 hover:text-white cursor-pointer truncate"
@@ -1390,7 +1394,8 @@
         <div class="relative">
             {#if showZoomMenu}
                 <div class="fixed inset-0 z-40" onclick={() => showZoomMenu = false}></div>
-                <div class="absolute left-0 bottom-10 bg-[#0c0c0e] border border-[#1a1a24] rounded-lg p-1.5 shadow-xl z-50 min-w-[110px] flex flex-col gap-0.5">
+                <div class="absolute left-0 bottom-10 rounded-lg p-1.5 shadow-xl z-50 min-w-[110px] flex flex-col gap-0.5"
+                     style="background: var(--bg-surface); border: 1px solid var(--border-primary)">
                     {#each [
                         { mode: 'XY' as const, label: 'Libre (XY)', icon: 'open_with' },
                         { mode: 'X' as const, label: 'Solo Eje X', icon: 'swap_horiz' },
@@ -1403,7 +1408,7 @@
                             {opt.label}
                         </button>
                     {/each}
-                    <div class="border-t border-[#1a1a24] my-0.5"></div>
+                    <div class="border-t my-0.5" style="border-color: var(--border-primary)"></div>
                     <button class="px-3 py-1.5 text-[10px] font-bold text-[#00ff88] hover:bg-[#00ff88]/10 rounded transition-all cursor-pointer text-left"
                         onclick={() => { handleDoubleClick(); showZoomMenu = false; }}>Restaurar</button>
                 </div>
@@ -1429,13 +1434,14 @@
             onclick={() => (showSelector = false)}
         ></div>
 
-        <div class="selector-popover absolute right-[10px] top-[46px] bg-[#0c0c0e] border border-[#1a1a24] rounded-xl p-4 shadow-[0_10px_30px_#000000] z-50 min-w-[200px] flex flex-col gap-3 select-none text-[11px] text-gray-200"
+        <div class="selector-popover absolute right-[10px] top-[46px] rounded-xl p-4 shadow-[0_10px_30px_#000000] z-50 min-w-[200px] flex flex-col gap-3 select-none text-[11px] text-gray-200"
+             style="background: var(--bg-surface); border: 1px solid var(--border-primary)"
              onmousedown={(e) => e.stopPropagation()}
              onmouseup={(e) => e.stopPropagation()}
              onmousemove={(e) => e.stopPropagation()}
              onclick={(e) => e.stopPropagation()}
              onwheel={(e) => e.stopPropagation()}>
-            <div class="popover-header flex items-center justify-between border-b border-[#1a1a24] pb-1.5">
+            <div class="popover-header flex items-center justify-between border-b pb-1.5" style="border-color: var(--border-primary)">
                 <span class="popover-title font-bold text-gray-300">Configuración Global</span>
                 <button
                     class="popover-close text-gray-500 hover:text-gray-300"
@@ -1478,7 +1484,7 @@
             </div>
 
             <!-- Límites de Zoom y Reinicio -->
-            <div class="divider border-t border-[#1a1a24] my-0.5"></div>
+            <div class="divider border-t my-0.5" style="border-color: var(--border-primary)"></div>
 
             <div class="flex flex-col gap-1.5">
                 <div class="flex justify-between items-center text-gray-400">
@@ -1505,13 +1511,14 @@
         <!-- Backdrop para cerrar con un click fuera -->
         <div class="fixed inset-0 z-40" onclick={() => activeConfigMetric = null}></div>
         
-        <div class="absolute top-[46px] left-[16px] bg-[#0c0c0e] border border-[#1a1a24] rounded-xl p-4 shadow-[0_10px_30px_#000000] z-50 min-w-[240px] flex flex-col gap-3 select-none text-[11px] text-gray-200"
+        <div class="absolute top-[46px] left-[16px] rounded-xl p-4 shadow-[0_10px_30px_#000000] z-50 min-w-[240px] flex flex-col gap-3 select-none text-[11px] text-gray-200"
+             style="background: var(--bg-surface); border: 1px solid var(--border-primary)"
              onmousedown={(e) => e.stopPropagation()}
              onmouseup={(e) => e.stopPropagation()}
              onmousemove={(e) => e.stopPropagation()}
              onclick={(e) => e.stopPropagation()}
              onwheel={(e) => e.stopPropagation()}>
-            <div class="flex items-center justify-between border-b border-[#1a1a24] pb-1.5 mb-1">
+            <div class="flex items-center justify-between border-b pb-1.5 mb-1" style="border-color: var(--border-primary)">
                 <span class="font-bold text-[#00ff88] uppercase tracking-wide">Config. {activeConfigMetric}</span>
                 <button onclick={() => activeConfigMetric = null} class="text-gray-500 hover:text-gray-300">
                     <span class="material-symbols-outlined text-xs">close</span>
@@ -1672,7 +1679,7 @@
 
             <!-- Editor de Estilos de Curva (Prompt 11) -->
             {#if activeConfigMetric && metricStyles[activeConfigMetric]}
-                <div class="border-t border-[#1a1a24] pt-2 mt-1 flex flex-col gap-2">
+                <div class="border-t pt-2 mt-1 flex flex-col gap-2" style="border-color: var(--border-primary)">
                     <span class="text-gray-400 font-bold uppercase tracking-wider text-[8px]">Estilo de Curva</span>
                     
                     <!-- Color -->
@@ -1713,7 +1720,7 @@
             {/if}
 
             <!-- Toggle Visibilidad de la Métrica -->
-            <div class="flex items-center justify-between mt-2 pt-2 border-t border-[#1a1a24]">
+            <div class="flex items-center justify-between mt-2 pt-2 border-t" style="border-color: var(--border-primary)">
                 <span class="text-[10px] text-gray-400">Visible en gráfico</span>
                 <button
                     class="w-8 h-4 rounded-full transition-all cursor-pointer {metricConfigs[activeConfigMetric!]?.hidden ? 'bg-gray-700' : 'bg-[#00ff88]'}"
