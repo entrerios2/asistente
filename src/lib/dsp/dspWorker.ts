@@ -53,19 +53,61 @@ function getPhaseValueRadians(freq: number, isMeasuring: boolean, eqBands: EQBan
 
     for (let b = 0; b < eqBands.length; b++) {
         const band = eqBands[b];
-        if (band.gain !== 0) {
-            const w0 = 2 * Math.PI * band.freq / 48000;
+        if (band.gain !== 0 || !['peaking', 'low_shelf', 'high_shelf'].includes(band.type)) {
+            const fc = band.freq;
+            const G = band.gain;
+            const Q = band.q;
+            const A = Math.pow(10, G / 40);
+            const w0 = 2 * Math.PI * fc / 48000;
             const sinW0 = Math.sin(w0);
             const cosW0 = Math.cos(w0);
-            const alpha = sinW0 / (2 * band.q);
-            const A = Math.pow(10, band.gain / 40);
-
-            const b0 = 1 + alpha * A;
-            const b1 = -2 * cosW0;
-            const b2 = 1 - alpha * A;
-            const a0 = 1 + alpha / A;
-            const a1 = -2 * cosW0;
-            const a2 = 1 - alpha / A;
+            
+            let b0 = 0, b1 = 0, b2 = 0, a0 = 1, a1 = 0, a2 = 0;
+            
+            if (band.type === 'peaking') {
+                const alpha = sinW0 / (2 * Q);
+                b0 = 1 + alpha * A; b1 = -2 * cosW0; b2 = 1 - alpha * A;
+                a0 = 1 + alpha / A; a1 = -2 * cosW0; a2 = 1 - alpha / A;
+            } else if (band.type === 'low_shelf' || band.type === 'lowshelf') {
+                const alpha = sinW0 / 2 * Math.sqrt((A + 1/A) * (1/Q - 1) + 2);
+                const sqrtA2alpha = 2 * Math.sqrt(A) * alpha;
+                b0 = A * ((A + 1) - (A - 1) * cosW0 + sqrtA2alpha);
+                b1 = 2 * A * ((A - 1) - (A + 1) * cosW0);
+                b2 = A * ((A + 1) - (A - 1) * cosW0 - sqrtA2alpha);
+                a0 = (A + 1) + (A - 1) * cosW0 + sqrtA2alpha;
+                a1 = -2 * ((A - 1) + (A + 1) * cosW0);
+                a2 = (A + 1) + (A - 1) * cosW0 - sqrtA2alpha;
+            } else if (band.type === 'high_shelf' || band.type === 'highshelf') {
+                const alpha = sinW0 / 2 * Math.sqrt((A + 1/A) * (1/Q - 1) + 2);
+                const sqrtA2alpha = 2 * Math.sqrt(A) * alpha;
+                b0 = A * ((A + 1) + (A - 1) * cosW0 + sqrtA2alpha);
+                b1 = -2 * A * ((A - 1) + (A + 1) * cosW0);
+                b2 = A * ((A + 1) + (A - 1) * cosW0 - sqrtA2alpha);
+                a0 = (A + 1) - (A - 1) * cosW0 + sqrtA2alpha;
+                a1 = 2 * ((A - 1) - (A + 1) * cosW0);
+                a2 = (A + 1) - (A - 1) * cosW0 - sqrtA2alpha;
+            } else if (band.type === 'lowpass') {
+                const alpha = sinW0 / (2 * Q);
+                b0 = (1 - cosW0) / 2; b1 = 1 - cosW0; b2 = (1 - cosW0) / 2;
+                a0 = 1 + alpha; a1 = -2 * cosW0; a2 = 1 - alpha;
+            } else if (band.type === 'highpass') {
+                const alpha = sinW0 / (2 * Q);
+                b0 = (1 + cosW0) / 2; b1 = -(1 + cosW0); b2 = (1 + cosW0) / 2;
+                a0 = 1 + alpha; a1 = -2 * cosW0; a2 = 1 - alpha;
+            } else if (band.type === 'notch') {
+                const alpha = sinW0 / (2 * Q);
+                b0 = 1; b1 = -2 * cosW0; b2 = 1;
+                a0 = 1 + alpha; a1 = -2 * cosW0; a2 = 1 - alpha;
+            } else if (band.type === 'bandpass') {
+                const alpha = sinW0 / (2 * Q);
+                b0 = alpha; b1 = 0; b2 = -alpha;
+                a0 = 1 + alpha; a1 = -2 * cosW0; a2 = 1 - alpha;
+            } else {
+                // Fallback peaking
+                const alpha = sinW0 / (2 * Q);
+                b0 = 1 + alpha * A; b1 = -2 * cosW0; b2 = 1 - alpha * A;
+                a0 = 1 + alpha / A; a1 = -2 * cosW0; a2 = 1 - alpha / A;
+            }
 
             const w = 2 * Math.PI * freq / 48000;
             const cosW = Math.cos(w);
@@ -154,6 +196,17 @@ function getCoherenceValue(freq: number, isMeasuring: boolean, eqBands: EQBand[]
         if (band.gain < -5) {
             const dist = Math.abs(Math.log2(freq / band.freq));
             if (dist < 0.25) coh -= 0.18 * (1 - dist / 0.25);
+        }
+        // Simular caída de coherencia en zonas de atenuación de filtros LP/HP/notch
+        if (band.type === 'lowpass' && freq > band.freq) {
+            const octaves = Math.log2(freq / band.freq);
+            coh -= Math.min(0.4, octaves * 0.15);
+        } else if (band.type === 'highpass' && freq < band.freq) {
+            const octaves = Math.log2(band.freq / freq);
+            coh -= Math.min(0.4, octaves * 0.15);
+        } else if (band.type === 'notch') {
+            const dist = Math.abs(Math.log2(freq / band.freq));
+            if (dist < 0.15) coh -= 0.25 * (1 - dist / 0.15);
         }
     }
     if (isMeasuring) {

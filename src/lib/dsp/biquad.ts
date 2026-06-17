@@ -55,6 +55,85 @@ export function highShelfCoeffs(fc: number, gain: number, Q: number, fs: number)
     return [b0 / a0, b1 / a0, b2 / a0, 1.0, a1 / a0, a2 / a0];
 }
 
+export function lowpassCoeffs(fc: number, _gain: number, Q: number, fs: number): number[] {
+    const w0 = 2 * Math.PI * fc / fs;
+    const sinW0 = Math.sin(w0);
+    const cosW0 = Math.cos(w0);
+    const alpha = sinW0 / (2 * Q);
+
+    const b0 = (1 - cosW0) / 2;
+    const b1 =  1 - cosW0;
+    const b2 = (1 - cosW0) / 2;
+    const a0 =  1 + alpha;
+    const a1 = -2 * cosW0;
+    const a2 =  1 - alpha;
+
+    return [b0 / a0, b1 / a0, b2 / a0, 1.0, a1 / a0, a2 / a0];
+}
+
+export function highpassCoeffs(fc: number, _gain: number, Q: number, fs: number): number[] {
+    const w0 = 2 * Math.PI * fc / fs;
+    const sinW0 = Math.sin(w0);
+    const cosW0 = Math.cos(w0);
+    const alpha = sinW0 / (2 * Q);
+
+    const b0 =  (1 + cosW0) / 2;
+    const b1 = -(1 + cosW0);
+    const b2 =  (1 + cosW0) / 2;
+    const a0 =  1 + alpha;
+    const a1 = -2 * cosW0;
+    const a2 =  1 - alpha;
+
+    return [b0 / a0, b1 / a0, b2 / a0, 1.0, a1 / a0, a2 / a0];
+}
+
+export function notchCoeffs(fc: number, _gain: number, Q: number, fs: number): number[] {
+    const w0 = 2 * Math.PI * fc / fs;
+    const sinW0 = Math.sin(w0);
+    const cosW0 = Math.cos(w0);
+    const alpha = sinW0 / (2 * Q);
+
+    const b0 =  1;
+    const b1 = -2 * cosW0;
+    const b2 =  1;
+    const a0 =  1 + alpha;
+    const a1 = -2 * cosW0;
+    const a2 =  1 - alpha;
+
+    return [b0 / a0, b1 / a0, b2 / a0, 1.0, a1 / a0, a2 / a0];
+}
+
+export function bandpassCoeffs(fc: number, _gain: number, Q: number, fs: number): number[] {
+    const w0 = 2 * Math.PI * fc / fs;
+    const sinW0 = Math.sin(w0);
+    const cosW0 = Math.cos(w0);
+    const alpha = sinW0 / (2 * Q);
+
+    const b0 =  alpha;
+    const b1 =  0;
+    const b2 = -alpha;
+    const a0 =  1 + alpha;
+    const a1 = -2 * cosW0;
+    const a2 =  1 - alpha;
+
+    return [b0 / a0, b1 / a0, b2 / a0, 1.0, a1 / a0, a2 / a0];
+}
+
+export function getCoeffsForType(
+    type: string, fc: number, gain: number, Q: number, fs: number
+): number[] {
+    switch (type) {
+        case 'peaking':                        return peakingCoeffs(fc, gain, Q, fs);
+        case 'low_shelf':  case 'lowshelf':    return lowShelfCoeffs(fc, gain, Q, fs);
+        case 'high_shelf': case 'highshelf':   return highShelfCoeffs(fc, gain, Q, fs);
+        case 'lowpass':                        return lowpassCoeffs(fc, gain, Q, fs);
+        case 'highpass':                       return highpassCoeffs(fc, gain, Q, fs);
+        case 'notch':                          return notchCoeffs(fc, gain, Q, fs);
+        case 'bandpass':                       return bandpassCoeffs(fc, gain, Q, fs);
+        default:                               return peakingCoeffs(fc, gain, Q, fs);
+    }
+}
+
 /**
  * Evalúa la respuesta compleja H(e^jω) de un filtro biquad en una frecuencia dada.
  * Retorna [magnitudDb, phaseRad].

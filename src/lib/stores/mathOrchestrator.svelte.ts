@@ -8,7 +8,7 @@ import { traceManager } from './traceManager.svelte';
 import { uiStore } from './ui.svelte';
 import { meterStore } from './meterStore.svelte';
 import { calibrationStore } from './calibrationStore.svelte';
-import { peakingCoeffs, biquadResponse } from '../dsp/biquad';
+import { peakingCoeffs, lowShelfCoeffs, highShelfCoeffs, getCoeffsForType, biquadResponse } from '../dsp/biquad';
 import {
     calculateMagnitude,
     calculatePhase,
@@ -214,11 +214,11 @@ class MathOrchestrator {
             let bandsHash = 0;
             for (let b = 0; b < traceManager.eqBands.length; b++) {
                 const band = traceManager.eqBands[b];
-                bandsHash += band.freq * 1e6 + band.gain * 1e3 + band.q;
+                bandsHash += band.freq * 1e6 + band.gain * 1e3 + band.q + (band.type ? band.type.charCodeAt(0) * 100 : 0);
             }
             // Incluir sugerencias de calibración para refrescar el caché de EQ
             for (const filter of calibrationStore.suggestedFilters) {
-                bandsHash += filter.frequency * 1e6 + filter.gain * 1e3 + filter.q + (filter.enabled ? 1 : 0);
+                bandsHash += filter.frequency * 1e6 + filter.gain * 1e3 + filter.q + (filter.enabled ? 1 : 0) + (filter.type ? filter.type.charCodeAt(0) * 100 : 0);
             }
 
             const measuring = uiStore.isMeasuring;
@@ -249,8 +249,8 @@ class MathOrchestrator {
                 // 1. Evaluar las bandas de EQ de traceManager (Playground) analíticamente usando biquads (Prompt 7)
                 for (let b = 0; b < traceManager.eqBands.length; b++) {
                     const band = traceManager.eqBands[b];
-                    if (band.gain !== 0) {
-                        const coeffs = peakingCoeffs(band.freq, band.gain, band.q, sr);
+                    if (band.gain !== 0 || !['peaking', 'low_shelf', 'high_shelf'].includes(band.type)) {
+                        const coeffs = getCoeffsForType(band.type, band.freq, band.gain, band.q, sr);
                         const [magDb] = biquadResponse(coeffs, freq, sr);
                         totalGain += magDb;
                     }
@@ -285,8 +285,8 @@ class MathOrchestrator {
         // Evaluar analíticamente la fase de las bandas de EQ (Playground) con biquads (Prompt 7)
         for (let b = 0; b < traceManager.eqBands.length; b++) {
             const band = traceManager.eqBands[b];
-            if (band.gain !== 0) {
-                const coeffs = peakingCoeffs(band.freq, band.gain, band.q, 48000);
+            if (band.gain !== 0 || !['peaking', 'low_shelf', 'high_shelf'].includes(band.type)) {
+                const coeffs = getCoeffsForType(band.type, band.freq, band.gain, band.q, 48000);
                 const [_, phaseRad] = biquadResponse(coeffs, freq, 48000);
                 phase += phaseRad;
             }
