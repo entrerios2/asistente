@@ -19,7 +19,7 @@ class TargetTraceStore {
     offset = $state(0);
     name = $state('Flat');
 
-    applyPreset(type: 'Flat' | 'X-Curve' | 'House') {
+    applyPreset(type: 'Flat' | 'X-Curve' | 'House' | 'BK' | 'Harman') {
         this.name = type;
         if (type === 'Flat') {
             this.points = [{ f: 20, g: 0 }, { f: 20000, g: 0 }];
@@ -35,6 +35,28 @@ class TargetTraceStore {
                 { f: 20, g: 6 },
                 { f: 100, g: 3 },
                 { f: 1000, g: 0 },
+                { f: 20000, g: -2 }
+            ];
+        } else if (type === 'BK') {
+            // B&K cinema curve — rolloff above 2 kHz
+            this.points = [
+                { f: 20, g: 0 },
+                { f: 2000, g: 0 },
+                { f: 4000, g: -1 },
+                { f: 8000, g: -3 },
+                { f: 16000, g: -5 },
+                { f: 20000, g: -6 }
+            ];
+        } else if (type === 'Harman') {
+            // Harman 2019 room target
+            this.points = [
+                { f: 20, g: 4 },
+                { f: 60, g: 3 },
+                { f: 200, g: 0 },
+                { f: 1500, g: 0 },
+                { f: 3000, g: -1 },
+                { f: 5000, g: 0 },
+                { f: 8000, g: -1 },
                 { f: 20000, g: -2 }
             ];
         }

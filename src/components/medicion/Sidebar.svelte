@@ -1,6 +1,7 @@
 <script lang="ts">
     import { uiStore } from "$lib/stores/ui.svelte";
     import { traceManager } from "$lib/stores/traceManager.svelte";
+    import { targetTrace } from "$lib/stores/targetTrace.svelte";
     import { calibrationStore } from "$lib/stores/calibrationStore.svelte";
     import { filterSvgIcons } from '$lib/icons/filterIcons';
     import { mathOrchestrator } from '$lib/stores/mathOrchestrator.svelte';
@@ -71,25 +72,13 @@
             if (!file) return;
             const text = await file.text();
             const data = JSON.parse(text);
-            const points: {freq: number, dB: number}[] = data.points || data;
-            const bins = mathOrchestrator.BINS;
-            const curve = new Float32Array(bins);
-            const binWidth = (uiStore.sampleRate / 2) / bins;
-            for (let i = 0; i < bins; i++) {
-                const freq = i * binWidth;
-                // Interpolación lineal entre puntos
-                let lo = points[0], hi = points[points.length - 1];
-                for (let p = 0; p < points.length - 1; p++) {
-                    if (points[p].freq <= freq && points[p + 1].freq >= freq) {
-                        lo = points[p];
-                        hi = points[p + 1];
-                        break;
-                    }
-                }
-                if (hi.freq === lo.freq) { curve[i] = lo.dB; }
-                else { curve[i] = lo.dB + (hi.dB - lo.dB) * (freq - lo.freq) / (hi.freq - lo.freq); }
-            }
-            traceManager.targetCurveCustom = curve;
+            const rawPoints: {freq?: number, f?: number, dB?: number, g?: number}[] = data.points || data;
+            
+            targetTrace.points = rawPoints.map(p => ({
+                f: p.freq ?? p.f ?? 0,
+                g: p.dB ?? p.g ?? 0
+            })).sort((a, b) => a.f - b.f);
+            targetTrace.name = 'Custom';
         };
         input.click();
     }
@@ -1303,22 +1292,17 @@
                             <select
                                 class="flex-1 rounded-md text-xs py-1.5 px-2"
                                 style="background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-primary)"
-                                bind:value={traceManager.targetCurveType}>
-                                <option value="flat">Flat (0dB)</option>
-                                <option value="house">House curve</option>
-                                <option value="bk">B&K cinema</option>
-                                <option value="harman">Harman 2019</option>
-                                <option value="custom">Personalizada</option>
+                                value={targetTrace.name}
+                                onchange={(e) => {
+                                    const val = e.currentTarget.value;
+                                    targetTrace.applyPreset(val as any);
+                                }}>
+                                <option value="Flat">Flat (0dB)</option>
+                                <option value="House">House curve</option>
+                                <option value="BK">B&K cinema</option>
+                                <option value="Harman">Harman 2019</option>
+                                <option value="X-Curve">X-Curve</option>
                             </select>
-                            {#if traceManager.targetCurveType === 'custom'}
-                                <button
-                                    class="px-2 py-1 rounded text-[9px] font-semibold cursor-pointer flex items-center justify-center"
-                                    style="color: var(--text-muted); border: 1px solid var(--border-primary)"
-                                    onclick={importTargetCurve}
-                                    title="Importar curva target desde JSON">
-                                    <span class="material-symbols-outlined text-[11px]">upload</span>
-                                </button>
-                            {/if}
                         </div>
                     </div>
 
