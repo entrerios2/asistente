@@ -510,7 +510,8 @@ export function drawQuadrant(p: DrawParams): void {
             "Impulse",
             p.interactionState,
             p.getImpulseValueInterpolated,
-            p.hasTimeDomainActive
+            p.hasTimeDomainActive,
+            p.metricConfigs
         );
     }
 
@@ -527,7 +528,8 @@ export function drawQuadrant(p: DrawParams): void {
             "Step",
             p.interactionState,
             p.getImpulseValueInterpolated,
-            p.hasTimeDomainActive
+            p.hasTimeDomainActive,
+            p.metricConfigs
         );
     }
 

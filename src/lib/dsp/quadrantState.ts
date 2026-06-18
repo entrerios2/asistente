@@ -102,7 +102,7 @@ export const allMetrics: Metric[] = [
 
 export interface MetricConfig {
     // Magnitude/Spectrum/Simulated Magnitude
-    modeY?: 'dB' | 'Linear' | 'Impedance';
+    modeY?: 'dB' | 'Linear' | 'Impedance' | 'ETC';
     sensorResistance?: number;
     smoothingPPO?: number;
     invertY?: boolean;

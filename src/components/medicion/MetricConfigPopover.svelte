@@ -107,6 +107,7 @@
                         bind:value={metricConfigs["Phase"].unwrapMode}>
                     <option value="±180">±180º</option>
                     <option value="360">0..360º</option>
+                    <option value="Unwrap">Unwrap (continuo)</option>
                 </select>
             </div>
             
@@ -185,6 +186,24 @@
                     <option value="Hot">Hot (Térmico)</option>
                     <option value="Grayscale">Escala de Grises</option>
                 </select>
+            </div>
+        {/if}
+
+        {#if activeConfigMetric === "Impulse"}
+            <!-- Configuración de Impulso -->
+            <div class="flex flex-col gap-1">
+                <span class="text-gray-400 font-medium">Configuración de Impulso</span>
+                <label class="flex items-center gap-2 cursor-pointer text-gray-300 py-1">
+                    <input type="checkbox" 
+                           checked={metricConfigs["Impulse"]?.modeY === 'ETC'}
+                           onchange={(e) => {
+                               metricConfigs["Impulse"] = {
+                                   ...metricConfigs["Impulse"],
+                                   modeY: e.currentTarget.checked ? 'ETC' : 'Linear'
+                               };
+                           }} />
+                    <span>ETC (dB)</span>
+                </label>
             </div>
         {/if}
 

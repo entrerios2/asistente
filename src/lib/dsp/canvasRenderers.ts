@@ -716,8 +716,27 @@ export function drawTimeDomainPath(
     metricType: string,
     state: InteractionState,
     getImpulseValueInterpolated: (timeMs: number, impulseArray: Float32Array) => number,
-    hasTimeDomainActive: boolean
+    hasTimeDomainActive: boolean,
+    metricConfigs?: Record<string, MetricConfig>
 ) {
+    let data = dataArray;
+    // ETC mode: Energy Time Curve (dB display of impulse)
+    if (metricType === "Impulse" && metricConfigs?.["Impulse"]?.modeY === 'ETC') {
+        const etcData = new Float32Array(data.length);
+        // Encontrar pico para referencia 0 dB
+        let peakVal = 0;
+        for (let i = 0; i < data.length; i++) {
+            const absVal = Math.abs(data[i]);
+            if (absVal > peakVal) peakVal = absVal;
+        }
+        const peakRef = 20 * Math.log10(peakVal + 1e-12);
+        for (let i = 0; i < data.length; i++) {
+            etcData[i] = 20 * Math.log10(Math.abs(data[i]) + 1e-12) - peakRef;
+        }
+        // Usar etcData para el renderizado con eje Y en dB (-60 a 0)
+        data = etcData;
+    }
+
     ctx.strokeStyle = color;
     ctx.lineWidth = lw;
     ctx.setLineDash(lineDash || []);
@@ -727,8 +746,8 @@ export function drawTimeDomainPath(
     for (let i = 0; i < numPoints; i++) {
         const t = timeMin + (i / (numPoints - 1)) * (timeMax - timeMin);
         const x = valToX(t, width, hasTimeDomainActive, state);
-        const val = getImpulseValueInterpolated(t, dataArray);
-        const y = valToY(val, height, metricType, {}, state);
+        const val = getImpulseValueInterpolated(t, data);
+        const y = valToY(val, height, metricType, metricConfigs || {}, state);
 
         if (x >= -50 && x <= width + 50 && y >= -50 && y <= height + 50) {
             if (first) {
@@ -911,6 +930,24 @@ export function drawPhasePath(
     const cfg = metricConfigs["Phase"] || { rotate: 0, unwrapMode: "±180", yShift: 0 };
     const magCfg = metricConfigs["Magnitude"] || { enableCoherence: false, coherenceThreshold: 0.5 };
 
+    // Phase unwrap mode
+    const phaseMode = cfg.unwrapMode || '±180';
+    let phaseToRender = interpPhase;
+
+    if (phaseMode === 'Unwrap') {
+        const unwrapped = new Float32Array(interpPhase.length);
+        unwrapped[0] = interpPhase[0];
+        let accumulated = interpPhase[0];
+        for (let k = 1; k < interpPhase.length; k++) {
+            let diff = interpPhase[k] - interpPhase[k - 1];
+            if (diff > 180) diff -= 360;
+            if (diff < -180) diff += 360;
+            accumulated += diff;
+            unwrapped[k] = accumulated;
+        }
+        phaseToRender = unwrapped;
+    }
+
     const path = new Path2D();
     let lastY = 0;
     let first = true;
@@ -925,7 +962,7 @@ export function drawPhasePath(
             continue;
         }
 
-        let val = interpPhase[binIndex];
+        let val = phaseToRender[binIndex];
         
         // Rotar fase
         val = val + (cfg.rotate || 0);
@@ -933,6 +970,8 @@ export function drawPhasePath(
         // Envoltura/Unwrap mode
         if (cfg.unwrapMode === "360") {
             val = ((val % 360) + 360) % 360;
+        } else if (cfg.unwrapMode === "Unwrap") {
+            // No wrapping
         } else {
             val = (val + 180) % 360;
             if (val < 0) val += 360;
