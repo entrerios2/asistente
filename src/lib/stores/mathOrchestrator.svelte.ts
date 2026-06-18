@@ -34,6 +34,13 @@ class MathOrchestrator {
     hReal = $state.raw(new Float32Array(this.BINS));
     hImag = $state.raw(new Float32Array(this.BINS));
 
+    // Dual-channel time-domain buffers (recibidos del HAL)
+    private measTimeDomain: Float32Array | null = null;
+    private refTimeDomain: Float32Array | null = null;
+
+    // Auto delay compensation tracking
+    compensationDelaySamples = 0;
+
     // Cache for EQ response
     eqResponseCache = new Float32Array(this.BINS);
     private lastBandsHash = 0;
@@ -78,7 +85,7 @@ class MathOrchestrator {
         }
         const intervalMs = 1000 / rate;
         this.timerId = setInterval(() => {
-            this.run(traceManager.liveFrequencyData);
+            this.run();
         }, intervalMs);
     }
 
@@ -100,11 +107,14 @@ class MathOrchestrator {
                 this.hImag = new Float32Array(data.hImag);
             }
             
-            // PROPAGAR VÚMETROS DINÁMICAMENTE CONFORME A LOS CANALES ACTIVOS (PROMPT 7)
-            const inChCount = uiStore.inChannels.filter(Boolean).length || 2;
-            const outChCount = uiStore.outChannels.filter(Boolean).length || 2;
-            meterStore.updateIn(Array.from({ length: inChCount }, () => data.dbIn));
-            meterStore.updateOut(Array.from({ length: outChCount }, () => data.dbIn));
+            // Meters independientes por canal
+            meterStore.updateIn([data.refPeakDb ?? -60]);
+            meterStore.updateOut([data.measPeakDb ?? -60]);
+
+            // Auto delay compensation
+            if (data.detectedDelaySamples !== undefined) {
+                this.compensationDelaySamples = data.detectedDelaySamples;
+            }
             
             // ESCRIBIR EN LA CAPA ACTIVA BAJO MEDICIÓN (PROMPT 6)
             const activeLayer = traceManager.layers.find(l => l.isMeasuring && l.id === uiStore.activeLayerId);
@@ -133,6 +143,15 @@ class MathOrchestrator {
 
     unregisterQuadrant(id: string) {
         delete this.activeMetricsByQuadrant[id];
+    }
+
+    /**
+     * Recibe datos time-domain dual-channel del HAL y dispara el pipeline DSP.
+     */
+    feedTimeDomain(measSamples: Float32Array, refSamples?: Float32Array): void {
+        this.measTimeDomain = measSamples;
+        this.refTimeDomain = refSamples || measSamples;
+        this.dirty = true;
     }
 
     globalActiveMetrics = $derived.by(() => {
@@ -286,58 +305,48 @@ class MathOrchestrator {
         return this.eqResponseCache[idx];
     }
 
-    run(liveData: Float32Array | null) {
+    run() {
         this.checkDirty();
 
-        const isMeasuring = uiStore.isMeasuring;
+        // Sin datos time-domain, no procesamos
+        if (!this.measTimeDomain || !this.refTimeDomain) {
+            return;
+        }
 
-        // If not measuring and not dirty, skip calculation
-        if (!isMeasuring && !this.dirty) {
+        if (!this.dirty) {
             return;
         }
 
         this.lastMathTime = performance.now();
 
         if (this.worker) {
-            // Web Worker asynchronous calculation (main path)
-            let liveDataTransfer: ArrayBuffer | undefined = undefined;
-            if (liveData && liveData.length > 0) {
-                const copy = new Float32Array(liveData);
-                liveDataTransfer = copy.buffer;
-            }
+            const measCopy = new Float32Array(this.measTimeDomain);
+            const refCopy = new Float32Array(this.refTimeDomain);
 
             this.worker.postMessage({
                 type: 'run-dsp',
-                liveData: liveDataTransfer,
+                measTimeDomain: measCopy.buffer,
+                refTimeDomain: refCopy.buffer,
                 BINS: this.BINS,
                 FFT_SIZE: this.FFT_SIZE,
-                eqResponseCache: this.eqResponseCache,
-                eqBands: [],  // EQ must NOT enter measurement pipeline — it's visualization only
-                calibrationFilters: $state.snapshot(calibrationStore.suggestedFilters),
-                calibrationPoints: $state.snapshot(calibrationStore.calibrationPoints),
-                inputGain: uiStore.inputGain,
-                displayOffset: uiStore.displayOffset,
-                isMeasuring,
                 metrics: Array.from(this.globalActiveMetrics),
+                windowType: uiStore.windowType,
                 weightingType: uiStore.weightingType,
                 averagingType: uiStore.averagingType,
                 averagingDepth: uiStore.averagingDepth,
                 averagingAlpha: uiStore.averagingAlpha,
-                windowType: uiStore.windowType,
                 enableSourceWindow: uiStore.enableSourceWindow,
                 sourceWindowWidthMs: uiStore.sourceWindowWidthMs,
                 sourceWindowOffsetMs: uiStore.sourceWindowOffsetMs,
                 sampleRate: uiStore.sampleRate,
-            }, liveDataTransfer ? [liveDataTransfer] : []);
+                compensationDelaySamples: uiStore.autoDelayCompensation
+                    ? this.compensationDelaySamples
+                    : Math.round(uiStore.compensationDelayMs * uiStore.sampleRate / 1000),
+                autoDelayCompensation: uiStore.autoDelayCompensation,
+            }, [measCopy.buffer, refCopy.buffer]);
 
-            if (this.dirty) {
-                this.dirty = false;
-            }
-            return;
+            this.dirty = false;
         }
-
-        // Sin Worker disponible — no procesar
-        return;
     }
 }
 
