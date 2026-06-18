@@ -12,6 +12,7 @@ import {
     type InteractionState
 } from './canvasInteraction';
 import { palettes, type PaletteType } from './colorPalettes';
+import { type MetricConfig } from './quadrantState';
 
 
 export function drawGrid(
@@ -20,7 +21,7 @@ export function drawGrid(
     height: number,
     hasTimeDomainActive: boolean,
     activeMetrics: string[],
-    metricConfigs: Record<string, any>,
+    metricConfigs: Record<string, MetricConfig>,
     state: InteractionState,
     isDarkMode: boolean
 ) {
@@ -538,7 +539,7 @@ export function drawMetricPath(
     metricType: string,
     frequencyLUT: Int32Array,
     interpCoherence: Float32Array,
-    metricConfigs: Record<string, any>,
+    metricConfigs: Record<string, MetricConfig>,
     state: InteractionState,
     getPPOSmoothedValue: (binIndex: number, dataArray: Float32Array, ppo: number) => number,
     sampleRate: number = 48000
@@ -561,10 +562,10 @@ export function drawMetricPath(
         if (x < -10 || x > width + 10) continue;
 
         // Coherence threshold masking (si aplica)
-        if (cfg && cfg.enableCoherence && interpCoherence[bin] < cfg.coherenceThreshold) continue;
+        if (cfg && cfg.enableCoherence && interpCoherence[bin] < (cfg.coherenceThreshold ?? 0.5)) continue;
 
         let val = (cfg && cfg.smoothingPPO)
-            ? getPPOSmoothedValue(bin, dataArray, cfg.smoothingPPO)
+            ? getPPOSmoothedValue(bin, dataArray, cfg.smoothingPPO ?? 48)
             : dataArray[bin];
 
         // Coherence transformations
@@ -611,7 +612,7 @@ export function drawMetricPath(
     if (metricType === "Coherence") {
         const cohCfg = metricConfigs["Coherence"];
         if (cohCfg && cohCfg.showThresholdLine) {
-            const thY = valToY(cohCfg.thresholdValue, height, "Coherence", metricConfigs, state);
+            const thY = valToY(cohCfg.thresholdValue ?? 0.5, height, "Coherence", metricConfigs, state);
             ctx.strokeStyle = cohCfg.thresholdColor || "#eab308";
             ctx.lineWidth = 1;
             ctx.setLineDash([2, 4]);
@@ -635,7 +636,7 @@ export function drawSpectrumPath(
     frequencyLUT: Int32Array,
     interpCoherence: Float32Array,
     interpMagnitude: Float32Array,
-    metricConfigs: Record<string, any>,
+    metricConfigs: Record<string, MetricConfig>,
     state: InteractionState,
     getPPOSmoothedValue: (binIndex: number, dataArray: Float32Array, ppo: number) => number,
     bins: number,
@@ -662,7 +663,7 @@ export function drawSpectrumPath(
         if (x < -10 || x > width + 10) continue;
 
         // Coherence threshold masking for Spectrum
-        if (cfg.enableCoherence && interpCoherence[bin] < cfg.coherenceThreshold) continue;
+        if (cfg.enableCoherence && interpCoherence[bin] < (cfg.coherenceThreshold ?? 0.5)) continue;
 
         let val = 0;
         if (hasLive) {
@@ -673,7 +674,7 @@ export function drawSpectrumPath(
         }
 
         // Smooth using PPO
-        val = getPPOSmoothedValue(bin, hasLive ? dataArray : interpMagnitude, cfg.smoothingPPO) + (hasLive ? 0 : offset);
+        val = getPPOSmoothedValue(bin, hasLive ? dataArray : interpMagnitude, cfg.smoothingPPO ?? 48) + (hasLive ? 0 : offset);
 
         // Mode Y transformations
         if (cfg.modeY === "Linear") {
@@ -750,7 +751,7 @@ export function drawSimulatedMagnitudePath(
     frequencyLUT: Int32Array,
     interpCoherence: Float32Array,
     interpMagnitude: Float32Array,
-    metricConfigs: Record<string, any>,
+    metricConfigs: Record<string, MetricConfig>,
     state: InteractionState,
     getPPOSmoothedValue: (binIndex: number, dataArray: Float32Array, ppo: number) => number,
     getEQResponseCached: (f: number) => number,
@@ -779,9 +780,9 @@ export function drawSimulatedMagnitudePath(
         if (x - prevX < 2 && prevX > -100) continue;
         prevX = x;
 
-        if (cfg.enableCoherence && interpCoherence[bin] < cfg.coherenceThreshold) continue;
+        if (cfg.enableCoherence && interpCoherence[bin] < (cfg.coherenceThreshold ?? 0.5)) continue;
 
-        let val = getPPOSmoothedValue(bin, interpMagnitude, cfg.smoothingPPO);
+        let val = getPPOSmoothedValue(bin, interpMagnitude, cfg.smoothingPPO ?? 48);
         const f = freq || 1e-6;
         val = val + getEQResponseCached(f);
 
@@ -899,7 +900,7 @@ export function drawPhasePath(
     style: { color: string, lineWidth: number, lineDash: number[] },
     frequencyLUT: Int32Array,
     interpPhase: Float32Array,
-    metricConfigs: Record<string, any>,
+    metricConfigs: Record<string, MetricConfig>,
     state: InteractionState,
     interpCoherence?: Float32Array
 ) {
@@ -919,7 +920,7 @@ export function drawPhasePath(
         if (binIndex === undefined) continue;
 
         // Masking by coherence (Prompt 11 parity)
-        if (interpCoherence && magCfg.enableCoherence && interpCoherence[binIndex] < magCfg.coherenceThreshold) {
+        if (interpCoherence && magCfg.enableCoherence && interpCoherence[binIndex] < (magCfg.coherenceThreshold ?? 0.5)) {
             first = true;
             continue;
         }
@@ -997,7 +998,7 @@ export function drawPhaseDelay(
     color: string,
     lw: number,
     frequencyLUT: Int32Array,
-    metricConfigs: Record<string, any>,
+    metricConfigs: Record<string, MetricConfig>,
     state: InteractionState,
     bins: number,
     sampleRate: number = 48000
@@ -1041,7 +1042,7 @@ export function drawEQOverlayPath(
     width: number,
     height: number,
     style: { color: string, lineWidth: number, lineDash: number[] },
-    metricConfigs: Record<string, any>,
+    metricConfigs: Record<string, MetricConfig>,
     state: InteractionState,
     getEQResponseCached: (f: number) => number,
     bins: number,

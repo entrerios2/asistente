@@ -7,7 +7,7 @@
 
     import { targetTrace } from "$lib/stores/targetTrace.svelte";
     import { palettes, type PaletteType } from "$lib/dsp/colorPalettes";
-    import { allMetrics, defaultMetricStyles, defaultMetricConfigs } from "$lib/dsp/quadrantState";
+    import { allMetrics, defaultMetricStyles, defaultMetricConfigs, type MetricConfig } from "$lib/dsp/quadrantState";
 
     import ZoomControls from "./ZoomControls.svelte";
     import GlobalConfigPopover from "./GlobalConfigPopover.svelte";
@@ -88,7 +88,7 @@
     );
 
     let activeConfigMetric = $state<string | null>(null);
-    let metricConfigs = $state<Record<string, any>>(
+    let metricConfigs = $state<Record<string, MetricConfig>>(
         JSON.parse(JSON.stringify(defaultMetricConfigs))
     );
 

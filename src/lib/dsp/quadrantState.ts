@@ -100,6 +100,29 @@ export const allMetrics: Metric[] = [
     },
 ];
 
+export interface MetricConfig {
+    // Magnitude/Spectrum/Simulated Magnitude
+    modeY?: 'dB' | 'Linear' | 'Impedance';
+    sensorResistance?: number;
+    smoothingPPO?: number;
+    invertY?: boolean;
+    enableCoherence?: boolean;
+    coherenceThreshold?: number;
+    yShift?: number;
+    hidden?: boolean;
+    // Phase
+    unwrapMode?: '±180' | '360' | 'Unwrap';
+    rotate?: number;
+    range?: number;
+    // Coherence
+    cohType?: string;
+    showThresholdLine?: boolean;
+    thresholdColor?: string;
+    thresholdValue?: number;
+    // Spectrogram
+    palette?: PaletteType;
+}
+
 export interface MetricStyle {
     color: string;
     lineWidth: number;
@@ -117,7 +140,7 @@ export const defaultMetricStyles: Record<string, MetricStyle> = {
     "Simulated Magnitude": { color: "#00ffff", lineWidth: 1, lineDash: [4, 4] },
 };
 
-export const defaultMetricConfigs: Record<string, any> = {
+export const defaultMetricConfigs: Record<string, MetricConfig> = {
     "Spectrum": { modeY: "dB", sensorResistance: 10, smoothingPPO: 48, invertY: false, enableCoherence: false, coherenceThreshold: 0.5, yShift: 0 },
     "Magnitude": { modeY: "dB", sensorResistance: 10, smoothingPPO: 48, invertY: false, enableCoherence: false, coherenceThreshold: 0.5, yShift: 0 },
     "Simulated Magnitude": { modeY: "dB", sensorResistance: 10, smoothingPPO: 48, invertY: false, enableCoherence: false, coherenceThreshold: 0.5, yShift: 0 },

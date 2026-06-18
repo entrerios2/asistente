@@ -1,3 +1,5 @@
+import { type MetricConfig } from './quadrantState';
+
 export const freqMin = 10;    // Hz (sub-bajo audible)
 export const freqMax = 22000; // Hz (cercano a Nyquist @ 44.1kHz)
 export const timeMin = -10; // ms
@@ -69,7 +71,7 @@ export function clampPan(
     height: number,
     hasTimeDomainActive: boolean,
     metricType: string,
-    metricConfigs: Record<string, any>
+    metricConfigs: Record<string, MetricConfig>
 ): void {
     // Clamp eje X (solo en modo frecuencia)
     if (!hasTimeDomainActive) {
@@ -89,7 +91,7 @@ export function valToY(
     val: number,
     height: number,
     metricType: string,
-    metricConfigs: Record<string, any>,
+    metricConfigs: Record<string, MetricConfig>,
     state: InteractionState
 ): number {
     let min = dbMin,
@@ -111,8 +113,9 @@ export function valToY(
         }
     } else if (metricType === "Phase") {
         const phaseCfg = metricConfigs["Phase"] || { range: 360 };
-        min = -phaseCfg.range / 2;
-        max = phaseCfg.range / 2;
+        const rangeVal = phaseCfg.range ?? 360;
+        min = -rangeVal / 2;
+        max = rangeVal / 2;
     } else if (metricType === "Coherence") {
         const cohCfg = metricConfigs["Coherence"] || { cohType: "normal" };
         if (cohCfg.cohType === "SNR") {
@@ -179,7 +182,7 @@ export function handleWheel(
     containerWidth: number,
     containerHeight: number,
     activeMetrics: string[],
-    metricConfigs: Record<string, any>,
+    metricConfigs: Record<string, MetricConfig>,
     hasTimeDomainActive: boolean
 ): void {
     e.preventDefault();
@@ -240,7 +243,7 @@ export function handleMouseMove(
     containerHeight: number,
     hasTimeDomainActive: boolean,
     activeMetrics: string[],
-    metricConfigs: Record<string, any>
+    metricConfigs: Record<string, MetricConfig>
 ) {
     const rect = canvasElement.getBoundingClientRect();
     state.mouseX = e.clientX - rect.left;
@@ -299,7 +302,7 @@ export function handleTouchMove(
     state: InteractionState,
     canvasElement: HTMLCanvasElement,
     activeMetrics: string[],
-    metricConfigs: Record<string, any>
+    metricConfigs: Record<string, MetricConfig>
 ) {
     const rect = canvasElement.getBoundingClientRect();
     if (e.touches.length === 1 && state.isDragging) {
@@ -334,7 +337,7 @@ export function handleTouchEnd(
     height: number,
     hasTimeDomainActive: boolean,
     activeMetrics: string[],
-    metricConfigs: Record<string, any>
+    metricConfigs: Record<string, MetricConfig>
 ) {
     state.isDragging = false;
     state.isPinching = false;
@@ -349,7 +352,7 @@ export function handleMouseUp(
     height: number,
     hasTimeDomainActive: boolean,
     activeMetrics: string[],
-    metricConfigs: Record<string, any>
+    metricConfigs: Record<string, MetricConfig>
 ): void {
     state.isDragging = false;
     const refMetric = activeMetrics.find(m => m !== "Phase") || "Magnitude";

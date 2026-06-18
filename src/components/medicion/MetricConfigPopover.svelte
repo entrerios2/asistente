@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { type MetricConfig } from '$lib/dsp/quadrantState';
+
     let {
         activeConfigMetric = $bindable(),
         metricConfigs = $bindable(),
@@ -7,7 +9,7 @@
         onRemoveMetric
     }: {
         activeConfigMetric: string | null;
-        metricConfigs: Record<string, any>;
+        metricConfigs: Record<string, MetricConfig>;
         metricStyles: Record<string, { color: string; lineWidth: number; lineDash: number[] }>;
         onClose: () => void;
         onRemoveMetric: (name: string) => void;
