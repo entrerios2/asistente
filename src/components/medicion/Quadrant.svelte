@@ -148,18 +148,10 @@
         [8, 3, 2, 3] // Capa 4: guión-punto
     ];
 
-    // Visual coding: colores por tipo de métrica
-    const METRIC_COLORS: Record<string, string> = {
-        'Magnitude': '#ff4444',
-        'Phase': '#d946ef',
-        'Coherence': '#eab308',
-        'Group Delay': '#3b82f6',
-        'Impulse': '#14b8a6',
-        'Step': '#10b981',
-        'Spectrum': '#a855f7',
-        'Scope': '#06b6d4',
-        'Crest Factor': '#f97316',
-    };
+    // Visual coding: colores por tipo de métrica (derivados de allMetrics)
+    const METRIC_COLORS: Record<string, string> = Object.fromEntries(
+        allMetrics.map(m => [m.name, m.color])
+    );
 
     $effect(() => {
         frequencyLUT = rebuildFrequencyLUT(containerWidth, interactionState, interpEngine.BINS, uiStore.sampleRate);
@@ -517,12 +509,7 @@
                 ctx.globalAlpha = op * getMetricAlpha(metric);
 
                 // Color reservado para la métrica
-                let color = "#ff4444"; // Magnitud por defecto
-                if (metric === "Phase") color = "#d946ef";
-                else if (metric === "Coherence") color = "#eab308";
-                else if (metric === "Spectrum") color = "#a855f7";
-                else if (metric === "Group Delay") color = "#10b981";
-                else if (metric === "Simulated Magnitude") color = "#00ffff";
+                const color = metricStyles[metric]?.color || METRIC_COLORS[metric] || '#ff4444';
 
                 const isLive = layer.isMeasuring;
                 
@@ -616,12 +603,7 @@
                 ctx.globalAlpha = op * getMetricAlpha(metric);
 
                 // Color reservado para la métrica
-                let color = "#ff4444";
-                if (metric === "Phase") color = "#d946ef";
-                else if (metric === "Coherence") color = "#eab308";
-                else if (metric === "Spectrum") color = "#a855f7";
-                else if (metric === "Group Delay") color = "#10b981";
-                else if (metric === "Simulated Magnitude") color = "#00ffff";
+                const color = metricStyles[metric]?.color || METRIC_COLORS[metric] || '#ff4444';
 
                 // Extraer el buffer específico de esta métrica desde la instantánea multimétrica
                 const bufferToDraw = snap.data[metric];
