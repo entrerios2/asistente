@@ -54,45 +54,77 @@ let outputCrestFactor: Float32Array;
 let avgHReal: Float32Array;
 let avgHImag: Float32Array;
 
-// Coherence accumulator state
-let cohGxx: Float32Array;
-let cohGyy: Float32Array;
-let cohGxyR: Float32Array;
-let cohGxyI: Float32Array;
-let cohAlpha = 0.1;
+// --- Coherence FIFO circular (como OSM) ---
+const COH_DEFAULT_DEPTH = 21; // OSM default
+let cohDepth = COH_DEFAULT_DEPTH;
+let cohPointer = 0;
+
+// Buffers FIFO: [depth][bins] para Grr, Gmm, Grm (complejo)
+let cohFifoGrr: Float32Array[] = [];
+let cohFifoGmm: Float32Array[] = [];
+let cohFifoGrmR: Float32Array[] = [];
+let cohFifoGrmI: Float32Array[] = [];
+
+// Acumuladores (suma de todas las depth snapshots)
+let cohSumGrr: Float32Array;
+let cohSumGmm: Float32Array;
+let cohSumGrmR: Float32Array;
+let cohSumGrmI: Float32Array;
+
+function initCoherenceFIFO(bins: number, depth: number): void {
+    cohDepth = depth;
+    cohPointer = 0;
+    cohFifoGrr = Array.from({ length: depth }, () => new Float32Array(bins));
+    cohFifoGmm = Array.from({ length: depth }, () => new Float32Array(bins));
+    cohFifoGrmR = Array.from({ length: depth }, () => new Float32Array(bins));
+    cohFifoGrmI = Array.from({ length: depth }, () => new Float32Array(bins));
+    cohSumGrr = new Float32Array(bins);
+    cohSumGmm = new Float32Array(bins);
+    cohSumGrmR = new Float32Array(bins);
+    cohSumGrmI = new Float32Array(bins);
+}
+
+function feedCoherenceFIFO(
+    refR: Float32Array, refI: Float32Array,
+    measR: Float32Array, measI: Float32Array,
+    bins: number
+): void {
+    const p = cohPointer;
+    for (let k = 0; k < bins; k++) {
+        const rr = refR[k] * refR[k] + refI[k] * refI[k];
+        const mm = measR[k] * measR[k] + measI[k] * measI[k];
+        const rmR = refR[k] * measR[k] + refI[k] * measI[k]; // conj(ref) * meas
+        const rmI = refR[k] * measI[k] - refI[k] * measR[k];
+
+        // Subtract old snapshot, add new (running sum)
+        cohSumGrr[k]  += rr  - cohFifoGrr[p][k];
+        cohSumGmm[k]  += mm  - cohFifoGmm[p][k];
+        cohSumGrmR[k] += rmR - cohFifoGrmR[p][k];
+        cohSumGrmI[k] += rmI - cohFifoGrmI[p][k];
+
+        // Store in FIFO slot
+        cohFifoGrr[p][k]  = rr;
+        cohFifoGmm[p][k]  = mm;
+        cohFifoGrmR[p][k] = rmR;
+        cohFifoGrmI[p][k] = rmI;
+    }
+    cohPointer = (p + 1) % cohDepth;
+}
+
+function computeCoherenceFIFO(output: Float32Array, bins: number): void {
+    for (let k = 0; k < bins; k++) {
+        const crmMagSq = cohSumGrmR[k] * cohSumGrmR[k] + cohSumGrmI[k] * cohSumGrmI[k];
+        const denom = cohSumGrr[k] * cohSumGmm[k] + 1e-12;
+        // γ = |Σ Crm| / √(Σ Crr · Σ Cmm) — como OSM
+        output[k] = Math.min(1, Math.max(0, Math.sqrt(crmMagSq) / Math.sqrt(denom)));
+    }
+}
 
 let currentBins = 0;
 let currentFftSize = 0;
 
 let averagingProcessor: ComplexAveraging | null = null;
 const windowProcessor = new WindowFunction();
-
-function feedCoherence(
-    refR: Float32Array, refI: Float32Array,
-    measR: Float32Array, measI: Float32Array,
-    bins: number
-): void {
-    for (let k = 0; k < bins; k++) {
-        const xx = refR[k] * refR[k] + refI[k] * refI[k];
-        const yy = measR[k] * measR[k] + measI[k] * measI[k];
-        const xyR = measR[k] * refR[k] + measI[k] * refI[k];
-        const xyI = measI[k] * refR[k] - measR[k] * refI[k];
-
-        cohGxx[k] += (xx - cohGxx[k]) * cohAlpha;
-        cohGyy[k] += (yy - cohGyy[k]) * cohAlpha;
-        cohGxyR[k] += (xyR - cohGxyR[k]) * cohAlpha;
-        cohGxyI[k] += (xyI - cohGxyI[k]) * cohAlpha;
-    }
-}
-
-function computeCoherence(output: Float32Array, bins: number): void {
-    for (let k = 0; k < bins; k++) {
-        const crossMagSq = cohGxyR[k] * cohGxyR[k] + cohGxyI[k] * cohGxyI[k];
-        const denom = cohGxx[k] * cohGyy[k] + 1e-12;
-        // γ = |Gxy| / √(Gxx·Gyy) — como OSM (no γ²)
-        output[k] = Math.min(1, Math.max(0, Math.sqrt(crossMagSq) / Math.sqrt(denom)));
-    }
-}
 
 function circularShift(buffer: Float32Array, samples: number): void {
     const N = buffer.length;
@@ -165,11 +197,8 @@ self.onmessage = (event) => {
             avgHReal = new Float32Array(BINS);
             avgHImag = new Float32Array(BINS);
 
-            // Coherence accumulator
-            cohGxx = new Float32Array(BINS);
-            cohGyy = new Float32Array(BINS);
-            cohGxyR = new Float32Array(BINS);
-            cohGxyI = new Float32Array(BINS);
+            // Coherence FIFO
+            initCoherenceFIFO(BINS, averagingDepth || COH_DEFAULT_DEPTH);
 
             averagingProcessor = new ComplexAveraging(BINS, averagingDepth || 16);
         }
@@ -177,7 +206,7 @@ self.onmessage = (event) => {
         if (averagingProcessor) {
             averagingProcessor.setDepth(averagingDepth || 16);
         }
-        cohAlpha = averagingAlpha || 0.1;
+
 
         const metricsSet = new Set<string>(metrics);
 
@@ -266,9 +295,9 @@ self.onmessage = (event) => {
             );
         }
 
-        // 8. Coherencia real
-        feedCoherence(fftRefReal, fftRefImag, fftInputReal, fftInputImag, BINS);
-        computeCoherence(outputCoherence, BINS);
+        // 8. Coherencia real (FIFO circular como OSM)
+        feedCoherenceFIFO(fftRefReal, fftRefImag, fftInputReal, fftInputImag, BINS);
+        computeCoherenceFIFO(outputCoherence, BINS);
 
         // 9. Impulse Response = IFFT(H(f))
         if (needImpulse) {
