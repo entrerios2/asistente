@@ -241,7 +241,7 @@
         freq: number,
         dataArray: Float32Array,
     ): number {
-        return interpEngine.getMetricValueInterpolated(freq, dataArray);
+        return interpEngine.getMetricValueInterpolated(freq, dataArray, uiStore.sampleRate);
     }
 
     // Ayudante de interpolación circular para el dominio del tiempo
@@ -249,7 +249,7 @@
         timeMs: number,
         impulseArray: Float32Array,
     ): number {
-        return interpEngine.getImpulseValueInterpolated(timeMs, impulseArray);
+        return interpEngine.getImpulseValueInterpolated(timeMs, impulseArray, uiStore.sampleRate);
     }
 
 
@@ -352,19 +352,7 @@
         // 2. Dibujar Grilla de Fondo (encima)
         drawGrid(ctx, width, height, hasTimeDomainActive, activeMetrics, metricConfigs, interactionState, uiStore.isDarkMode);
 
-        const liveTrace = {
-            id: 'live-1',
-            name: 'Señal en Vivo',
-            type: 'live' as const,
-            metric: 'magnitude',
-            data: traceManager.liveFrequencyData,
-            color: '#ff4444',
-            style: 'solid' as const,
-            visible: true,
-            offsetY: 0,
-            timestamp: Date.now(),
-            source: 'manual' as const
-        };
+        const liveData = traceManager.liveFrequencyData;
 
         const currentVersion = mathOrchestrator.version;
         if (currentVersion !== localLastVersion) {
@@ -390,8 +378,8 @@
         }
 
         const specPPO = metricConfigs["Spectrum"]?.smoothingPPO || 48;
-        const hasLive = liveTrace && liveTrace.data && liveTrace.data.length > 0;
-        const rawSpec = hasLive ? liveTrace.data : interpEngine.interpMagnitude;
+        const hasLive = liveData && liveData.length > 0;
+        const rawSpec = hasLive ? liveData : interpEngine.interpMagnitude;
         if (activeMetrics.includes("Spectrum") && specPPO < 48) {
             for (let i = 0; i < BINS; i++) {
                 smoothedSpectrum[i] = getPPOSmoothedValue(i, rawSpec, specPPO);
@@ -428,7 +416,7 @@
 
                     // Dibujar la nueva fila en el extremo inferior usando ImageData pre-alocado para aceleración directa
                     const pixels = sharedImageData.data;
-                    const data = liveTrace.data;
+                    const data = liveData;
                     const yRow = maxHistory - 1;
                     const logMin = Math.log10(freqMin);
                     const logMax = Math.log10(freqMax);
@@ -749,7 +737,7 @@
             const style = metricStyles["Spectrum"];
             drawSpectrumPath(
                 ctx,
-                liveTrace,
+                liveData,
                 width,
                 height,
                 style.color,
@@ -968,7 +956,7 @@
                 interpEngine.interpImpulse,
                 interpEngine.interpStep,
                 spectrogramDbHistory,
-                liveTrace,
+                liveData,
                 getMetricValueInterpolated,
                 getImpulseValueInterpolated
             );

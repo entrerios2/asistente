@@ -533,6 +533,8 @@ self.onmessage = (event) => {
         const impBuf = outputImpulse.buffer;
         const stepBuf = outputStep.buffer;
         const cfBuf = outputCrestFactor.buffer;
+        const hRealBuf = hReal.buffer;
+        const hImagBuf = hImag.buffer;
 
         (self as any).postMessage({
             type: 'dsp-results',
@@ -543,8 +545,10 @@ self.onmessage = (event) => {
             outputImpulse: impBuf,
             outputStep: stepBuf,
             outputCrestFactor: cfBuf,
+            hReal: hRealBuf,
+            hImag: hImagBuf,
             dbIn
-        }, [magBuf, phaseBuf, cohBuf, gdBuf, impBuf, stepBuf, cfBuf]);
+        }, [magBuf, phaseBuf, cohBuf, gdBuf, impBuf, stepBuf, cfBuf, hRealBuf, hImagBuf]);
 
         // Reallocar buffers en el worker (los anteriores fueron transferidos)
         outputMagnitude = new Float32Array(currentBins);
@@ -554,5 +558,7 @@ self.onmessage = (event) => {
         outputImpulse = new Float32Array(currentFftSize);
         outputStep = new Float32Array(currentFftSize);
         outputCrestFactor = new Float32Array(currentBins);
+        hReal = new Float32Array(currentBins);
+        hImag = new Float32Array(currentBins);
     }
 };

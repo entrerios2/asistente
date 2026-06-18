@@ -377,7 +377,7 @@ export function drawCrosshair(
     interpImpulse: Float32Array,
     interpStep: Float32Array,
     spectrogramDbHistory: Float32Array[],
-    liveTrace: Trace | undefined,
+    liveData: Float32Array | null,
     getMetricValueInterpolated: (freq: number, dataArray: Float32Array) => number,
     getImpulseValueInterpolated: (timeMs: number, impulseArray: Float32Array) => number
 ) {
@@ -477,12 +477,12 @@ export function drawCrosshair(
         if (activeMetrics.includes("Spectrum")) {
             const val = getMetricValueInterpolated(
                 xVal,
-                liveTrace && liveTrace.data && liveTrace.data.length > 0
-                    ? liveTrace.data
+                liveData && liveData.length > 0
+                    ? liveData
                     : interpMagnitude,
             );
             const offset =
-                liveTrace && liveTrace.data && liveTrace.data.length > 0
+                liveData && liveData.length > 0
                     ? 0
                     : 68;
             ctx.fillStyle = "#a855f7";
@@ -630,7 +630,7 @@ export function drawMetricPath(
 
 export function drawSpectrumPath(
     ctx: CanvasRenderingContext2D,
-    liveTrace: Trace | undefined,
+    liveData: Float32Array | null,
     width: number,
     height: number,
     color: string,
@@ -651,9 +651,8 @@ export function drawSpectrumPath(
     
     const cfg = metricConfigs["Spectrum"] || { modeY: "dB", smoothingPPO: 48 };
     const path = new Path2D();
-    const hasLive =
-        liveTrace && liveTrace.data && liveTrace.data.length > 0;
-    const dataArray = hasLive ? liveTrace.data : interpMagnitude;
+    const hasLive = liveData && liveData.length > 0;
+    const dataArray = hasLive ? liveData : interpMagnitude;
     const offset = hasLive ? 0 : 68;
 
     // Construir array de puntos (un punto por bin FFT visible)

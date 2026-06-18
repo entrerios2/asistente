@@ -1,4 +1,4 @@
-import { palettes, type PaletteType } from "./colorPalettes";
+import { type PaletteType } from "./colorPalettes";
 
 export interface Metric {
     name: string;

@@ -42,7 +42,7 @@ class MathOrchestrator {
 
     // Worker & autonomous timer
     private worker: Worker | null = null;
-    private timerId: any = null;
+    private timerId: ReturnType<typeof setInterval> | null = null;
 
     constructor() {
         if (typeof window !== 'undefined') {
@@ -92,6 +92,12 @@ class MathOrchestrator {
             this.outputStep = new Float32Array(data.outputStep);
             if (data.outputCrestFactor) {
                 this.outputCrestFactor = new Float32Array(data.outputCrestFactor);
+            }
+            if (data.hReal) {
+                this.hReal = new Float32Array(data.hReal);
+            }
+            if (data.hImag) {
+                this.hImag = new Float32Array(data.hImag);
             }
             
             // PROPAGAR VÚMETROS DINÁMICAMENTE CONFORME A LOS CANALES ACTIVOS (PROMPT 7)
