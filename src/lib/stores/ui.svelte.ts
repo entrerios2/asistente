@@ -25,6 +25,7 @@ class UIStore {
     targetFps = $state(10);
     dspUpdateRate = $state(2); // Hz
     fftSize = $state(8192);
+    sampleRate = $state(48000); // 44100 | 48000 | 96000
 
     // Estado del Generador de Audio
     generatorType = $state('pink'); // 'pink' | 'white' | 'brown' | 'music-noise' | 'sine' | 'sweep' | 'burst' | 'sinburst' | 'mls'

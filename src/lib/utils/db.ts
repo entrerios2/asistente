@@ -2,6 +2,18 @@ const DB_NAME = 'asistente_db';
 const DB_VERSION = 1;
 const STORE_NAME = 'instantaneas';
 
+export interface SerializedInstantanea {
+    id: string;
+    name: string;
+    timestamp: number;
+    data: Record<string, ArrayBuffer | number[]>;
+    visible: boolean;
+    color: string;
+    source: 'manual' | 'secuencial';
+    metric: string;
+    offsetY: number;
+}
+
 let cachedDB: IDBDatabase | null = null;
 
 function openDB(): Promise<IDBDatabase> {
@@ -29,7 +41,7 @@ function openDB(): Promise<IDBDatabase> {
     });
 }
 
-export async function saveInstantanea(item: any): Promise<void> {
+export async function saveInstantanea(item: SerializedInstantanea): Promise<void> {
     const db = await openDB();
     return new Promise((resolve, reject) => {
         const tx = db.transaction(STORE_NAME, 'readwrite');
@@ -39,7 +51,7 @@ export async function saveInstantanea(item: any): Promise<void> {
     });
 }
 
-export async function loadAllInstantaneas(): Promise<any[]> {
+export async function loadAllInstantaneas(): Promise<SerializedInstantanea[]> {
     const db = await openDB();
     return new Promise((resolve, reject) => {
         const tx = db.transaction(STORE_NAME, 'readonly');

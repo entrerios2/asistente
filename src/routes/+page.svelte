@@ -5,6 +5,7 @@
     import ViewGrid from '../components/medicion/ViewGrid.svelte';
     import { traceManager } from '$lib/stores/traceManager.svelte';
     import { uiStore } from '$lib/stores/ui.svelte';
+    import { mathOrchestrator } from '$lib/stores/mathOrchestrator.svelte';
 
     onMount(() => {
         // Hotkeys globales
@@ -32,6 +33,11 @@
 
 <div class="app-layout">
     <Header />
+    {#if mathOrchestrator.workerError}
+        <div style="background: #dc2626; color: white; padding: 8px 16px; font-size: 12px; text-align: center; font-weight: 600;">
+            ⚠️ {mathOrchestrator.workerError}
+        </div>
+    {/if}
     <div class="app-container" style="position: relative;">
         {#if uiStore.showSidebar}
             <div class="sidebar-wrapper transition-all duration-300 ease-in-out overflow-hidden flex-shrink-0" style="width: 380px; transition: width 300ms ease, opacity 300ms ease;">

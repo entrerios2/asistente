@@ -25,6 +25,7 @@ import { deconvolve } from '../dsp/deconvolution';
 class MathOrchestrator {
     // Reactive version to notify subscribers of new calculations
     version = $state(0);
+    workerError = $state<string | null>(null);
     dirty = $state(true);
     lastMathTime = 0;
 
@@ -86,6 +87,7 @@ class MathOrchestrator {
                 };
             } catch (e) {
                 console.error('[MathOrchestrator] Error initializing dspWorker:', e);
+                this.workerError = 'No se pudo inicializar el procesador DSP. La medición no estará disponible.';
             }
         }
 
