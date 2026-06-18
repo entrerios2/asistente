@@ -544,7 +544,8 @@ export function drawMetricPath(
     interpCoherence: Float32Array,
     metricConfigs: Record<string, any>,
     state: InteractionState,
-    getPPOSmoothedValue: (binIndex: number, dataArray: Float32Array, ppo: number) => number
+    getPPOSmoothedValue: (binIndex: number, dataArray: Float32Array, ppo: number) => number,
+    sampleRate: number = 48000
 ) {
     ctx.strokeStyle = color;
     ctx.lineWidth = lw;
@@ -555,7 +556,7 @@ export function drawMetricPath(
 
     // Construir array de puntos (un punto por bin FFT visible)
     const points: {x: number, y: number}[] = [];
-    const binWidth = 24000 / dataArray.length;
+    const binWidth = (sampleRate / 2) / dataArray.length;
 
     for (let bin = 0; bin < dataArray.length; bin++) {
         const freq = bin * binWidth;
@@ -641,7 +642,8 @@ export function drawSpectrumPath(
     metricConfigs: Record<string, any>,
     state: InteractionState,
     getPPOSmoothedValue: (binIndex: number, dataArray: Float32Array, ppo: number) => number,
-    bins: number
+    bins: number,
+    sampleRate: number = 48000
 ) {
     ctx.strokeStyle = color;
     ctx.lineWidth = lw;
@@ -656,7 +658,7 @@ export function drawSpectrumPath(
 
     // Construir array de puntos (un punto por bin FFT visible)
     const points: {x: number, y: number}[] = [];
-    const binWidth = 24000 / dataArray.length;
+    const binWidth = (sampleRate / 2) / dataArray.length;
 
     for (let bin = 0; bin < dataArray.length; bin++) {
         const freq = bin * binWidth;
@@ -757,7 +759,8 @@ export function drawSimulatedMagnitudePath(
     state: InteractionState,
     getPPOSmoothedValue: (binIndex: number, dataArray: Float32Array, ppo: number) => number,
     getEQResponseCached: (f: number) => number,
-    bins: number
+    bins: number,
+    sampleRate: number = 48000
 ) {
     ctx.setLineDash(style.lineDash || []);
     ctx.strokeStyle = style.color;
@@ -766,7 +769,7 @@ export function drawSimulatedMagnitudePath(
     const cfg = metricConfigs["Simulated Magnitude"] || { modeY: "dB", smoothingPPO: 48, enableCoherence: false, coherenceThreshold: 0.5 };
     
     const path = new Path2D();
-    const sr = 48000;
+    const sr = sampleRate;
     const binWidth = sr / 2 / bins;
 
     // Pixel-distance based decimation: adapts to log scale
@@ -1001,7 +1004,8 @@ export function drawPhaseDelay(
     frequencyLUT: Int32Array,
     metricConfigs: Record<string, any>,
     state: InteractionState,
-    bins: number
+    bins: number,
+    sampleRate: number = 48000
 ) {
     if (frequencyLUT.length === 0) return;
 
@@ -1009,7 +1013,7 @@ export function drawPhaseDelay(
     ctx.lineWidth = lw;
     ctx.beginPath();
     let first = true;
-    const sr = 48000;
+    const sr = sampleRate;
     const binWidth = sr / 2 / bins;
 
     for (let x = 0; x < width; x++) {
@@ -1045,14 +1049,15 @@ export function drawEQOverlayPath(
     metricConfigs: Record<string, any>,
     state: InteractionState,
     getEQResponseCached: (f: number) => number,
-    bins: number
+    bins: number,
+    sampleRate: number = 48000
 ) {
     ctx.setLineDash(style.lineDash || []);
     ctx.strokeStyle = style.color;
     ctx.lineWidth = style.lineWidth;
 
     const path = new Path2D();
-    const sr = 48000;
+    const sr = sampleRate;
     const binWidth = sr / 2 / bins;
 
     // Pixel-distance based decimation: skip bins closer than 2px (adapts to log scale)

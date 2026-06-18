@@ -172,7 +172,7 @@
     };
 
     $effect(() => {
-        frequencyLUT = rebuildFrequencyLUT(containerWidth, interactionState, interpEngine.BINS);
+        frequencyLUT = rebuildFrequencyLUT(containerWidth, interactionState, interpEngine.BINS, uiStore.sampleRate);
     });
 
     let localLastVersion = 0;
@@ -411,7 +411,7 @@
         if (ppo >= 48) return dataArray[binIndex];
         
         const octaveFraction = 1 / ppo;
-        const binWidth = 24000 / BINS;
+        const binWidth = (uiStore.sampleRate / 2) / BINS;
         const freq = binIndex * binWidth || 1e-6;
         
         const f_start = freq * Math.pow(2, -octaveFraction / 2);
@@ -593,7 +593,7 @@
                 ctx, layer.data, width, height,
                 color, lineWidth, layer.isCalculated ? [4, 2, 1, 2] : dashPattern,
                 metricForColor, frequencyLUT, interpEngine.interpCoherence,
-                metricConfigs, interactionState, getPPOSmoothedValue
+                metricConfigs, interactionState, getPPOSmoothedValue, uiStore.sampleRate
             );
             ctx.globalAlpha = 1.0;
             if (layer.isCalculated) {
@@ -669,7 +669,8 @@
                         interpEngine.interpCoherence,
                         metricConfigs,
                         interactionState,
-                        customPPOSmooth
+                        customPPOSmooth,
+                        uiStore.sampleRate
                     );
                 }
 
@@ -687,7 +688,8 @@
                         interactionState,
                         (idx: number, arr: Float32Array) => arr[idx],
                         mathOrchestrator.getEQResponseCached.bind(mathOrchestrator),
-                        BINS
+                        BINS,
+                        uiStore.sampleRate
                     );
                 }
 
@@ -764,7 +766,8 @@
                             interactionState,
                             (idx: number, arr: Float32Array) => arr[idx],
                             mathOrchestrator.getEQResponseCached.bind(mathOrchestrator),
-                            BINS
+                            BINS,
+                            uiStore.sampleRate
                         );
                     } else {
                         drawMetricPath(
@@ -780,7 +783,8 @@
                             interpEngine.interpCoherence,
                             metricConfigs,
                             interactionState,
-                            (idx: number, arr: Float32Array) => arr[idx]
+                            (idx: number, arr: Float32Array) => arr[idx],
+                            uiStore.sampleRate
                         );
                     }
                 }
@@ -838,7 +842,8 @@
                 interactionState,
                 (idx: number, arr: Float32Array) => arr[idx],
                 mathOrchestrator.getEQResponseCached.bind(mathOrchestrator),
-                BINS
+                BINS,
+                uiStore.sampleRate
             );
         }
 
@@ -858,7 +863,8 @@
                 metricConfigs,
                 interactionState,
                 (idx: number, arr: Float32Array) => arr[idx],
-                BINS
+                BINS,
+                uiStore.sampleRate
             );
         }
 
@@ -892,7 +898,8 @@
                 interpEngine.interpCoherence,
                 metricConfigs,
                 interactionState,
-                getPPOSmoothedValue
+                getPPOSmoothedValue,
+                uiStore.sampleRate
             );
         }
 
@@ -911,7 +918,8 @@
                 interpEngine.interpCoherence,
                 metricConfigs,
                 interactionState,
-                getPPOSmoothedValue
+                getPPOSmoothedValue,
+                uiStore.sampleRate
             );
         }
 
@@ -968,7 +976,8 @@
                 frequencyLUT,
                 metricConfigs,
                 interactionState,
-                BINS
+                BINS,
+                uiStore.sampleRate
             );
         }
 
@@ -993,7 +1002,8 @@
                 { color: '#fbbf24', lineWidth: 2, lineDash: [] },
                 metricConfigs, interactionState,
                 mathOrchestrator.getEQResponseCached.bind(mathOrchestrator),
-                mathOrchestrator.BINS
+                mathOrchestrator.BINS,
+                uiStore.sampleRate
             );
 
             // Dibujar nodos de filtros

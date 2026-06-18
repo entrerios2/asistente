@@ -49,19 +49,17 @@ export class InterpolationEngine {
         }
     }
 
-    public getMetricValueInterpolated(freq: number, dataArray: Float32Array): number {
-        const sr = 48000;
+    public getMetricValueInterpolated(freq: number, dataArray: Float32Array, sampleRate: number = 48000): number {
         const bins = dataArray.length;
-        const idx = (freq * bins) / (sr / 2);
+        const idx = (freq * bins) / (sampleRate / 2);
         const i0 = Math.max(0, Math.min(bins - 1, Math.floor(idx)));
         const i1 = Math.max(0, Math.min(bins - 1, Math.ceil(idx)));
         const frac = idx - i0;
         return dataArray[i0] * (1 - frac) + dataArray[i1] * frac;
     }
 
-    public getImpulseValueInterpolated(timeMs: number, impulseArray: Float32Array): number {
+    public getImpulseValueInterpolated(timeMs: number, impulseArray: Float32Array, sampleRate: number = 48000): number {
         const size = impulseArray.length;
-        const sampleRate = 48000;
         const sampleIdx = (timeMs / 1000) * sampleRate;
 
         let idx = sampleIdx;

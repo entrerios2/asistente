@@ -209,7 +209,7 @@ class MathOrchestrator {
             if (typeof traceManager === 'undefined' || !traceManager || !traceManager.eqBands) {
                 return;
             }
-            const sr = 48000;
+            const sr = uiStore.sampleRate;
             const nyquist = sr / 2;
 
             // 1. Precompute coefficients ONCE per band (avoids recalculating sin/cos 4096× per band)
@@ -273,7 +273,7 @@ class MathOrchestrator {
     }
 
     getEQResponseCached(f: number): number {
-        const binWidth = 24000 / this.BINS;
+        const binWidth = (uiStore.sampleRate / 2) / this.BINS;
         const idx = Math.round(f / binWidth);
         if (idx < 0) return this.eqResponseCache[0];
         if (idx >= this.BINS) return this.eqResponseCache[this.BINS - 1];
@@ -321,6 +321,7 @@ class MathOrchestrator {
                 enableSourceWindow: uiStore.enableSourceWindow,
                 sourceWindowWidthMs: uiStore.sourceWindowWidthMs,
                 sourceWindowOffsetMs: uiStore.sourceWindowOffsetMs,
+                sampleRate: uiStore.sampleRate,
             }, liveDataTransfer ? [liveDataTransfer] : []);
 
             if (this.dirty) {

@@ -366,13 +366,14 @@ export function handleDoubleClick(state: InteractionState): void {
 export function rebuildFrequencyLUT(
     width: number,
     state: InteractionState,
-    bins: number
+    bins: number,
+    sampleRate: number = 48000
 ): Int32Array {
     if (width <= 0) return new Int32Array(0);
     const lut = new Int32Array(Math.round(width));
     const logMin = Math.log10(freqMin);
     const logMax = Math.log10(freqMax);
-    const binWidth = 24000 / bins; // 48000 Hz / 2 / bins
+    const binWidth = (sampleRate / 2) / bins;
 
     for (let x = 0; x < width; x++) {
         // Calcular frecuencia logarítmica correspondiente al píxel X

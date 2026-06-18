@@ -148,11 +148,11 @@ export function calculateImpulseResponse(
  * 2.2.5. Step (Respuesta al Escalón)
  * Integral temporal de la respuesta al impulso. Zero-allocation.
  */
-export function calculateStepResponse(impulseResponse: Float32Array, output: Float32Array): void {
+export function calculateStepResponse(impulseResponse: Float32Array, output: Float32Array, sampleRate: number = 48000): void {
     let cumulativeSum = 0.0;
     const N = impulseResponse.length;
     // Escalamiento del paso de integración
-    const dt = 1.0 / 48000.0; 
+    const dt = 1.0 / sampleRate; 
     for (let i = 0; i < N; i++) {
         cumulativeSum += impulseResponse[i] * dt * 1000.0; // Escalado conveniente
         output[i] = cumulativeSum;

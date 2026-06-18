@@ -4,6 +4,7 @@
  */
 
 import { peakingCoeffs, lowShelfCoeffs, highShelfCoeffs, lowpassCoeffs, highpassCoeffs, notchCoeffs, bandpassCoeffs, biquadResponse } from '../dsp/biquad';
+import { uiStore } from './ui.svelte';
 
 export interface EQFilter {
     frequency: number;
@@ -24,7 +25,6 @@ export class CalibrationStore {
     targetCurve = $state<Float32Array>(new Float32Array(1024));
     suggestedFilters = $state<EQFilter[]>([]);
     agnosticMode = $state<boolean>(false);
-    sampleRate = $state<number>(48000);
 
     // Curva de calibración de micrófono cargada de archivos (.cal / .txt)
     calibrationPoints = $state<CalibrationPoint[]>([]);
@@ -35,7 +35,7 @@ export class CalibrationStore {
         const bins = this.measuredCurve.length;
 
         for (let i = 0; i < bins; i++) {
-            const freq = (i * (this.sampleRate / 2)) / bins || 1e-6;
+            const freq = (i * (uiStore.sampleRate / 2)) / bins || 1e-6;
             
             // Sumamos el impacto de todos los biquads activos en cascada
             let totalFilterGain = 0;
@@ -58,7 +58,7 @@ export class CalibrationStore {
         const bins = this.measuredCurve.length;
 
         for (let i = 0; i < bins; i++) {
-            const freq = (i * (this.sampleRate / 2)) / bins || 1e-6;
+            const freq = (i * (uiStore.sampleRate / 2)) / bins || 1e-6;
             
             let totalFilterGain = 0;
             for (const filter of this.suggestedFilters) {
@@ -79,7 +79,7 @@ export class CalibrationStore {
         const fc = filter.frequency;
         const G = filter.gain;
         const Q = filter.q;
-        const fs = this.sampleRate;
+        const fs = uiStore.sampleRate;
 
         switch (filter.type) {
             case 'peaking':                        return peakingCoeffs(fc, G, Q, fs);
@@ -99,7 +99,7 @@ export class CalibrationStore {
     calculateFilterGainAt(filter: EQFilter, f: number): number {
         const coeffs = this.getCoefficients(filter);
         if (!coeffs) return 0;
-        const [magDb] = biquadResponse(coeffs, f, this.sampleRate);
+        const [magDb] = biquadResponse(coeffs, f, uiStore.sampleRate);
         return magDb;
     }
 
@@ -112,7 +112,7 @@ export class CalibrationStore {
             if (filter.enabled) {
                 const coeffs = this.getCoefficients(filter);
                 if (coeffs) {
-                    const [_, phaseRad] = biquadResponse(coeffs, freq, this.sampleRate);
+                    const [_, phaseRad] = biquadResponse(coeffs, freq, uiStore.sampleRate);
                     totalPhase += phaseRad;
                 }
             }

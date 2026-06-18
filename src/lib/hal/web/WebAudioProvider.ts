@@ -32,7 +32,7 @@ export class WebAudioProvider implements AudioProvider {
 
 	async startCapture(listener: AudioListener): Promise<void> {
 		if (!this.audioContext) {
-			this.audioContext = new AudioContext({ sampleRate: 48000 });
+			this.audioContext = new AudioContext({ sampleRate: uiStore.sampleRate });
 		}
 
 		if (this.audioContext.state === 'suspended') {
@@ -59,7 +59,7 @@ export class WebAudioProvider implements AudioProvider {
 		this.freqDataArray = new Float32Array(this.analyserNode.frequencyBinCount);
 		source.connect(this.analyserNode);
 
-		const bufferSize = 48000;
+		const bufferSize = uiStore.sampleRate;
 		let writeIndex = 0;
 		const hasSAB = typeof SharedArrayBuffer !== 'undefined';
 
@@ -104,7 +104,7 @@ export class WebAudioProvider implements AudioProvider {
 
 				if (uiStore.enableLeq) {
 					if (!this.leqCalculator) {
-						this.leqCalculator = new LeqCalculator(uiStore.leqWindowSeconds, 48000);
+						this.leqCalculator = new LeqCalculator(uiStore.leqWindowSeconds, uiStore.sampleRate);
 					} else {
 						this.leqCalculator.setWindowSeconds(uiStore.leqWindowSeconds);
 					}
@@ -136,7 +136,7 @@ export class WebAudioProvider implements AudioProvider {
 
 	async playWavFile(file: File, level: number): Promise<void> {
 		if (!this.audioContext) {
-			this.audioContext = new AudioContext({ sampleRate: 48000 });
+			this.audioContext = new AudioContext({ sampleRate: uiStore.sampleRate });
 		}
 		const arrayBuffer = await file.arrayBuffer();
 		const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
@@ -159,7 +159,7 @@ export class WebAudioProvider implements AudioProvider {
 
 	playGenerator(type: SignalType, active: boolean, freq: number, level: number, routing: 'L' | 'R' | 'Stereo'): void {
 		if (!this.audioContext) {
-			this.audioContext = new AudioContext({ sampleRate: 48000 });
+			this.audioContext = new AudioContext({ sampleRate: uiStore.sampleRate });
 		}
 
 		if (this.generatorNode) {
@@ -269,7 +269,7 @@ export class WebAudioProvider implements AudioProvider {
 
 	async playSample(url: string): Promise<void> {
 		if (!this.audioContext) {
-			this.audioContext = new AudioContext({ sampleRate: 48000 });
+			this.audioContext = new AudioContext({ sampleRate: uiStore.sampleRate });
 		}
 
 		if (this.audioContext.state === 'suspended') {

@@ -47,7 +47,7 @@ interface CalibrationPoint {
     gain: number;
 }
 
-function getPhaseValueRadians(freq: number, isMeasuring: boolean, eqBands: EQBand[], calibrationFilters: EQFilter[]): number {
+function getPhaseValueRadians(freq: number, isMeasuring: boolean, eqBands: EQBand[], calibrationFilters: EQFilter[], sampleRate: number): number {
     const delayMs = 1.4;
     let phase = -2 * Math.PI * freq * (delayMs / 1000);
 
@@ -58,7 +58,7 @@ function getPhaseValueRadians(freq: number, isMeasuring: boolean, eqBands: EQBan
             const G = band.gain;
             const Q = band.q;
             const A = Math.pow(10, G / 40);
-            const w0 = 2 * Math.PI * fc / 48000;
+            const w0 = 2 * Math.PI * fc / sampleRate;
             const sinW0 = Math.sin(w0);
             const cosW0 = Math.cos(w0);
             
@@ -82,7 +82,7 @@ function getPhaseValueRadians(freq: number, isMeasuring: boolean, eqBands: EQBan
                 const sqrtA2alpha = 2 * Math.sqrt(A) * alpha;
                 b0 = A * ((A + 1) + (A - 1) * cosW0 + sqrtA2alpha);
                 b1 = -2 * A * ((A - 1) + (A + 1) * cosW0);
-                b2 = A * ((A + 1) + (A - 1) * cosW0 - sqrtA2alpha);
+                b2 = A * ((A + 1) - (A - 1) * cosW0 - sqrtA2alpha);
                 a0 = (A + 1) - (A - 1) * cosW0 + sqrtA2alpha;
                 a1 = 2 * ((A - 1) - (A + 1) * cosW0);
                 a2 = (A + 1) - (A - 1) * cosW0 - sqrtA2alpha;
@@ -109,7 +109,7 @@ function getPhaseValueRadians(freq: number, isMeasuring: boolean, eqBands: EQBan
                 a0 = 1 + alpha / A; a1 = -2 * cosW0; a2 = 1 - alpha / A;
             }
 
-            const w = 2 * Math.PI * freq / 48000;
+            const w = 2 * Math.PI * freq / sampleRate;
             const cosW = Math.cos(w);
             const sinW = Math.sin(w);
             const cos2W = Math.cos(2 * w);
@@ -131,7 +131,7 @@ function getPhaseValueRadians(freq: number, isMeasuring: boolean, eqBands: EQBan
                 const G = filter.gain;
                 const Q = filter.q;
                 const A = Math.pow(10, G / 40);
-                const w0 = 2 * Math.PI * fc / 48000;
+                const w0 = 2 * Math.PI * fc / sampleRate;
                 const sinW0 = Math.sin(w0);
                 const cosW0 = Math.cos(w0);
                 
@@ -164,7 +164,7 @@ function getPhaseValueRadians(freq: number, isMeasuring: boolean, eqBands: EQBan
                     a2 = (A + 1) - (A - 1) * cosW0 - sqrtA2alpha;
                 }
 
-                const w = 2 * Math.PI * freq / 48000;
+                const w = 2 * Math.PI * freq / sampleRate;
                 const cosW = Math.cos(w);
                 const sinW = Math.sin(w);
                 const cos2W = Math.cos(2 * w);
@@ -298,7 +298,10 @@ self.onmessage = (event) => {
             enableSourceWindow,
             sourceWindowWidthMs,
             sourceWindowOffsetMs,
+            sampleRate,
         } = event.data;
+
+        const sr = sampleRate || 48000;
 
         // WebFFT initialization if FFT_SIZE changes
         if (FFT_SIZE && FFT_SIZE !== webfftSize) {
@@ -345,7 +348,7 @@ self.onmessage = (event) => {
         const liveTraceData = liveData ? new Float32Array(liveData) : null;
 
         for (let k = 0; k < BINS; k++) {
-            const f_k = k * (24000 / BINS) || 1e-6;
+            const f_k = k * ((sr / 2) / BINS) || 1e-6;
 
             // Simulated pink noise reference
             const refDb = -50 + Math.sin(k * 0.05) * 0.5;
@@ -370,7 +373,7 @@ self.onmessage = (event) => {
                 // 4. Aplicar offset absoluto de visualización
                 liveDb += displayOffset || 0;
             } else {
-                const binWidth = 24000 / BINS;
+                const binWidth = (sr / 2) / BINS;
                 const idx = Math.max(0, Math.min(BINS - 1, Math.round(f_k / binWidth)));
                 const eqGain = eqResponseCache[idx] || 0;
                 liveDb = -50 + eqGain + Math.sin(k * 0.08) * 0.3;
@@ -381,7 +384,7 @@ self.onmessage = (event) => {
             }
 
             const liveMag = Math.pow(10, liveDb / 20);
-            const phaseTotal = getPhaseValueRadians(f_k, isMeasuring, eqBands, calibrationFilters) + refPhase;
+            const phaseTotal = getPhaseValueRadians(f_k, isMeasuring, eqBands, calibrationFilters, sr) + refPhase;
 
             fftInputReal[k] = liveMag * Math.cos(phaseTotal);
             fftInputImag[k] = liveMag * Math.sin(phaseTotal);
@@ -504,7 +507,7 @@ self.onmessage = (event) => {
 
             // Aplicar source windowing si está activo (Prompt 9)
             if (enableSourceWindow) {
-                applySourceWindow(outputImpulse, sourceWindowWidthMs, sourceWindowOffsetMs, 48000);
+                applySourceWindow(outputImpulse, sourceWindowWidthMs, sourceWindowOffsetMs, sr);
             }
             // Aplicar WindowFunction si es necesario (Prompt 9)
             if (windowType !== 'Rectangular') {
@@ -513,13 +516,13 @@ self.onmessage = (event) => {
         }
 
         if (metricsSet.has("Step")) {
-            calculateStepResponse(outputImpulse, outputStep);
+            calculateStepResponse(outputImpulse, outputStep, sr);
         }
         if (metricsSet.has("Group Delay")) {
             for (let k = 0; k < BINS; k++) {
                 tempPhaseRadians[k] = (outputPhase[k] * Math.PI) / 180;
             }
-            calculateGroupDelay(tempPhaseRadians, 24000 / BINS, outputGroupDelay);
+            calculateGroupDelay(tempPhaseRadians, (sr / 2) / BINS, outputGroupDelay);
         }
 
         // Crear copias para transferir (el worker pierde ownership)

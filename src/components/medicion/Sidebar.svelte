@@ -27,7 +27,6 @@
     let manualDelay = $state(0); // en ms
 
     // --- MODO SECUENCIAL ---
-    let sampleRate = $state(48000);
     let selectedPreset = $state("all");
     let isOffline = $state(false);
     let downloadFormat = $state("wav");
@@ -45,7 +44,7 @@
     let customBandCount = $state(false);
     let isCalculatingAutoEQ = $state(false);
     let autoEQSourceLayer = $state<string>('active');
-    const deviationTarget = $derived(traceManager.getTargetCurve(mathOrchestrator.BINS, 48000));
+    const deviationTarget = $derived(traceManager.getTargetCurve(mathOrchestrator.BINS, uiStore.sampleRate));
 
     function computeDeviationWithEQ(
         magnitude: Float32Array,
@@ -53,7 +52,7 @@
         coherence: Float32Array | null,
         bins: number
     ): DeviationResult {
-        const sampleRate = 48000;
+        const sampleRate = uiStore.sampleRate;
         const binWidth = (sampleRate / 2) / bins;
         const adjusted = new Float32Array(bins);
         for (let i = 0; i < bins; i++) {
@@ -75,7 +74,7 @@
             const points: {freq: number, dB: number}[] = data.points || data;
             const bins = mathOrchestrator.BINS;
             const curve = new Float32Array(bins);
-            const binWidth = 24000 / bins;
+            const binWidth = (uiStore.sampleRate / 2) / bins;
             for (let i = 0; i < bins; i++) {
                 const freq = i * binWidth;
                 // Interpolación lineal entre puntos
@@ -1089,7 +1088,7 @@
                                     >Tasa (kHz)</label
                                 >
                                 <select
-                                    bind:value={sampleRate}
+                                    bind:value={uiStore.sampleRate}
                                     class="w-full bg-[#121216] border border-[#1a1a24] rounded-md px-2 py-1.5 text-xs text-gray-200"
                                 >
                                     <option value={44100}>44.1 kHz</option>
