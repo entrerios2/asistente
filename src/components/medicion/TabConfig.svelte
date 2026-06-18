@@ -565,46 +565,6 @@
             </div>
         </div>
 
-        <!-- Canal de Referencia & Loopback -->
-        <div
-            class="grid grid-cols-2 gap-3 pt-2 border-t border-[#1a1a24]/20 items-center"
-        >
-            <div class="flex flex-col gap-1.5">
-                <label
-                    class="text-[10px] font-bold text-gray-500 uppercase tracking-wider"
-                    >Canal de Referencia</label
-                >
-                <select
-                    bind:value={uiStore.referenceChannel}
-                    disabled={isInternalLoopback}
-                    class="w-full bg-[#121216] border border-[#1a1a24] rounded-md px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-[#3b82f6] disabled:opacity-40"
-                >
-                    <option value="Input 1">Entrada 1 (L)</option>
-                    <option value="Input 2">Entrada 2 (R)</option>
-                    <option value="Input 3">Entrada 3</option>
-                    <option value="Input 4">Entrada 4</option>
-                    <option value="Loopback"
-                        >Loopback interno</option
-                    >
-                </select>
-            </div>
-
-            <div class="flex flex-col gap-1.5 justify-end h-full">
-                <label
-                    class="flex items-center gap-2 text-xs text-gray-300 cursor-pointer py-2"
-                >
-                    <input
-                        type="checkbox"
-                        bind:checked={isInternalLoopback}
-                        class="w-4 h-4 rounded border-[#1a1a24] bg-[#121216] text-[#3b82f6] accent-[#3b82f6] cursor-pointer"
-                    />
-                    <span class="font-semibold select-none"
-                        >Loopback interno</span
-                    >
-                </label>
-            </div>
-        </div>
-
         <!-- Routing Dual-Channel -->
         <div class="flex flex-col gap-3 pt-2 border-t border-[#1a1a24]/20">
             <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
@@ -642,6 +602,17 @@
                     </select>
                 </div>
             </div>
+
+            <label
+                class="flex items-center gap-2 text-xs text-gray-300 cursor-pointer py-1"
+            >
+                <input
+                    type="checkbox"
+                    bind:checked={isInternalLoopback}
+                    class="w-4 h-4 rounded border-[#1a1a24] bg-[#121216] text-[#3b82f6] accent-[#3b82f6] cursor-pointer"
+                />
+                <span class="font-semibold select-none">Loopback interno</span>
+            </label>
         </div>
     </div>
 
