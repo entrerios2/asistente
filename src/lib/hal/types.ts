@@ -3,6 +3,7 @@ export type AudioBufferChunk = Float32Array;
 export interface AudioListener {
 	onAudioData(data: AudioBufferChunk): void;
 	onFrequencyData?(data: Float32Array): void;
+	onTimeDomainData?(measSamples: Float32Array, refSamples?: Float32Array): void;
 }
 
 export interface AudioDevice {

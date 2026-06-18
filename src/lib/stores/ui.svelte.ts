@@ -56,6 +56,24 @@ class UIStore {
     sourceWindowWidthMs = $state(10.0);
     sourceWindowOffsetMs = $state(0.0);
 
+    // Routing de canales dual-channel
+    refChannel = $state(0);           // Canal físico para referencia (0=L, 1=R)
+    measChannel = $state(1);          // Canal físico para medición
+    channelAssignment = $state<'manual' | 'auto'>('manual');
+
+    // Modo de referencia
+    refSourceMode = $state<'channel' | 'generator-tap' | 'analytical' | 'loopback'>('channel');
+
+    // FFT overlap
+    fftOverlap = $state(0.5);        // 0, 0.5, 0.75
+
+    // Delay compensation
+    compensationDelayMs = $state(0);       // Delay manual en ms
+    autoDelayCompensation = $state(true);  // Auto-detect desde IR
+
+    // Averaging threshold
+    averagingThresholdDb = $state(-60);    // dBFS threshold para amplitude gating
+
     constructor() {
         if (typeof window !== 'undefined') {
             window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
