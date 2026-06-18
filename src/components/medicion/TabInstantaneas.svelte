@@ -1,5 +1,4 @@
 <script lang="ts">
-    import { uiStore } from "$lib/stores/ui.svelte";
     import { traceManager } from "$lib/stores/traceManager.svelte";
 
     let { statusText = $bindable("Listo para medir") } = $props();

@@ -7,6 +7,13 @@
 
     import { targetTrace } from "$lib/stores/targetTrace.svelte";
     import { palettes, type PaletteType } from "$lib/dsp/colorPalettes";
+    import { allMetrics, defaultMetricStyles, defaultMetricConfigs } from "$lib/dsp/quadrantState";
+
+    import ZoomControls from "./ZoomControls.svelte";
+    import GlobalConfigPopover from "./GlobalConfigPopover.svelte";
+    import MetricConfigPopover from "./MetricConfigPopover.svelte";
+    import AddMetricDropdown from "./AddMetricDropdown.svelte";
+    import LayerPanel from "./LayerPanel.svelte";
 
     import { InterpolationEngine } from "$lib/dsp/interpolationEngine";
     import {
@@ -76,27 +83,14 @@
     let smoothing = $state(1 / 48);
     let showSelector = $state(false);
 
-    let metricStyles = $state<Record<string, { color: string, lineWidth: number, lineDash: number[] }>>({
-        "Spectrum": { color: "#a855f7", lineWidth: 1, lineDash: [] },
-        "Magnitude": { color: "#ff4444", lineWidth: 1, lineDash: [] },
-        "Phase": { color: "#d946ef", lineWidth: 1, lineDash: [] },
-        "Coherence": { color: "#eab308", lineWidth: 1, lineDash: [] },
-        "Group Delay": { color: "#10b981", lineWidth: 1, lineDash: [] },
-        "Impulse": { color: "#3b82f6", lineWidth: 1, lineDash: [] },
-        "Step": { color: "#f97316", lineWidth: 1, lineDash: [] },
-        "Simulated Magnitude": { color: "#00ffff", lineWidth: 1, lineDash: [4, 4] },
-    });
+    let metricStyles = $state<Record<string, { color: string, lineWidth: number, lineDash: number[] }>>(
+        JSON.parse(JSON.stringify(defaultMetricStyles))
+    );
 
-    let showAddDropdown = $state(false);
     let activeConfigMetric = $state<string | null>(null);
-    let metricConfigs = $state<Record<string, any>>({
-        "Spectrum": { modeY: "dB", sensorResistance: 10, smoothingPPO: 48, invertY: false, enableCoherence: false, coherenceThreshold: 0.5, yShift: 0 },
-        "Magnitude": { modeY: "dB", sensorResistance: 10, smoothingPPO: 48, invertY: false, enableCoherence: false, coherenceThreshold: 0.5, yShift: 0 },
-        "Simulated Magnitude": { modeY: "dB", sensorResistance: 10, smoothingPPO: 48, invertY: false, enableCoherence: false, coherenceThreshold: 0.5, yShift: 0 },
-        "Phase": { unwrapMode: "±180", rotate: 0, range: 360, yShift: 0 },
-        "Coherence": { cohType: "normal", showThresholdLine: false, thresholdColor: "#eab308", thresholdValue: 0.5, yShift: 0 },
-        "Spectrogram": { palette: "Magma" as PaletteType },
-    });
+    let metricConfigs = $state<Record<string, any>>(
+        JSON.parse(JSON.stringify(defaultMetricConfigs))
+    );
 
     let frequencyLUT = $state<Int32Array>(new Int32Array(0));
     let hoverMetric = $state<string | null>(null);
@@ -136,16 +130,12 @@
         showCrosshair: false
     });
 
-    let showZoomMenu = $state(false);
-    let showLayerDropdown = $state(false);
-    let showAddLayerMenu = $state(false);
-    let showSnapshotSubmenu = $state(false);
+
 
     // Motor de interpolación
     const interpEngine = new InterpolationEngine();
 
     const quadrantLayers = $derived(traceManager.layers.filter(l => l.quadrantId === id));
-    const activeLayer = $derived(quadrantLayers.find(l => l.id === uiStore.activeLayerId));
     const myLayers = $derived(
         traceManager.layers.filter(l => l.quadrantId === id && l.visible)
     );
@@ -262,99 +252,7 @@
         return interpEngine.getImpulseValueInterpolated(timeMs, impulseArray);
     }
 
-    // Definición de las 10 métricas de OSM
-    const allMetrics = [
-        {
-            name: "Spectrum",
-            type: "frequency",
-            color: "#a855f7",
-            label: "Spectrum [Absoluto]",
-        },
-        {
-            name: "Magnitude",
-            type: "frequency",
-            color: "#ff4444",
-            label: "Magnitude [Relativo]",
-        },
-        {
-            name: "Simulated Magnitude",
-            type: "frequency",
-            color: "#00ffff",
-            label: "Magnitud Simulada (EQ)",
-        },
-        {
-            name: "Phase",
-            type: "frequency",
-            color: "#d946ef",
-            label: "Phase [Fase]",
-        },
-        {
-            name: "Coherence",
-            type: "frequency",
-            color: "#eab308",
-            label: "Coherence",
-        },
-        {
-            name: "Group Delay",
-            type: "frequency",
-            color: "#10b981",
-            label: "Group Delay",
-        },
-        {
-            name: "Spectrogram",
-            type: "frequency",
-            color: "#ec4899",
-            label: "Spectrogram 2D",
-        },
-        {
-            name: "Impulse",
-            type: "time",
-            color: "#3b82f6",
-            label: "Impulse [Tiempo]",
-        },
-        {
-            name: "Step",
-            type: "time",
-            color: "#f97316",
-            label: "Step [Escalón]",
-        },
-        {
-            name: "Level",
-            type: "visual",
-            color: "#06b6d4",
-            label: "Level [VU]",
-        },
-        {
-            name: "Numeric",
-            type: "visual",
-            color: "#14b8a6",
-            label: "Numeric [HUD]",
-        },
-        {
-            name: "Nyquist",
-            type: "frequency",
-            color: "#ffffff",
-            label: "Nyquist Plot",
-        },
-        {
-            name: "Scope",
-            type: "time",
-            color: "#00ff00",
-            label: "Oscilloscope",
-        },
-        {
-            name: "Phase Delay",
-            type: "frequency",
-            color: "#f43f5e",
-            label: "Phase Delay",
-        },
-        {
-            name: "Crest Factor",
-            type: "frequency",
-            color: "#60a5fa",
-            label: "Crest Factor",
-        },
-    ];
+
 
     // Lógica reactiva derivada para exclusiones Cartesianas
     const hasTimeDomainActive = $derived(
@@ -1194,11 +1092,6 @@
         }
     }
 
-    function onLayerDragStart(e: DragEvent, layerId: string) {
-        if (e.dataTransfer) {
-            e.dataTransfer.setData("text/plain", layerId);
-        }
-    }
 
     export function loadInstantaneaIntoLayer(layerId: string, instId: string, metric: string) {
         const inst = traceManager.instantaneas.find(i => i.id === instId);
@@ -1307,45 +1200,12 @@
         <div class="quadrant-title-group flex items-center gap-3">
             
             <!-- Botón "+ Métrica" -->
-            <div class="relative inline-block">
-                <button
-                    class="w-6 h-6 flex items-center justify-center rounded border border-[#222] text-[#00ff88] hover:bg-[#00ff88]/10 hover:border-[#00ff88]/30 transition-all cursor-pointer text-sm font-bold"
-                    onclick={(e) => { e.stopPropagation(); showAddDropdown = !showAddDropdown; }}
-                    title="Agregar Métrica"
-                >
-                    +
-                </button>
-                
-                {#if showAddDropdown}
-                    <!-- Backdrop para cerrar con un click fuera -->
-                    <div class="fixed inset-0 z-40" onclick={() => showAddDropdown = false}></div>
-                    
-                    <div class="absolute left-0 mt-1 rounded-lg p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.8)] z-50 min-w-[170px] flex flex-col gap-0.5 select-none"
-                         style="background: var(--bg-surface); border: 1px solid var(--border-primary)"
-                         onmousedown={(e) => e.stopPropagation()} onclick={(e) => e.stopPropagation()}>
-                        {#each allMetrics as m}
-                            {@const active = activeMetrics.includes(m.name)}
-                            {@const disabled = isMetricDisabled(m.name)}
-                            <button
-                                class="w-full text-left px-2 py-1 rounded-md text-[11px] font-medium flex items-center justify-between transition-colors
-                                       {active ? 'bg-[#00ff88]/10 text-[#00ff88] cursor-default' : disabled ? 'text-gray-600 cursor-not-allowed opacity-50' : 'text-gray-300 hover:bg-[#161622] hover:text-[#fff]'}"
-                                onclick={() => {
-                                    if (!active && !disabled) {
-                                        toggleMetric(m.name);
-                                        showAddDropdown = false;
-                                    }
-                                }}
-                                disabled={disabled}
-                            >
-                                <span>{m.label}</span>
-                                {#if active}
-                                    <span class="material-symbols-outlined text-xs">done</span>
-                                {/if}
-                            </button>
-                        {/each}
-                    </div>
-                {/if}
-            </div>
+            <AddMetricDropdown
+                allMetrics={allMetrics}
+                bind:activeMetrics={activeMetrics}
+                isMetricDisabled={isMetricDisabled}
+                onToggleMetric={toggleMetric}
+            />
 
             <!-- Pills compactos de métricas (solo texto, clic = config) -->
             <div class="active-metrics-badges flex items-center gap-1">
@@ -1373,143 +1233,11 @@
 
         <!-- ETIQUETA DE CAPA ACTIVA + BOTÓN DE CAPAS CON BADGE (CON ML-AUTO Y BOTÓN SETTINGS INTEGRADO) -->
         <div class="flex items-center gap-1.5 ml-auto">
-            <!-- Etiqueta de capa activa (siempre visible) -->
-            {#if activeLayer}
-                <span class="text-[9px] text-gray-400 truncate max-w-[80px]" title={activeLayer.name}>
-                    {#if activeLayer.isCalculated}<span class="text-[#a855f7] font-mono">∑</span>{/if}
-                    {activeLayer.name}
-                </span>
-            {/if}
-
-            <div class="relative">
-                <button
-                    class="flex items-center justify-center w-8 h-8 rounded-lg border border-[#1a1a24] text-gray-400 hover:text-gray-200 transition-all cursor-pointer hover:bg-[#121216] relative"
-                    onclick={(e) => { e.stopPropagation(); showLayerDropdown = !showLayerDropdown; }}
-                    title="Gestionar Capas"
-                >
-                    <span class="material-symbols-outlined text-[16px]">layers</span>
-                    {#if quadrantLayers.length > 0}
-                        <span class="absolute -top-1 -right-1 bg-[#00ff88] text-black text-[8px] font-black w-3.5 h-3.5 rounded-full flex items-center justify-center">
-                            {quadrantLayers.filter(l => l.visible).length}
-                        </span>
-                    {/if}
-                </button>
-
-                {#if showLayerDropdown}
-                    <div class="fixed inset-0 z-40" onclick={() => showLayerDropdown = false}></div>
-                    <div class="absolute right-0 mt-1 rounded-xl p-3 shadow-[0_10px_30px_#000] z-50 min-w-[200px] flex flex-col gap-1.5 select-none text-[11px]"
-                          style="background: var(--bg-surface); border: 1px solid var(--border-primary)"
-                          onmousedown={(e) => e.stopPropagation()}
-                          onclick={(e) => e.stopPropagation()}
-                          onwheel={(e) => e.stopPropagation()}>
-                        <div class="flex items-center justify-between border-b pb-1.5 mb-1" style="border-color: var(--border-primary)">
-                            <span class="font-bold text-gray-300 text-[10px] uppercase tracking-wider">Capas</span>
-                            <button onclick={() => showLayerDropdown = false} class="text-gray-500 hover:text-gray-300">
-                                <span class="material-symbols-outlined text-xs">close</span>
-                            </button>
-                        </div>
-
-                        <!-- Capa fija de EQ (siempre presente) -->
-                        <div class="flex items-center gap-1.5 px-2 py-1 rounded text-[10px]"
-                             style="background: {showEQOverlay ? '#fbbf2410' : 'transparent'}">
-                            <button
-                                class="w-4 h-4 flex items-center justify-center cursor-pointer"
-                                onclick={() => showEQOverlay = !showEQOverlay}
-                                title={showEQOverlay ? 'Ocultar ecualizador' : 'Mostrar ecualizador'}>
-                                <span class="material-symbols-outlined text-[12px]" style="color: {showEQOverlay ? '#fbbf24' : 'var(--text-muted)'}">
-                                    {showEQOverlay ? 'visibility' : 'visibility_off'}
-                                </span>
-                            </button>
-                            <span class="material-symbols-outlined text-[12px]" style="color: #fbbf24">equalizer</span>
-                            <span class="font-semibold" style="color: {showEQOverlay ? '#fbbf24' : 'var(--text-muted)'}">Ecualizador</span>
-                        </div>
-                        <div class="border-t my-0.5" style="border-color: var(--border-primary)"></div>
-
-                        {#each quadrantLayers as layer}
-                            <div class="flex items-center justify-between gap-2 py-1 px-1 rounded hover:bg-[#121216] group"
-                                 draggable="true"
-                                 ondragstart={(e) => onLayerDragStart(e, layer.id)}>
-                                <span class="text-[10px] truncate flex-1 cursor-pointer {layer.id === uiStore.activeLayerId ? 'text-[#00ff88] font-bold' : 'text-gray-300'}"
-                                      onclick={() => uiStore.activeLayerId = layer.id}>
-                                    {#if layer.isCalculated}<span class="text-[#a855f7] font-mono mr-1">∑</span>{/if}
-                                    {layer.name}
-                                </span>
-                                <div class="flex items-center gap-0.5">
-                                    <button class="p-0.5 text-gray-500 hover:text-white" onclick={() => layer.visible = !layer.visible}>
-                                        <span class="material-symbols-outlined text-[13px]">{layer.visible ? 'visibility' : 'visibility_off'}</span>
-                                    </button>
-                                    <button class="p-0.5 text-gray-500 hover:text-red-400" onclick={() => traceManager.deleteLayer(layer.id)}>
-                                        <span class="material-symbols-outlined text-[13px]">delete</span>
-                                    </button>
-                                </div>
-                            </div>
-                        {/each}
-
-                        <!-- Botón único "Agregar" con sub-menú desplegable -->
-                        <div class="border-t pt-1.5 mt-1 relative" style="border-color: var(--border-primary)">
-                            <button
-                                class="w-full text-left px-2 py-1.5 rounded text-[10px] text-[#00ff88] hover:bg-[#00ff88]/5 font-semibold flex items-center gap-1 cursor-pointer"
-                                onclick={(e) => { e.stopPropagation(); showAddLayerMenu = !showAddLayerMenu; }}>
-                                <span class="material-symbols-outlined text-[12px]">add</span>
-                                Agregar capa
-                                <span class="material-symbols-outlined text-[10px] ml-auto">expand_more</span>
-                            </button>
-                            {#if showAddLayerMenu}
-                                <div class="absolute left-0 bottom-full mb-1 rounded-lg shadow-lg z-50 min-w-[180px] py-1"
-                                     style="background: var(--bg-surface); border: 1px solid var(--border-primary)">
-                                    <button
-                                        class="w-full text-left px-3 py-1.5 text-[10px] text-[#00ff88] hover:bg-[#00ff88]/5 flex items-center gap-1.5 cursor-pointer"
-                                        onclick={() => { traceManager.addLayer(`Capa ${traceManager.layers.length + 1}`, id, 'live'); showAddLayerMenu = false; showLayerDropdown = false; }}>
-                                        <span class="material-symbols-outlined text-[12px]">podcasts</span>
-                                        Medición
-                                    </button>
-                                    <div class="relative">
-                                        <button
-                                            class="w-full text-left px-3 py-1.5 text-[10px] text-[#3b82f6] hover:bg-[#3b82f6]/5 flex items-center gap-1.5 cursor-pointer"
-                                            onclick={(e) => { e.stopPropagation(); showSnapshotSubmenu = !showSnapshotSubmenu; }}>
-                                            <span class="material-symbols-outlined text-[12px]">photo_camera</span>
-                                            Instantánea
-                                            <span class="material-symbols-outlined text-[10px] ml-auto">{showSnapshotSubmenu ? 'expand_less' : 'expand_more'}</span>
-                                        </button>
-                                        {#if showSnapshotSubmenu}
-                                            <div class="bg-[#0a0a0e] border-t py-0.5" style="border-color: var(--border-primary)">
-                                                {#each traceManager.instantaneas as inst}
-                                                    <button
-                                                        class="w-full text-left px-4 py-1 text-[9px] text-gray-300 hover:bg-[#3b82f6]/5 hover:text-white cursor-pointer truncate"
-                                                        onclick={() => {
-                                                            const layer = traceManager.addLayer(inst.name, id, 'snapshot');
-                                                            if (layer && inst.data) {
-                                                                const firstMetric = Object.values(inst.data)[0];
-                                                                if (firstMetric) {
-                                                                    traceManager.setLayerSource(layer.id, 'snapshot', firstMetric);
-                                                                }
-                                                            }
-                                                            showSnapshotSubmenu = false;
-                                                            showAddLayerMenu = false;
-                                                            showLayerDropdown = false;
-                                                        }}
-                                                        title={inst.name}
-                                                    >
-                                                        {inst.name}
-                                                    </button>
-                                                {:else}
-                                                    <span class="block px-4 py-1 text-[9px] text-gray-600 italic">Sin instantáneas</span>
-                                                {/each}
-                                            </div>
-                                        {/if}
-                                    </div>
-                                    <button
-                                        class="w-full text-left px-3 py-1.5 text-[10px] text-[#a855f7] hover:bg-[#a855f7]/5 flex items-center gap-1.5 cursor-pointer"
-                                        onclick={() => { traceManager.addCalculatedLayer('Avg', id, 'average'); showAddLayerMenu = false; showLayerDropdown = false; }}>
-                                        <span class="material-symbols-outlined text-[12px]">functions</span>
-                                        Calculada
-                                    </button>
-                                </div>
-                            {/if}
-                        </div>
-                    </div>
-                {/if}
-            </div>
+            <LayerPanel
+                quadrantId={id}
+                quadrantLayers={quadrantLayers}
+                bind:showEQOverlay={showEQOverlay}
+            />
 
             <!-- Botón settings (MOVIDO AQUÍ) -->
             <button
@@ -1536,366 +1264,27 @@
 
 
     <!-- BOTÓN ÚNICO DE ZOOM CON MENÚ -->
-    <div class="absolute left-3 bottom-3 z-20 select-none">
-        <div class="relative">
-            {#if showZoomMenu}
-                <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-                <div class="fixed inset-0 z-40" onclick={() => showZoomMenu = false}></div>
-                <div class="absolute left-0 bottom-10 rounded-lg p-1.5 shadow-xl z-50 min-w-[110px] flex flex-col gap-0.5"
-                     style="background: var(--bg-surface); border: 1px solid var(--border-primary)">
-                    {#each [
-                        { mode: 'XY' as const, label: 'Libre (XY)', icon: 'open_with' },
-                        { mode: 'X' as const, label: 'Solo Eje X', icon: 'swap_horiz' },
-                        { mode: 'Y' as const, label: 'Solo Eje Y', icon: 'swap_vert' },
-                    ] as opt}
-                        <button class="px-3 py-1.5 text-[10px] font-bold rounded transition-all cursor-pointer text-left flex items-center gap-1.5
-                                       {interactionState.zoomMode === opt.mode ? 'text-[#00ff88] bg-[#00ff88]/10' : 'text-gray-300 hover:text-white hover:bg-[#121216]'}"
-                            onclick={() => { interactionState.zoomMode = opt.mode; showZoomMenu = false; }}>
-                            <span class="material-symbols-outlined text-[14px]">{opt.icon}</span>
-                            {opt.label}
-                        </button>
-                    {/each}
-                    <div class="border-t my-0.5" style="border-color: var(--border-primary)"></div>
-                    <button class="px-3 py-1.5 text-[10px] font-bold text-[#00ff88] hover:bg-[#00ff88]/10 rounded transition-all cursor-pointer text-left"
-                        onclick={() => { handleDoubleClick(); showZoomMenu = false; }}>Restaurar</button>
-                </div>
-            {/if}
-            <button
-                class="flex items-center justify-center w-8 h-8 rounded-lg bg-[#0c0c0e] border border-[#1a1a24] text-gray-400 hover:text-white hover:border-[#00ff88] transition-all cursor-pointer shadow-lg opacity-40 hover:opacity-100"
-                onclick={() => showZoomMenu = !showZoomMenu}
-                title="Opciones de Zoom"
-            >
-                <span class="material-symbols-outlined text-[16px]">
-                    {interactionState.zoomMode === 'X' ? 'swap_horiz' : interactionState.zoomMode === 'Y' ? 'swap_vert' : 'open_with'}
-                </span>
-            </button>
-        </div>
-    </div>
+    <ZoomControls
+        bind:interactionState={interactionState}
+        onDoubleClick={handleDoubleClick}
+    />
 
     <!-- POPOVER FLOTANTE ABSOLUTO OSM (CONFIGURACIÓN GLOBAL) -->
-    {#if showSelector}
-        <!-- Capturador de clics del fondo -->
-        <!-- svelte-ignore a11y_click_events_have_key_events -->
-        <div
-            class="popover-backdrop fixed inset-0 z-30"
-            onclick={() => (showSelector = false)}
-        ></div>
-
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="selector-popover absolute right-[10px] top-[46px] rounded-xl p-4 shadow-[0_10px_30px_#000000] z-50 min-w-[200px] flex flex-col gap-3 select-none text-[11px] text-gray-200"
-             style="background: var(--bg-surface); border: 1px solid var(--border-primary)"
-             onmousedown={(e) => e.stopPropagation()}
-             onmouseup={(e) => e.stopPropagation()}
-             onmousemove={(e) => e.stopPropagation()}
-             onclick={(e) => e.stopPropagation()}
-             onwheel={(e) => e.stopPropagation()}>
-            <div class="popover-header flex items-center justify-between border-b pb-1.5" style="border-color: var(--border-primary)">
-                <span class="popover-title font-bold text-gray-300">Configuración Global</span>
-                <button
-                    class="popover-close text-gray-500 hover:text-gray-300"
-                    onclick={() => (showSelector = false)}
-                >
-                    <span class="material-symbols-outlined text-xs">close</span>
-                </button>
-            </div>
-
-            <!-- FPS de Visualización -->
-            <div class="flex flex-col gap-1">
-                <span class="text-gray-400 font-medium">FPS de Visualización ({uiStore.targetFps})</span>
-                <input
-                    type="range"
-                    min="0.5"
-                    max="60"
-                    step="1"
-                    class="accent-[#00ff88]"
-                    value={uiStore.targetFps}
-                    oninput={(e) => {
-                        uiStore.targetFps = parseFloat(e.currentTarget.value);
-                    }}
-                />
-            </div>
-
-            <!-- Suavizado Global -->
-            <div class="flex flex-col gap-1">
-                <span class="text-gray-400 font-medium">Suavizado Temporal</span>
-                <div class="smoothing-options flex gap-1 bg-[#121216] p-0.5 rounded border border-[#222]">
-                    {#each [0, 1 / 3, 1 / 12, 1 / 48] as s}
-                        <button
-                            class="smoothing-btn flex-1 py-1 rounded text-[10px] font-semibold text-center transition-all cursor-pointer
-                                   {smoothing === s ? 'bg-[#00ff88]/15 text-[#00ff88]' : 'text-gray-400 hover:text-white'}"
-                            onclick={() => (smoothing = s)}
-                        >
-                            {s === 0 ? "Off" : `1/${Math.round(1 / s)}`}
-                        </button>
-                    {/each}
-                </div>
-            </div>
-
-            <!-- Límites de Zoom y Reinicio -->
-            <div class="divider border-t my-0.5" style="border-color: var(--border-primary)"></div>
-
-            <div class="flex flex-col gap-1.5">
-                <div class="flex justify-between items-center text-gray-400">
-                    <span>Límite Zoom In</span>
-                    <span class="font-mono text-gray-300">80x</span>
-                </div>
-                <div class="flex justify-between items-center text-gray-400">
-                    <span>Límite Zoom Out</span>
-                    <span class="font-mono text-gray-300">0.1x</span>
-                </div>
-                
-                <button
-                    class="action-btn w-full flex items-center justify-center gap-1.5 mt-2 py-1.5 rounded-lg bg-[#121216] border border-[#222] hover:border-gray-500 text-gray-300 hover:text-white font-bold transition-all cursor-pointer"
-                    onclick={handleDoubleClick}
-                >
-                    <span class="material-symbols-outlined text-xs">restart_alt</span> Reiniciar Vista
-                </button>
-            </div>
-        </div>
-    {/if}
+    <GlobalConfigPopover
+        show={showSelector}
+        bind:smoothing={smoothing}
+        onClose={() => showSelector = false}
+        onResetView={handleDoubleClick}
+    />
 
     <!-- POPOVER DE CONFIGURACIÓN POR MÉTRICA (OSM PARIDAD) -->
-    {#if activeConfigMetric}
-        <!-- Backdrop para cerrar con un click fuera -->
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="fixed inset-0 z-40" onclick={() => activeConfigMetric = null}></div>
-        
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="absolute top-[46px] left-[16px] rounded-xl p-4 shadow-[0_10px_30px_#000000] z-50 min-w-[240px] flex flex-col gap-3 select-none text-[11px] text-gray-200"
-             style="background: var(--bg-surface); border: 1px solid var(--border-primary)"
-             onmousedown={(e) => e.stopPropagation()}
-             onmouseup={(e) => e.stopPropagation()}
-             onmousemove={(e) => e.stopPropagation()}
-             onclick={(e) => e.stopPropagation()}
-             onwheel={(e) => e.stopPropagation()}>
-            <div class="flex items-center justify-between border-b pb-1.5 mb-1" style="border-color: var(--border-primary)">
-                <span class="font-bold text-[#00ff88] uppercase tracking-wide">Config. {activeConfigMetric}</span>
-                <button onclick={() => activeConfigMetric = null} class="text-gray-500 hover:text-gray-300">
-                    <span class="material-symbols-outlined text-xs">close</span>
-                </button>
-            </div>
-            
-            {#if activeConfigMetric === "Magnitude" || activeConfigMetric === "Spectrum" || activeConfigMetric === "Simulated Magnitude"}
-                <!-- Modo Y -->
-                <div class="flex flex-col gap-1">
-                    <span class="text-gray-400 font-medium">Modo Eje Y</span>
-                    <select class="bg-[#121216] border border-[#222] rounded px-2 py-1 text-xs text-white focus:outline-none"
-                            bind:value={metricConfigs[activeConfigMetric].modeY}>
-                        <option value="dB">dB</option>
-                        <option value="Linear">Linear</option>
-                        <option value="Impedance">Impedance</option>
-                    </select>
-                </div>
-                
-                {#if metricConfigs[activeConfigMetric].modeY === "Impedance"}
-                    <!-- Resistencia del sensor -->
-                    <div class="flex flex-col gap-1">
-                        <span class="text-gray-400 font-medium">Resistencia Sensor (Ω)</span>
-                        <input type="number" class="bg-[#121216] border border-[#222] rounded px-2 py-1 text-xs text-white"
-                               bind:value={metricConfigs[activeConfigMetric].sensorResistance} />
-                    </div>
-                {/if}
-                
-                <!-- Suavizado PPO -->
-                <div class="flex flex-col gap-1">
-                    <span class="text-gray-400 font-medium">Suavizado PPO (1/Oct)</span>
-                    <select class="bg-[#121216] border border-[#222] rounded px-2 py-1 text-xs text-white focus:outline-none"
-                            bind:value={metricConfigs[activeConfigMetric].smoothingPPO}>
-                        <option value="1">1/1 Octava</option>
-                        <option value="3">1/3 Octava</option>
-                        <option value="6">1/6 Octava</option>
-                        <option value="12">1/12 Octava</option>
-                        <option value="24">1/24 Octava</option>
-                        <option value="48">1/48 Octava</option>
-                    </select>
-                </div>
-                
-                <!-- Invertir Y / Activar coherencia -->
-                <div class="flex flex-col gap-1.5 py-1">
-                    <label class="flex items-center gap-2 cursor-pointer text-gray-300">
-                        <input type="checkbox" bind:checked={metricConfigs[activeConfigMetric].invertY} />
-                        <span>Invertir Eje Y</span>
-                    </label>
-                    <label class="flex items-center gap-2 cursor-pointer text-gray-300">
-                        <input type="checkbox" bind:checked={metricConfigs[activeConfigMetric].enableCoherence} />
-                        <span>Activar Coherencia</span>
-                    </label>
-                </div>
-                
-                {#if metricConfigs[activeConfigMetric].enableCoherence}
-                    <div class="flex flex-col gap-1">
-                        <span class="text-gray-400 font-medium">Umbral Coherencia ({metricConfigs[activeConfigMetric].coherenceThreshold})</span>
-                        <input type="range" min="0" max="1" step="0.05" class="accent-[#00ff88]"
-                               bind:value={metricConfigs[activeConfigMetric].coherenceThreshold} />
-                    </div>
-                {/if}
-                
-                <!-- Desplazamiento Y -->
-                <div class="flex flex-col gap-1">
-                    <span class="text-gray-400 font-medium">Desplazamiento Eje Y ({metricConfigs[activeConfigMetric].yShift}px)</span>
-                    <input type="range" min="-300" max="300" step="5" class="accent-[#00ff88]"
-                           bind:value={metricConfigs[activeConfigMetric].yShift} />
-                </div>
-            {/if}
-            
-            {#if activeConfigMetric === "Phase"}
-                <!-- Envoltura -->
-                <div class="flex flex-col gap-1">
-                    <span class="text-gray-400 font-medium">Rango / Envoltura</span>
-                    <select class="bg-[#121216] border border-[#222] rounded px-2 py-1 text-xs text-white focus:outline-none"
-                            bind:value={metricConfigs["Phase"].unwrapMode}>
-                        <option value="±180">±180º</option>
-                        <option value="360">0..360º</option>
-                    </select>
-                </div>
-                
-                <!-- Rotación de Fase -->
-                <div class="flex flex-col gap-1">
-                    <span class="text-gray-400 font-medium">Ángulo de Rotación ({metricConfigs["Phase"].rotate}º)</span>
-                    <input type="range" min="-360" max="360" step="5" class="accent-[#00ff88]"
-                           bind:value={metricConfigs["Phase"].rotate} />
-                </div>
-                
-                <!-- Rango angular -->
-                <div class="flex flex-col gap-1">
-                    <span class="text-gray-400 font-medium">Rango Angular ({metricConfigs["Phase"].range}º)</span>
-                    <input type="range" min="90" max="720" step="30" class="accent-[#00ff88]"
-                           bind:value={metricConfigs["Phase"].range} />
-                </div>
-                
-                <!-- Desplazamiento Y -->
-                <div class="flex flex-col gap-1">
-                    <span class="text-gray-400 font-medium">Desplazamiento Eje Y ({metricConfigs["Phase"].yShift}px)</span>
-                    <input type="range" min="-300" max="300" step="5" class="accent-[#00ff88]"
-                           bind:value={metricConfigs["Phase"].yShift} />
-                </div>
-            {/if}
-            
-            {#if activeConfigMetric === "Coherence"}
-                <!-- Tipo de Coherencia -->
-                <div class="flex flex-col gap-1">
-                    <span class="text-gray-400 font-medium">Tipo de Coherencia</span>
-                    <select class="bg-[#121216] border border-[#222] rounded px-2 py-1 text-xs text-white focus:outline-none"
-                            bind:value={metricConfigs["Coherence"].cohType}>
-                        <option value="normal">Normal</option>
-                        <option value="squared">Al Cuadrado (r²)</option>
-                        <option value="SNR">Estimación SNR</option>
-                    </select>
-                </div>
-                
-                <!-- Línea de umbral -->
-                <div class="flex flex-col gap-1.5 py-1">
-                    <label class="flex items-center gap-2 cursor-pointer text-gray-300">
-                        <input type="checkbox" bind:checked={metricConfigs["Coherence"].showThresholdLine} />
-                        <span>Mostrar línea de umbral</span>
-                    </label>
-                </div>
-                
-                {#if metricConfigs["Coherence"].showThresholdLine}
-                    <div class="flex flex-col gap-2">
-                        <div class="flex items-center justify-between">
-                            <span class="text-gray-400">Color Umbral</span>
-                            <input type="color" bind:value={metricConfigs["Coherence"].thresholdColor} class="w-6 h-6 border-none cursor-pointer rounded bg-transparent" />
-                        </div>
-                        <div class="flex flex-col gap-1">
-                            <span class="text-gray-400 font-medium">Valor Umbral ({metricConfigs["Coherence"].thresholdValue})</span>
-                            <input type="range" min="0.05" max="0.95" step="0.05" class="accent-[#eab308]"
-                                   bind:value={metricConfigs["Coherence"].thresholdValue} />
-                        </div>
-                    </div>
-                {/if}
-                
-                <!-- Desplazamiento Y -->
-                <div class="flex flex-col gap-1">
-                    <span class="text-gray-400 font-medium">Desplazamiento Eje Y ({metricConfigs["Coherence"].yShift}px)</span>
-                    <input type="range" min="-300" max="300" step="5" class="accent-[#00ff88]"
-                           bind:value={metricConfigs["Coherence"].yShift} />
-                </div>
-            {/if}
-            
-            {#if activeConfigMetric === "Spectrogram"}
-                <!-- Paleta de Colores -->
-                <div class="flex flex-col gap-1">
-                    <span class="text-gray-400 font-medium">Paleta de Colores</span>
-                    <select class="bg-[#121216] border border-[#222] rounded px-2 py-1 text-xs text-white focus:outline-none"
-                            bind:value={metricConfigs["Spectrogram"].palette}>
-                        <option value="Magma">Magma</option>
-                        <option value="Jet">Jet (Arcoíris)</option>
-                        <option value="Hot">Hot (Térmico)</option>
-                        <option value="Grayscale">Escala de Grises</option>
-                    </select>
-                </div>
-            {/if}
-
-            <!-- Editor de Estilos de Curva (Prompt 11) -->
-            {#if activeConfigMetric && metricStyles[activeConfigMetric]}
-                <div class="border-t pt-2 mt-1 flex flex-col gap-2" style="border-color: var(--border-primary)">
-                    <span class="text-gray-400 font-bold uppercase tracking-wider text-[8px]">Estilo de Curva</span>
-                    
-                    <!-- Color -->
-                    <div class="flex items-center justify-between">
-                        <span>Color</span>
-                        <input type="color" bind:value={metricStyles[activeConfigMetric].color} class="w-6 h-6 border-none cursor-pointer rounded bg-transparent" />
-                    </div>
-
-                    <!-- Grosor -->
-                    <div class="flex flex-col gap-1">
-                        <div class="flex justify-between">
-                            <span>Grosor</span>
-                            <span class="font-mono">{metricStyles[activeConfigMetric].lineWidth}px</span>
-                        </div>
-                        <input type="range" min="1" max="5" step="0.2" class="accent-[#00ff88]"
-                               bind:value={metricStyles[activeConfigMetric].lineWidth} />
-                    </div>
-
-                    <!-- Estilo de Trazo -->
-                    <div class="flex flex-col gap-1">
-                        <span>Estilo de Línea</span>
-                        <div class="flex gap-1">
-                            <button class="flex-1 py-1 text-center border rounded text-[9px] cursor-pointer {metricStyles[activeConfigMetric].lineDash.length === 0 ? 'bg-[#00ff88]/10 border-[#00ff88] text-[#00ff88]' : 'bg-[#121216] border-[#222]'}"
-                                    onclick={() => metricStyles[activeConfigMetric!].lineDash = []}>
-                                Sólido
-                            </button>
-                            <button class="flex-1 py-1 text-center border rounded text-[9px] cursor-pointer {metricStyles[activeConfigMetric].lineDash.join(',') === '8,4' ? 'bg-[#00ff88]/10 border-[#00ff88] text-[#00ff88]' : 'bg-[#121216] border-[#222]'}"
-                                    onclick={() => metricStyles[activeConfigMetric!].lineDash = [8, 4]}>
-                                Dashed
-                            </button>
-                            <button class="flex-1 py-1 text-center border rounded text-[9px] cursor-pointer {metricStyles[activeConfigMetric].lineDash.join(',') === '2,3' ? 'bg-[#00ff88]/10 border-[#00ff88] text-[#00ff88]' : 'bg-[#121216] border-[#222]'}"
-                                    onclick={() => metricStyles[activeConfigMetric!].lineDash = [2, 3]}>
-                                Dotted
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            {/if}
-
-            <!-- Toggle Visibilidad de la Métrica -->
-            <div class="flex items-center justify-between mt-2 pt-2 border-t" style="border-color: var(--border-primary)">
-                <span class="text-[10px] text-gray-400">Visible en gráfico</span>
-                <button
-                    class="w-8 h-4 rounded-full transition-all cursor-pointer {metricConfigs[activeConfigMetric!]?.hidden ? 'bg-gray-700' : 'bg-[#00ff88]'}"
-                    onclick={() => {
-                        if (!metricConfigs[activeConfigMetric!]) metricConfigs[activeConfigMetric!] = {};
-                        metricConfigs[activeConfigMetric!].hidden = !metricConfigs[activeConfigMetric!].hidden;
-                    }}
-                >
-                    <div class="w-3 h-3 rounded-full bg-white shadow transition-transform {metricConfigs[activeConfigMetric!]?.hidden ? 'translate-x-0.5' : 'translate-x-4'}"></div>
-                </button>
-            </div>
-
-            <!-- Botón Eliminar Métrica -->
-            <button
-                class="w-full mt-2 py-1.5 px-3 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 text-[10px] font-semibold transition-all cursor-pointer flex items-center justify-center gap-1"
-                onclick={() => {
-                    removeMetric(activeConfigMetric!);
-                    activeConfigMetric = null;
-                }}
-            >
-                <span class="material-symbols-outlined text-[12px]">delete</span>
-                Eliminar {activeConfigMetric}
-            </button>
-        </div>
-    {/if}
+    <MetricConfigPopover
+        bind:activeConfigMetric={activeConfigMetric}
+        bind:metricConfigs={metricConfigs}
+        bind:metricStyles={metricStyles}
+        onClose={() => activeConfigMetric = null}
+        onRemoveMetric={removeMetric}
+    />
 </div>
 
 <style>
