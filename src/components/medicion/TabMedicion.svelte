@@ -158,11 +158,6 @@
     }
 
     async function startMeasurement() {
-        // Encender generador si está vinculado (F27)
-        if (uiStore.linkGeneratorToMeasurement && !uiStore.genActive) {
-            uiStore.genActive = true;
-        }
-
         progress = 0;
         statusText = "Iniciando captura...";
         try {
@@ -180,6 +175,11 @@
                         mathOrchestrator.feedTimeDomain(measSamples, refSamples);
                     },
                 });
+                // Encender generador DESPUÉS de que la captura esté lista
+                // para evitar glitch por recreación del AudioContext
+                if (uiStore.linkGeneratorToMeasurement && !uiStore.genActive) {
+                    uiStore.genActive = true;
+                }
                 statusText = "Medición en vivo activa";
             } else {
                 statusText = "Ejecutando secuencia...";

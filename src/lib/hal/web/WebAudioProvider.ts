@@ -18,8 +18,6 @@ export class WebAudioProvider implements AudioProvider {
 	private audioContext: AudioContext | null = null;
 	private stream: MediaStream | null = null;
 	private workletNode: AudioWorkletNode | null = null;
-	private sab: SharedArrayBuffer | null = null;
-	private sharedArray: Float32Array | null = null;
 	private analyserNode: AnalyserNode | null = null;
 	private freqDataArray: Float32Array | null = null;
 	private animationFrameId: number | null = null;
@@ -36,6 +34,13 @@ export class WebAudioProvider implements AudioProvider {
 	private generatorNode: AudioNode | null = null;
 	private generatorGainNode: GainNode | null = null;
 	private pannerNode: StereoPannerNode | null = null;
+
+	// Generator state tracking (prevent unnecessary recreation)
+	private lastGenType: string | null = null;
+	private lastGenActive: boolean = false;
+	private lastGenFreq: number = 0;
+	private lastGenLevel: number = 0;
+	private lastGenRouting: string = '';
 
 	async startCapture(listener: AudioListener): Promise<void> {
 		if (!this.audioContext) {
@@ -59,30 +64,26 @@ export class WebAudioProvider implements AudioProvider {
 
 		const source = this.audioContext.createMediaStreamSource(this.stream);
 
-		// Analyser para RTA (Fast-Path)
-		this.analyserNode = this.audioContext.createAnalyser();
-		this.analyserNode.fftSize = 8192; // Mayor resolución para RTA
-		this.analyserNode.smoothingTimeConstant = 0.2;
-		this.freqDataArray = new Float32Array(this.analyserNode.frequencyBinCount);
-		source.connect(this.analyserNode);
-
 		// Dual-channel: separar L/R para captura independiente
 		this.splitterNode = this.audioContext.createChannelSplitter(2);
 		source.connect(this.splitterNode);
+
+		// Analyser para RTA — conectar SOLO el canal de medición (no el source directo)
+		this.analyserNode = this.audioContext.createAnalyser();
+		this.analyserNode.fftSize = 8192;
+		this.analyserNode.smoothingTimeConstant = 0.2;
+		this.freqDataArray = new Float32Array(this.analyserNode.frequencyBinCount);
 
 		// AnalyserNode dedicado para canal de referencia
 		this.analyserRef = this.audioContext.createAnalyser();
 		this.analyserRef.fftSize = uiStore.fftSize;
 		this.analyserRef.smoothingTimeConstant = 0;
 
-		// Conectar canales según routing del usuario
+		// Conectar cada canal del splitter a su analyser dedicado
 		const refCh = uiStore.refChannel;
 		const measCh = uiStore.measChannel;
 		this.splitterNode.connect(this.analyserRef, refCh);
-
-		// Reasignar analyserNode existente al canal de medición
-		this.analyserNode!.smoothingTimeConstant = 0;
-		this.splitterNode.connect(this.analyserNode!, measCh);
+		this.splitterNode.connect(this.analyserNode, measCh);
 
 		// Buffers time-domain para dual-channel
 		this.refTimeDomain = new Float32Array(uiStore.fftSize);
@@ -133,9 +134,9 @@ export class WebAudioProvider implements AudioProvider {
 			// Dual-channel time-domain para el worker DSP
 			if (listener.onTimeDomainData && this.analyserRef && this.analyserNode) {
 				if (hasSAB && this.refSab && this.measSab) {
-					// Leer desde SAB (el worklet ya los llena)
-					const refData = new Float32Array(this.refSab);
-					const measData = new Float32Array(this.measSab);
+					// Copias defensivas — el worklet sigue escribiendo en el SAB
+					const refData = Float32Array.from(new Float32Array(this.refSab));
+					const measData = Float32Array.from(new Float32Array(this.measSab));
 					listener.onTimeDomainData(measData, refData);
 				} else if (this.refTimeDomain && this.measTimeDomain) {
 					// Fallback: datos ya recibidos via postMessage
@@ -205,6 +206,22 @@ export class WebAudioProvider implements AudioProvider {
 	}
 
 	playGenerator(type: SignalType, active: boolean, freq: number, level: number, routing: 'L' | 'R' | 'Stereo'): void {
+		// Skip if nothing changed — prevents glitch on reactive re-evaluation
+		if (
+			type === this.lastGenType &&
+			active === this.lastGenActive &&
+			freq === this.lastGenFreq &&
+			level === this.lastGenLevel &&
+			routing === this.lastGenRouting
+		) {
+			return;
+		}
+		this.lastGenType = type;
+		this.lastGenActive = active;
+		this.lastGenFreq = freq;
+		this.lastGenLevel = level;
+		this.lastGenRouting = routing;
+
 		if (!this.audioContext) {
 			this.audioContext = new AudioContext({ sampleRate: uiStore.sampleRate });
 		}
@@ -352,7 +369,7 @@ export class WebAudioProvider implements AudioProvider {
 	}
 
 	getSharedBuffer(): SharedArrayBuffer | null {
-		return this.sab;
+		return this.refSab;
 	}
 
 	async listDevices(): Promise<AudioDevice[]> {

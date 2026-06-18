@@ -1,0 +1,343 @@
+# Plan de Correcciones — Pipeline DSP Real
+
+Correcciones derivadas de la [auditoría post-implementación](file:///C:/Users/Abel/.gemini/antigravity-ide/brain/83a06231-6bab-4806-929e-1eb797d424e9/audit_post_pipeline_real.md).
+
+> [!NOTE]
+> Las features E1 (Phase Unwrap) y E3 (ETC) **sí están implementadas** en `canvasRenderers.ts` (L722-738 y L933-948). La auditoría los marcó como faltantes por error de búsqueda.
+
+---
+
+## Propuestas
+
+### Grupo A — Bugs críticos y limpieza (3 tareas)
+
+#### [MODIFY] [WebAudioProvider.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/hal/web/WebAudioProvider.ts)
+
+**A1. Fix race condition SAB — copias defensivas**
+
+En `readData()` (L135-139), el path SAB crea views sobre el SharedArrayBuffer en vez de copias. Como el worklet sigue escribiendo mientras el main thread lee, los datos pueden estar parcialmente sobrescritos.
+
+```diff
+ if (hasSAB && this.refSab && this.measSab) {
+-    const refData = new Float32Array(this.refSab);
+-    const measData = new Float32Array(this.measSab);
++    // Copias defensivas — el worklet sigue escribiendo en el SAB
++    const refData = Float32Array.from(new Float32Array(this.refSab));
++    const measData = Float32Array.from(new Float32Array(this.measSab));
+     listener.onTimeDomainData(measData, refData);
+ }
+```
+
+**A2. Fix doble conexión del AnalyserNode**
+
+En `startCapture()` (L67), `source.connect(this.analyserNode)` conecta el source stereo completo al analyserNode de medición. Luego en L85, `this.splitterNode.connect(this.analyserNode!, measCh)` conecta **solo** el canal de medición al mismo analyserNode. El resultado es una superposición de señales que contamina la data RTA.
+
+```diff
+ const source = this.audioContext.createMediaStreamSource(this.stream);
+
+-// Analyser para RTA (Fast-Path)
+-this.analyserNode = this.audioContext.createAnalyser();
+-this.analyserNode.fftSize = 8192;
+-this.analyserNode.smoothingTimeConstant = 0.2;
+-this.freqDataArray = new Float32Array(this.analyserNode.frequencyBinCount);
+-source.connect(this.analyserNode);
+-
+ // Dual-channel: separar L/R para captura independiente
+ this.splitterNode = this.audioContext.createChannelSplitter(2);
+ source.connect(this.splitterNode);
+
++// Analyser para RTA (Fast-Path) — conectar solo el canal de medición
++this.analyserNode = this.audioContext.createAnalyser();
++this.analyserNode.fftSize = 8192;
++this.analyserNode.smoothingTimeConstant = 0.2;
++this.freqDataArray = new Float32Array(this.analyserNode.frequencyBinCount);
++
+ // AnalyserNode dedicado para canal de referencia
+ this.analyserRef = this.audioContext.createAnalyser();
+ this.analyserRef.fftSize = uiStore.fftSize;
+ this.analyserRef.smoothingTimeConstant = 0;
+
+ // Conectar canales según routing del usuario
+ const refCh = uiStore.refChannel;
+ const measCh = uiStore.measChannel;
+ this.splitterNode.connect(this.analyserRef, refCh);
+-
+-// Reasignar analyserNode existente al canal de medición
+-this.analyserNode!.smoothingTimeConstant = 0;
+ this.splitterNode.connect(this.analyserNode!, measCh);
+```
+
+**A3. Eliminar propiedades legacy sin uso**
+
+Eliminar las propiedades `sab` y `sharedArray` (L21-22) que eran del sistema single-channel anterior y ya no se usan.
+
+```diff
+-private sab: SharedArrayBuffer | null = null;
+-private sharedArray: Float32Array | null = null;
+```
+
+**A4. Fix glitch del generador al iniciar medición**
+
+#### [MODIFY] [WebAudioProvider.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/hal/web/WebAudioProvider.ts)
+
+**Problema:** Cuando el usuario tiene "Vincular Generador al medir" activo, la secuencia es:
+1. `genActive = true` → `$effect` reactivo → `playGenerator(active=true)` → generador suena
+2. `startCapture()` → `getUserMedia()` (async ~200ms) → durante este tiempo, el `$effect` del generador puede re-ejecutarse
+3. Cada ejecución de `playGenerator()` **destruye** el nodo existente (`this.generatorNode.disconnect()`) y crea uno nuevo → **glitch audible**
+
+**Causa raíz doble:**
+- `playGenerator()` es "destructivo": siempre desconecta y recrea el generador, sin verificar si los parámetros cambiaron.
+- El `$effect` reactivo en `TabMedicion.svelte` (L117-128) se re-dispara por cualquier cambio en sus dependencias.
+
+**Fix en WebAudioProvider.ts — hacer `playGenerator()` idempotente:**
+
+Agregar tracking de estado para evitar recrear el generador si los parámetros no cambiaron:
+
+```diff
++    // Generator state tracking (prevent unnecessary recreation)
++    private lastGenType: string | null = null;
++    private lastGenActive: boolean = false;
++    private lastGenFreq: number = 0;
++    private lastGenLevel: number = 0;
++    private lastGenRouting: string = '';
+
+     playGenerator(type: SignalType, active: boolean, freq: number, level: number, routing: 'L' | 'R' | 'Stereo'): void {
++        // Skip if nothing changed — prevents glitch on reactive re-evaluation
++        if (
++            type === this.lastGenType &&
++            active === this.lastGenActive &&
++            freq === this.lastGenFreq &&
++            level === this.lastGenLevel &&
++            routing === this.lastGenRouting
++        ) {
++            return;
++        }
++        this.lastGenType = type;
++        this.lastGenActive = active;
++        this.lastGenFreq = freq;
++        this.lastGenLevel = level;
++        this.lastGenRouting = routing;
++
+         if (!this.audioContext) {
+```
+
+Y en `stopCapture()`, resetear el tracking del generador (no destruirlo):
+
+```diff
+     stopCapture(): void {
+         // NO destruir el generador — solo detener la captura
+         if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
+         ...
++        // Reset gen tracking para que el próximo playGenerator se aplique
++        // (pero NO desconectar el generador — eso lo hace playGenerator(active=false))
+     }
+```
+
+#### [MODIFY] [TabMedicion.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/components/medicion/TabMedicion.svelte)
+
+Además, en `startMeasurement()` (L160-193), asegurar que el generador se enciende **después** del `await startCapture()`, no antes:
+
+```diff
+     async function startMeasurement() {
+-        // Encender generador si está vinculado (F27)
+-        if (uiStore.linkGeneratorToMeasurement && !uiStore.genActive) {
+-            uiStore.genActive = true;
+-        }
+-
+         progress = 0;
+         statusText = "Iniciando captura...";
+         try {
+             if (uiStore.measurementMode === "manual") {
+                 await provider.startCapture({
+                     ...
+                 });
++                // Encender generador DESPUÉS de que la captura esté lista
++                // para evitar glitch por recreación del AudioContext
++                if (uiStore.linkGeneratorToMeasurement && !uiStore.genActive) {
++                    uiStore.genActive = true;
++                }
+                 statusText = "Medición en vivo activa";
+```
+
+---
+
+### Grupo B — Controles UI en TabConfig.svelte (1 tarea)
+
+#### [MODIFY] [TabConfig.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/components/medicion/TabConfig.svelte)
+
+**B1. Agregar sección "Routing Dual-Channel" en la card "Hardware de Audio"**
+
+Insertar **después** de la sección "Canal de Referencia & Loopback" (L516-554), dentro de la misma card "Hardware de Audio". Los controles usan las propiedades ya existentes en `uiStore`:
+
+```html
+<!-- Routing Dual-Channel -->
+<div class="flex flex-col gap-3 pt-2 border-t border-[#1a1a24]/20">
+    <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+        Routing Dual-Channel
+    </span>
+
+    <div class="grid grid-cols-2 gap-3">
+        <!-- Canal de Referencia -->
+        <div class="flex flex-col gap-1.5">
+            <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                Canal Ref (X)
+            </label>
+            <select bind:value={uiStore.refChannel}
+                    class="w-full bg-[#121216] border border-[#1a1a24] rounded-md px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-[#3b82f6]">
+                <option value={0}>Canal 1 (L)</option>
+                <option value={1}>Canal 2 (R)</option>
+            </select>
+        </div>
+
+        <!-- Canal de Medición -->
+        <div class="flex flex-col gap-1.5">
+            <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                Canal Meas (Y)
+            </label>
+            <select bind:value={uiStore.measChannel}
+                    class="w-full bg-[#121216] border border-[#1a1a24] rounded-md px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-[#3b82f6]">
+                <option value={0}>Canal 1 (L)</option>
+                <option value={1}>Canal 2 (R)</option>
+            </select>
+        </div>
+    </div>
+</div>
+```
+
+**B2. Agregar controles de FFT Overlap y Delay Compensation**
+
+Insertar en la sección "Procesamiento DSP" (después del bloque FFT Size ~L421), antes del cierre de la card DSP:
+
+```html
+<!-- FFT Overlap -->
+<div class="flex items-center gap-2">
+    <span class="text-[9px] text-gray-500 font-bold uppercase w-16">Overlap</span>
+    <select bind:value={uiStore.fftOverlap}
+            class="flex-1 bg-[#121216] border border-[#1a1a24] rounded px-2 py-1 text-xs text-gray-200">
+        <option value={0}>0% (Sin overlap)</option>
+        <option value={0.5}>50%</option>
+        <option value={0.75}>75%</option>
+    </select>
+</div>
+
+<!-- Delay Compensation -->
+<div class="flex flex-col gap-2 pt-2 border-t border-[#1a1a24]/20">
+    <label class="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+        <input type="checkbox"
+               bind:checked={uiStore.autoDelayCompensation}
+               class="w-4 h-4 rounded accent-[#ec4899] cursor-pointer" />
+        <span class="font-semibold select-none">Auto Delay Compensation</span>
+    </label>
+    {#if !uiStore.autoDelayCompensation}
+        <div class="flex items-center gap-2 pl-6">
+            <span class="text-[9px] text-gray-500 font-bold uppercase w-14">Delay</span>
+            <input type="range" min="0" max="100" step="0.1"
+                   bind:value={uiStore.compensationDelayMs}
+                   ondblclick={() => uiStore.compensationDelayMs = 0}
+                   class="flex-1 h-1 bg-[#121216] rounded-lg appearance-none cursor-pointer accent-[#ec4899]" />
+            <span class="text-[10px] font-mono text-[#ec4899] w-14 text-right">
+                {uiStore.compensationDelayMs.toFixed(1)} ms
+            </span>
+        </div>
+    {/if}
+</div>
+```
+
+**B3. Agregar slider de Averaging Threshold**
+
+Insertar dentro de la sección "Promediado (Averaging)" (L260-303), después del control de depth/alpha, visible cuando averaging NO es None:
+
+```html
+{#if uiStore.averagingType !== 'None'}
+    <div class="flex items-center gap-2 mt-1">
+        <span class="text-[9px] text-gray-500 font-bold uppercase w-16">Thresh</span>
+        <input type="range" min="-120" max="-20" step="1"
+               bind:value={uiStore.averagingThresholdDb}
+               ondblclick={() => uiStore.averagingThresholdDb = -60}
+               class="flex-1 h-1 bg-[#121216] rounded-lg appearance-none cursor-pointer accent-[#ec4899]"
+               title="Doble clic para reiniciar a -60 dBFS" />
+        <span class="text-[10px] font-mono text-[#ec4899] w-12 text-right">
+            {uiStore.averagingThresholdDb} dB
+        </span>
+    </div>
+{/if}
+```
+
+---
+
+### Grupo C — Propagación de threshold al worker (2 tareas)
+
+#### [MODIFY] [mathOrchestrator.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/mathOrchestrator.svelte.ts)
+
+**C1. Agregar `averagingThresholdDb` al postMessage**
+
+En `run()` (~L326-346), agregar la propiedad al objeto del message:
+
+```diff
+ this.worker.postMessage({
+     type: 'run-dsp',
+     ...
+     averagingAlpha: uiStore.averagingAlpha,
++    averagingThresholdDb: uiStore.averagingThresholdDb,
+     enableSourceWindow: uiStore.enableSourceWindow,
+```
+
+#### [MODIFY] [dspWorker.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/dspWorker.ts)
+
+**C2. Usar threshold en la llamada a `processFIFO`**
+
+En el handler `self.onmessage` (~L108-125), agregar `averagingThresholdDb` al destructuring:
+
+```diff
+ const {
+     ...
+     averagingAlpha,
++    averagingThresholdDb,
+     enableSourceWindow,
+```
+
+Y en el bloque de averaging (~L226):
+
+```diff
+ if (averagingType === 'FIFO') {
+-    averagingProcessor.processFIFO(hReal, hImag, avgHReal, avgHImag);
++    averagingProcessor.processFIFO(hReal, hImag, avgHReal, avgHImag, averagingThresholdDb);
+```
+
+---
+
+### Grupo D — Verificación
+
+```bash
+npm run build
+```
+
+Verificación visual:
+- [ ] Magnitude se muestra **siempre** al medir (no intermitente)
+- [ ] RTA (Spectrum) muestra solo el canal de medición (sin mezcla estéreo)
+- [ ] Cambiar canal Ref/Meas en TabConfig invierte las señales
+- [ ] Selector de overlap aparece en DSP config
+- [ ] Auto delay checkbox funciona
+- [ ] Slider de threshold aparece cuando averaging ≠ None
+- [ ] Generador + medición vinculados: NO hay corte/glitch al iniciar
+- [ ] Generador solo (sin medición): sin cambios de comportamiento
+
+---
+
+## Resumen de archivos
+
+| Tarea | Archivo | Tipo | Qué hace |
+|-------|---------|:----:|----------|
+| A1 | `WebAudioProvider.ts` | Fix | Copias defensivas del SAB |
+| A2 | `WebAudioProvider.ts` | Fix | Eliminar doble conexión analyserNode |
+| A3 | `WebAudioProvider.ts` | Cleanup | Eliminar `sab`/`sharedArray` sin uso |
+| A4 | `WebAudioProvider.ts` | Fix | `playGenerator()` idempotente |
+| A4 | `TabMedicion.svelte` | Fix | Generador después del `await startCapture()` |
+| B1 | `TabConfig.svelte` | UI | Dropdowns routing dual-channel |
+| B2 | `TabConfig.svelte` | UI | Overlap + delay compensation |
+| B3 | `TabConfig.svelte` | UI | Slider averaging threshold |
+| C1 | `mathOrchestrator.svelte.ts` | Fix | Propagar threshold al worker |
+| C2 | `dspWorker.ts` | Fix | Usar threshold en processFIFO |
+
+> [!IMPORTANT]
+> Los modos de referencia `generator-tap`, `analytical`, y `loopback` NO se incluyen en este plan — requieren un diseño separado del grafo de audio para cada modo.
