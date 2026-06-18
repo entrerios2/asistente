@@ -402,27 +402,14 @@
         statusText = "Iniciando captura...";
         try {
             if (uiStore.measurementMode === "manual") {
-                // Inicializar trazo live en traceManager si no existe
-                if (!traceManager.traces.some((t) => t.id === "live-1")) {
-                    traceManager.addTrace({
-                        id: "live-1",
-                        name: "Micrófono en Vivo",
-                        type: "live",
-                        metric: "RTA",
-                        data: new Float32Array(4096),
-                        color: "#ff4444",
-                        style: "solid",
-                        visible: true,
-                        offsetY: 0,
-                        timestamp: Date.now(),
-                        source: "manual",
-                    });
-                }
-
                 await provider.startCapture({
                     onAudioData: () => {},
                     onFrequencyData: (data) => {
-                        traceManager.updateLiveTrace("live-1", data);
+                        if (traceManager.liveFrequencyData.length !== data.length) {
+                            traceManager.liveFrequencyData = new Float32Array(data.length);
+                        }
+                        traceManager.liveFrequencyData.set(data);
+                        traceManager.version++;
                     },
                 });
                 statusText = "Medición en vivo activa";
@@ -2001,7 +1988,7 @@
                                             <button
                                                 class="w-7 h-7 rounded flex items-center justify-center text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-all cursor-pointer min-h-[28px] min-w-[28px]"
                                                 onclick={() =>
-                                                    traceManager.removeTrace(
+                                                    traceManager.deleteInstantanea(
                                                         snap.id,
                                                     )}
                                                 title="Eliminar instantánea"

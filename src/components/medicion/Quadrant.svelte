@@ -454,7 +454,19 @@
         // 2. Dibujar Grilla de Fondo (encima)
         drawGrid(ctx, width, height, hasTimeDomainActive, activeMetrics, metricConfigs, interactionState, uiStore.isDarkMode);
 
-        const liveTrace = traceManager.traces.find((t) => t.id === "live-1");
+        const liveTrace = {
+            id: 'live-1',
+            name: 'Señal en Vivo',
+            type: 'live' as const,
+            metric: 'magnitude',
+            data: traceManager.liveFrequencyData,
+            color: '#ff4444',
+            style: 'solid' as const,
+            visible: true,
+            offsetY: 0,
+            timestamp: Date.now(),
+            source: 'manual' as const
+        };
 
         const currentVersion = mathOrchestrator.version;
         if (currentVersion !== localLastVersion) {

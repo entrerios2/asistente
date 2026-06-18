@@ -6,19 +6,7 @@
 import { uiStore } from './ui.svelte';
 import { mathOrchestrator } from './mathOrchestrator.svelte';
 
-export interface Trace {
-    id: string;
-    name: string;
-    type: 'live' | 'snapshot' | 'math' | 'eq';
-    metric: string;
-    data: Float32Array;
-    color: string;
-    style: 'solid' | 'dashed';
-    visible: boolean;
-    offsetY: number;
-    timestamp: number;
-    source: 'manual' | 'secuencial';
-}
+
 
 export interface MeasurementLayer {
     id: string;
@@ -228,11 +216,15 @@ class TraceManager {
         // Guardar en la DB
         try {
             const { saveInstantanea } = await import('../utils/db');
+            const serializedData: Record<string, ArrayBufferLike> = {};
+            for (const metric in data) {
+                serializedData[metric] = data[metric].buffer;
+            }
             await saveInstantanea({
                 id: ins.id,
                 name: ins.name,
                 timestamp: ins.timestamp,
-                data,
+                data: serializedData,
                 visible: ins.visible,
                 color: ins.color,
                 source: ins.source,
@@ -320,11 +312,15 @@ class TraceManager {
             this.instantaneas.push(ins);
 
             const { saveInstantanea } = await import('../utils/db');
+            const serializedData: Record<string, ArrayBufferLike> = {};
+            for (const metric in ins.data) {
+                serializedData[metric] = ins.data[metric].buffer;
+            }
             await saveInstantanea({
                 id: ins.id,
                 name: ins.name,
                 timestamp: ins.timestamp,
-                data: ins.data,
+                data: serializedData,
                 visible: ins.visible,
                 color: ins.color,
                 source: ins.source,
@@ -502,70 +498,6 @@ class TraceManager {
         }
     }
 
-    /**
-     * Retrocompatibilidad con la API de traces (Lectura unificada)
-     */
-    traces = $derived.by(() => {
-        const list: Trace[] = [];
-        // Añadir el live-1 ficticio/inicial que la app espera
-        list.push({
-            id: 'live-1',
-            name: 'Señal en Vivo',
-            type: 'live',
-            metric: 'magnitude',
-            data: this.liveFrequencyData,
-            color: '#ff4444',
-            style: 'solid',
-            visible: true,
-            offsetY: 0,
-            timestamp: Date.now(),
-            source: 'manual'
-        });
-
-        // Convertir cada instantánea multimétrica a traces virtuales legibles para retrocompatibilidad total
-        this.instantaneas.forEach(ins => {
-            for (const metric in ins.data) {
-                list.push({
-                    id: `${ins.id}_${metric}`,
-                    name: `${ins.name} [${metric}]`,
-                    type: 'snapshot',
-                    metric: metric.toLowerCase(),
-                    data: ins.data[metric],
-                    color: ins.color || '#00ff88',
-                    style: 'solid',
-                    visible: ins.visible,
-                    offsetY: 0,
-                    timestamp: ins.timestamp,
-                    source: 'manual'
-                });
-            }
-        });
-        return list;
-    });
-
-    addTrace(trace: Trace) {
-        // Enrutado retrocompatible
-        const dataMap: Record<string, Float32Array> = {};
-        const metricName = trace.metric.charAt(0).toUpperCase() + trace.metric.slice(1);
-        dataMap[metricName] = trace.data;
-
-        this.instantaneas.push({
-            id: trace.id,
-            name: trace.name,
-            timestamp: trace.timestamp,
-            data: dataMap,
-            visible: trace.visible,
-            color: trace.color,
-            source: trace.source,
-            metric: trace.metric,
-            offsetY: trace.offsetY
-        });
-    }
-
-    removeTrace(id: string) {
-        this.deleteInstantanea(id);
-    }
-
     toggleVisibility(id: string) {
         const ins = this.instantaneas.find(i => i.id === id);
         if (ins) {
@@ -573,21 +505,9 @@ class TraceManager {
         }
     }
 
-    updateLiveTrace(_id: string, data: Float32Array) {
-        if (this.liveFrequencyData.length !== data.length) {
-            this.liveFrequencyData = new Float32Array(data.length);
-        }
-        this.liveFrequencyData.set(data);
-        this.version++;
-    }
-
-    captureSnapshot(_liveTraceId: string, name?: string, _source: 'manual' | 'secuencial' = 'manual') {
+    async captureInstantaneaFromLive(name?: string, source: 'manual' | 'secuencial' = 'manual') {
         const metricList = Object.keys(this.metricsToCapture).filter(k => this.metricsToCapture[k]);
-        this.captureInstantanea(name, metricList);
-    }
-
-    get snapshots() {
-        return this.instantaneas;
+        return this.captureInstantanea(name, metricList);
     }
 }
 

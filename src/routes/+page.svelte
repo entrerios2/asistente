@@ -16,10 +16,10 @@
 
             if (e.code === 'Space') {
                 e.preventDefault();
-                traceManager.captureSnapshot('live-1', 'Captura manual', 'manual');
+                traceManager.captureInstantaneaFromLive('Captura manual', 'manual');
             } else if (e.key >= '1' && e.key <= '9') {
                 const index = parseInt(e.key) - 1;
-                const snapshots = traceManager.snapshots;
+                const snapshots = traceManager.instantaneas;
                 if (snapshots[index]) {
                     traceManager.toggleVisibility(snapshots[index].id);
                 }

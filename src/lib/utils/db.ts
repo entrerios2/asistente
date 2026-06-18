@@ -6,7 +6,7 @@ export interface SerializedInstantanea {
     id: string;
     name: string;
     timestamp: number;
-    data: Record<string, ArrayBuffer | number[]>;
+    data: Record<string, ArrayBufferLike | number[]>;
     visible: boolean;
     color: string;
     source: 'manual' | 'secuencial';
