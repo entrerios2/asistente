@@ -301,6 +301,21 @@
                     <span class="text-[10px] font-mono text-[#ec4899] w-10 text-right">{uiStore.averagingAlpha.toFixed(2)}</span>
                 </div>
             {/if}
+            {#if uiStore.averagingType !== 'None'}
+                <div class="flex items-center gap-2 mt-1">
+                    <span class="text-[9px] text-gray-500 font-bold uppercase w-16">Thresh</span>
+                    <input
+                        type="range" min="-120" max="-20" step="1"
+                        bind:value={uiStore.averagingThresholdDb}
+                        ondblclick={() => uiStore.averagingThresholdDb = -60}
+                        class="flex-1 h-1 bg-[#121216] rounded-lg appearance-none cursor-pointer accent-[#ec4899]"
+                        title="Doble clic para reiniciar a -60 dBFS"
+                    />
+                    <span class="text-[10px] font-mono text-[#ec4899] w-12 text-right">
+                        {uiStore.averagingThresholdDb} dB
+                    </span>
+                </div>
+            {/if}
         </div>
 
         <!-- Función de Ventana -->
@@ -417,6 +432,43 @@
                         <option value={size}>{size}</option>
                     {/each}
                 </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-[9px] text-gray-500 font-bold uppercase w-16">Overlap</span>
+                <select
+                    bind:value={uiStore.fftOverlap}
+                    class="flex-1 bg-[#121216] border border-[#1a1a24] rounded px-2 py-1 text-xs text-gray-200"
+                >
+                    <option value={0}>0% (Sin overlap)</option>
+                    <option value={0.5}>50%</option>
+                    <option value={0.75}>75%</option>
+                </select>
+            </div>
+
+            <!-- Delay Compensation -->
+            <div class="flex flex-col gap-2 pt-2 border-t border-[#1a1a24]/20">
+                <label class="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+                    <input
+                        type="checkbox"
+                        bind:checked={uiStore.autoDelayCompensation}
+                        class="w-4 h-4 rounded accent-[#ec4899] cursor-pointer"
+                    />
+                    <span class="font-semibold select-none">Auto Delay Compensation</span>
+                </label>
+                {#if !uiStore.autoDelayCompensation}
+                    <div class="flex items-center gap-2 pl-6">
+                        <span class="text-[9px] text-gray-500 font-bold uppercase w-14">Delay</span>
+                        <input
+                            type="range" min="0" max="100" step="0.1"
+                            bind:value={uiStore.compensationDelayMs}
+                            ondblclick={() => uiStore.compensationDelayMs = 0}
+                            class="flex-1 h-1 bg-[#121216] rounded-lg appearance-none cursor-pointer accent-[#ec4899]"
+                        />
+                        <span class="text-[10px] font-mono text-[#ec4899] w-14 text-right">
+                            {uiStore.compensationDelayMs.toFixed(1)} ms
+                        </span>
+                    </div>
+                {/if}
             </div>
         </div>
     </div>
@@ -550,6 +602,45 @@
                         >Loopback interno</span
                     >
                 </label>
+            </div>
+        </div>
+
+        <!-- Routing Dual-Channel -->
+        <div class="flex flex-col gap-3 pt-2 border-t border-[#1a1a24]/20">
+            <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                Routing Dual-Channel
+            </span>
+
+            <div class="grid grid-cols-2 gap-3">
+                <!-- Canal de Referencia -->
+                <div class="flex flex-col gap-1.5">
+                    <label
+                        class="text-[10px] font-bold text-gray-500 uppercase tracking-wider"
+                        >Canal Ref (X)</label
+                    >
+                    <select
+                        bind:value={uiStore.refChannel}
+                        class="w-full bg-[#121216] border border-[#1a1a24] rounded-md px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-[#3b82f6]"
+                    >
+                        <option value={0}>Canal 1 (L)</option>
+                        <option value={1}>Canal 2 (R)</option>
+                    </select>
+                </div>
+
+                <!-- Canal de Medición -->
+                <div class="flex flex-col gap-1.5">
+                    <label
+                        class="text-[10px] font-bold text-gray-500 uppercase tracking-wider"
+                        >Canal Meas (Y)</label
+                    >
+                    <select
+                        bind:value={uiStore.measChannel}
+                        class="w-full bg-[#121216] border border-[#1a1a24] rounded-md px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-[#3b82f6]"
+                    >
+                        <option value={0}>Canal 1 (L)</option>
+                        <option value={1}>Canal 2 (R)</option>
+                    </select>
+                </div>
             </div>
         </div>
     </div>
