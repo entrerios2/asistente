@@ -139,10 +139,10 @@ self.onmessage = (event) => {
             currentBins = BINS;
             currentFftSize = FFT_SIZE;
 
-            fftInputReal = new Float32Array(BINS);
-            fftInputImag = new Float32Array(BINS);
-            fftRefReal = new Float32Array(BINS);
-            fftRefImag = new Float32Array(BINS);
+            fftInputReal = new Float32Array(FFT_SIZE);
+            fftInputImag = new Float32Array(FFT_SIZE);
+            fftRefReal = new Float32Array(FFT_SIZE);
+            fftRefImag = new Float32Array(FFT_SIZE);
             hReal = new Float32Array(BINS);
             hImag = new Float32Array(BINS);
 
