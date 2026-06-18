@@ -1,142 +1,11 @@
 <script lang="ts">
     import { uiStore } from "$lib/stores/ui.svelte";
-    import { traceManager } from "$lib/stores/traceManager.svelte";
     import { onMount } from "svelte";
 
     import TabMedicion from "./TabMedicion.svelte";
     import TabEcualizar from "./TabEcualizar.svelte";
     import TabInstantaneas from "./TabInstantaneas.svelte";
     import TabConfig from "./TabConfig.svelte";
-
-    // --- ESTADOS DE ECUALIZACIÓN (PERSISTENTES EN SIDEBAR) ---
-    let eqType = $state<'grafico' | 'parametrico'>(uiStore.eqType); // 'grafico' | 'parametrico'
-    $effect(() => {
-        uiStore.eqType = eqType;
-    });
-    $effect(() => {
-        eqType = uiStore.eqType;
-    });
-    let showEQ = $state(true); // Switch Mostrar Ecualización
-    let numGraphicBands = $state(10); // 5 | 10 | 15
-    let customBandCount = $state(false);
-    let isCalculatingAutoEQ = $state(false);
-    let autoEQSourceLayer = $state<string>('active');
-
-    interface GraphicBand {
-        freq: number;
-        gain: number;
-    }
-    let graphicBands = $state<GraphicBand[]>([
-        { freq: 31, gain: 0 },
-        { freq: 63, gain: 0 },
-        { freq: 125, gain: 0 },
-        { freq: 250, gain: 0 },
-        { freq: 500, gain: 0 },
-        { freq: 1000, gain: 0 },
-        { freq: 2000, gain: 0 },
-        { freq: 4000, gain: 0 },
-        { freq: 8000, gain: 0 },
-        { freq: 16000, gain: 0 },
-    ]);
-
-    interface ParametricFilter {
-        id: number;
-        freq: number;
-        gain: number;
-        q: number;
-        type: string; // 'peaking' | 'lowpass' | 'highpass' | ...
-        supportedTypes: string[];
-        showConfig: boolean;
-    }
-    let parametricFilters = $state<ParametricFilter[]>([
-        {
-            id: 1,
-            freq: 80,
-            gain: 0,
-            q: 1.0,
-            type: "peaking",
-            supportedTypes: [
-                "peaking",
-                "lowpass",
-                "highpass",
-                "low_shelf",
-                "high_shelf",
-                "notch",
-                "bandpass",
-            ],
-            showConfig: false,
-        },
-        {
-            id: 2,
-            freq: 500,
-            gain: 0,
-            q: 1.0,
-            type: "peaking",
-            supportedTypes: ["peaking", "low_shelf", "high_shelf", "notch"],
-            showConfig: false,
-        },
-        {
-            id: 3,
-            freq: 2000,
-            gain: 0,
-            q: 1.0,
-            type: "peaking",
-            supportedTypes: ["peaking", "notch"],
-            showConfig: false,
-        },
-        {
-            id: 4,
-            freq: 8000,
-            gain: 0,
-            q: 1.0,
-            type: "peaking",
-            supportedTypes: ["peaking", "lowpass", "low_shelf", "high_shelf"],
-            showConfig: false,
-        },
-        {
-            id: 5,
-            freq: 12000,
-            gain: 0,
-            q: 1.0,
-            type: "peaking",
-            supportedTypes: ["peaking", "lowpass"],
-            showConfig: false,
-        },
-        {
-            id: 6,
-            freq: 16000,
-            gain: 0,
-            q: 1.0,
-            type: "peaking",
-            supportedTypes: ["peaking"],
-            showConfig: false,
-        },
-    ]);
-
-    // Sincronización reactiva con traceManager.eqBands
-    $effect(() => {
-        if (!showEQ) {
-            traceManager.eqBands = [];
-            return;
-        }
-
-        if (eqType === "grafico") {
-            traceManager.eqBands = graphicBands.map((b) => ({
-                freq: b.freq,
-                gain: b.gain,
-                q: 1.414,
-                type: "peaking",
-            }));
-        } else if (eqType === "parametrico") {
-            traceManager.eqBands = parametricFilters
-                .map((f) => ({
-                    freq: f.freq,
-                    gain: f.gain,
-                    q: f.q,
-                    type: f.type,
-                }));
-        }
-    });
 
     onMount(async () => {
         const stored = localStorage.getItem("asistente_config");
@@ -216,17 +85,7 @@
         {#if uiStore.activeTab === "medicion"}
             <TabMedicion bind:statusText />
         {:else if uiStore.activeTab === "eq"}
-            <TabEcualizar
-                bind:showEQ
-                bind:eqType
-                bind:numGraphicBands
-                bind:customBandCount
-                bind:isCalculatingAutoEQ
-                bind:autoEQSourceLayer
-                bind:graphicBands
-                bind:parametricFilters
-                bind:statusText
-            />
+            <TabEcualizar bind:statusText />
         {:else if uiStore.activeTab === "snaps"}
             <TabInstantaneas bind:statusText />
         {:else if uiStore.activeTab === "config"}

@@ -6,41 +6,11 @@
     import { mathOrchestrator } from "$lib/stores/mathOrchestrator.svelte";
     import { computeDeviation, type DeviationResult } from "$lib/dsp/deviationMetrics";
     import { filterSvgIcons } from "$lib/icons/filterIcons";
-
-    interface GraphicBand {
-        freq: number;
-        gain: number;
-    }
-
-    interface ParametricFilter {
-        id: number;
-        type: string;
-        freq: number;
-        gain: number;
-        q: number;
-        supportedTypes: string[];
-        showConfig: boolean;
-    }
+    import { eqStore, type GraphicBand } from "$lib/stores/eqStore.svelte";
 
     let {
-        showEQ = $bindable(true),
-        eqType = $bindable("grafico"),
-        numGraphicBands = $bindable(10),
-        customBandCount = $bindable(false),
-        isCalculatingAutoEQ = $bindable(false),
-        autoEQSourceLayer = $bindable("active"),
-        graphicBands = $bindable([]),
-        parametricFilters = $bindable([]),
         statusText = $bindable("Listo para medir")
     }: {
-        showEQ: boolean;
-        eqType: "grafico" | "parametrico";
-        numGraphicBands: number;
-        customBandCount: boolean;
-        isCalculatingAutoEQ: boolean;
-        autoEQSourceLayer: string;
-        graphicBands: GraphicBand[];
-        parametricFilters: ParametricFilter[];
         statusText: string;
     } = $props();
 
@@ -73,30 +43,30 @@
 
     // Ajustar número de bandas en modo gráfico
     $effect(() => {
-        const count = numGraphicBands;
-        const currentGraphicBands = untrack(() => graphicBands);
+        const count = eqStore.numGraphicBands;
+        const currentGraphicBands = untrack(() => eqStore.graphicBands);
         const newBands = generateGraphicBands(count);
-        graphicBands = newBands.map((nb) => {
+        eqStore.graphicBands = newBands.map((nb) => {
             const prev = currentGraphicBands.find((b) => Math.abs(b.freq - nb.freq) < 2);
             return { freq: nb.freq, gain: prev ? prev.gain : 0 };
         });
     });
 
     function runAutoEQ() {
-        isCalculatingAutoEQ = true;
+        eqStore.isCalculatingAutoEQ = true;
         statusText = "Calculando curva de corrección AutoEQ...";
         setTimeout(() => {
-            if (eqType === "grafico") {
-                graphicBands.forEach((b) => {
+            if (eqStore.eqType === "grafico") {
+                eqStore.graphicBands.forEach((b) => {
                     b.gain = Math.round((Math.random() * 12 - 6) * 10) / 10;
                 });
-            } else if (eqType === "parametrico") {
-                parametricFilters.forEach((f) => {
+            } else if (eqStore.eqType === "parametrico") {
+                eqStore.parametricFilters.forEach((f) => {
                     f.gain = Math.round((Math.random() * 10 - 5) * 10) / 10;
                     f.q = Math.round((0.5 + Math.random() * 2) * 10) / 10;
                 });
             }
-            isCalculatingAutoEQ = false;
+            eqStore.isCalculatingAutoEQ = false;
             statusText = "AutoEQ calculado con éxito";
         }, 1200);
     }
@@ -113,10 +83,10 @@
             <label class="flex items-center gap-2 cursor-pointer">
                 <input
                     type="checkbox"
-                    bind:checked={showEQ}
+                    bind:checked={eqStore.showEQ}
                     class="accent-[#fbbf24] w-3.5 h-3.5 cursor-pointer"
                 />
-                <span class="text-[10px] font-semibold" style="color: {showEQ ? '#fbbf24' : 'var(--text-muted)'}">
+                <span class="text-[10px] font-semibold" style="color: {eqStore.showEQ ? '#fbbf24' : 'var(--text-muted)'}">
                     <span class="material-symbols-outlined text-[12px] align-middle mr-0.5">equalizer</span>
                     Capa de ecualizador
                 </span>
@@ -164,7 +134,7 @@
             <select
                 class="w-full rounded-md text-xs py-1.5 px-2"
                 style="background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-primary)"
-                bind:value={autoEQSourceLayer}>
+                bind:value={eqStore.autoEQSourceLayer}>
                 <option value="active">Capa activa</option>
                 {#each traceManager.layers as layer}
                     <option value={layer.id}>{layer.name}</option>
@@ -175,11 +145,11 @@
         <button
             class="w-full min-h-[38px] bg-[#00ff88]/10 text-[#00ff88] hover:bg-[#00ff88]/20 border border-[#00ff88]/20 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-40"
             onclick={runAutoEQ}
-            disabled={!showEQ || isCalculatingAutoEQ}
+            disabled={!eqStore.showEQ || eqStore.isCalculatingAutoEQ}
         >
             <span class="material-symbols-outlined text-sm"
-                >{isCalculatingAutoEQ ? "sync" : "auto_awesome"}</span>
-            {isCalculatingAutoEQ
+                >{eqStore.isCalculatingAutoEQ ? "sync" : "auto_awesome"}</span>
+            {eqStore.isCalculatingAutoEQ
                 ? "Calculando..."
                 : "Calcular ecualización"}
         </button>
@@ -229,44 +199,44 @@
         <div class="flex items-center p-0.5 rounded-lg gap-0.5" style="background: var(--bg-tertiary); border: 1px solid var(--border-primary)">
             <button
                 class="flex-1 px-3 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer
-                       {eqType === 'grafico' ? 'bg-[#3b82f6]/10 text-[#3b82f6]' : 'hover:text-gray-300'}"
-                style="{eqType !== 'grafico' ? 'color: var(--text-muted)' : ''}"
-                onclick={() => eqType = 'grafico'}>
+                       {eqStore.eqType === 'grafico' ? 'bg-[#3b82f6]/10 text-[#3b82f6]' : 'hover:text-gray-300'}"
+                style="{eqStore.eqType !== 'grafico' ? 'color: var(--text-muted)' : ''}"
+                onclick={() => eqStore.eqType = 'grafico'}>
                 Gráfico
             </button>
             <button
                 class="flex-1 px-3 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer
-                       {eqType === 'parametrico' ? 'bg-[#3b82f6]/10 text-[#3b82f6]' : 'hover:text-gray-300'}"
-                style="{eqType !== 'parametrico' ? 'color: var(--text-muted)' : ''}"
-                onclick={() => eqType = 'parametrico'}>
+                       {eqStore.eqType === 'parametrico' ? 'bg-[#3b82f6]/10 text-[#3b82f6]' : 'hover:text-gray-300'}"
+                style="{eqStore.eqType !== 'parametrico' ? 'color: var(--text-muted)' : ''}"
+                onclick={() => eqStore.eqType = 'parametrico'}>
                 Paramétrico
             </button>
         </div>
     </div>
 
     <!-- MODO GRÁFICO -->
-    {#if eqType === "grafico"}
+    {#if eqStore.eqType === "grafico"}
         <div class="flex flex-col gap-4">
             <div class="flex justify-between items-center bg-[#121216]/20 border border-[#1a1a24]/30 rounded-lg p-2.5">
                 <label class="text-xs text-gray-400">Bandas</label>
-                {#if customBandCount}
+                {#if eqStore.customBandCount}
                     <div class="flex items-center gap-1">
                         <input
                             type="number"
                             min="3"
                             max="31"
-                            bind:value={numGraphicBands}
+                            bind:value={eqStore.numGraphicBands}
                             class="w-14 bg-[#121216] border border-[#1a1a24] rounded px-2 py-1 text-xs text-gray-200 text-center"
                         />
                         <button
                             class="text-[9px] text-gray-500 hover:text-white cursor-pointer"
-                            onclick={() => customBandCount = false}
+                            onclick={() => eqStore.customBandCount = false}
                         >Presets</button>
                     </div>
                 {:else}
                     <div class="flex items-center gap-1">
                         <select
-                            bind:value={numGraphicBands}
+                            bind:value={eqStore.numGraphicBands}
                             class="bg-[#121216] border border-[#1a1a24] rounded px-2 py-1 text-xs text-gray-200 focus:outline-none"
                         >
                             <option value={10}>1 oct (10)</option>
@@ -276,7 +246,7 @@
                         </select>
                         <button
                             class="text-[9px] text-gray-500 hover:text-white cursor-pointer px-1"
-                            onclick={() => customBandCount = true}
+                            onclick={() => eqStore.customBandCount = true}
                             title="Número personalizado de bandas"
                         >
                             <span class="material-symbols-outlined text-[12px]">tune</span>
@@ -286,7 +256,7 @@
             </div>
 
             <div class="flex flex-col gap-2.5">
-                {#each graphicBands as band}
+                {#each eqStore.graphicBands as band}
                     <div class="flex items-center gap-2">
                         <span
                             class="text-[11px] font-mono w-14 text-right text-gray-400"
@@ -320,18 +290,18 @@
     {/if}
 
     <!-- MODO PARAMÉTRICO -->
-    {#if eqType === "parametrico"}
+    {#if eqStore.eqType === "parametrico"}
         <div class="flex flex-col gap-3">
             <div class="flex justify-between items-center bg-[#121216]/20 border border-[#1a1a24]/30 rounded-lg p-2.5">
-                <label class="text-xs text-gray-400">{parametricFilters.length} filtro{parametricFilters.length !== 1 ? 's' : ''}</label>
+                <label class="text-xs text-gray-400">{eqStore.parametricFilters.length} filtro{eqStore.parametricFilters.length !== 1 ? 's' : ''}</label>
                 <button
                     class="text-[9px] text-red-400/60 hover:text-red-400 cursor-pointer"
-                    onclick={() => parametricFilters.forEach(f => { f.gain = 0; f.freq = 1000; f.q = 1.0; })}
+                    onclick={() => eqStore.parametricFilters.forEach(f => { f.gain = 0; f.freq = 1000; f.q = 1.0; })}
                     title="Resetear todos los filtros"
                 >Resetear</button>
             </div>
             <div class="flex flex-col gap-3">
-                {#each parametricFilters as filter}
+                {#each eqStore.parametricFilters as filter}
                     <div
                         class="border border-[#1a1a24] bg-[#121216]/20 rounded-lg p-3 flex flex-col gap-3"
                     >
@@ -342,7 +312,7 @@
                                 <span class="text-xs font-bold text-[#3b82f6]">Filtro {filter.id}</span>
                                 <button
                                     class="text-gray-500 hover:text-red-400 cursor-pointer flex items-center justify-center"
-                                    onclick={() => parametricFilters = parametricFilters.filter(f => f.id !== filter.id)}
+                                    onclick={() => eqStore.parametricFilters = eqStore.parametricFilters.filter(f => f.id !== filter.id)}
                                     title="Eliminar filtro"
                                 >
                                     <span class="material-symbols-outlined text-[14px]">close</span>
@@ -568,8 +538,8 @@
             <button
                 class="w-full py-2 px-3 rounded-lg border border-dashed border-[#1a1a24] text-[#3b82f6] hover:bg-[#3b82f6]/5 text-[10px] font-semibold transition-all cursor-pointer flex items-center justify-center gap-1"
                 onclick={() => {
-                    const newId = parametricFilters.length > 0 ? Math.max(...parametricFilters.map(f => f.id)) + 1 : 1;
-                    parametricFilters = [...parametricFilters, {
+                    const newId = eqStore.parametricFilters.length > 0 ? Math.max(...eqStore.parametricFilters.map(f => f.id)) + 1 : 1;
+                    eqStore.parametricFilters = [...eqStore.parametricFilters, {
                         id: newId,
                         type: 'peaking',
                         freq: 1000,

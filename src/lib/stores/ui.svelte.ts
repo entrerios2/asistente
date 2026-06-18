@@ -38,7 +38,6 @@ class UIStore {
     autoSaveSnapshotOnStop = $state(false);
     linkGeneratorToMeasurement = $state(true);
     activeLayerId = $state('');
-    eqType = $state<'grafico' | 'parametrico'>('grafico'); // 'grafico' | 'parametrico'
 
     // NUEVOS CONTROLES DE CALIBRACIÓN GLOBAL Y GANANCIA (PROMPT 7)
     inputGain = $state(0); // Ganancia de entrada en dB (-20 a +20)
