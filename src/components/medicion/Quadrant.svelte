@@ -662,40 +662,6 @@
         });
 
         // 4. Renderizar métricas que no son capas o son globales (Impulse, Step)
-        if (activeMetrics.includes("Impulse") && hasTimeDomainActive) {
-            const style = metricStyles["Impulse"];
-            drawTimeDomainPath(
-                ctx,
-                interpEngine.interpImpulse,
-                width,
-                height,
-                style.color,
-                style.lineWidth,
-                style.lineDash,
-                "Impulse",
-                interactionState,
-                getImpulseValueInterpolated,
-                hasTimeDomainActive
-            );
-        }
-
-        if (activeMetrics.includes("Step") && hasTimeDomainActive) {
-            const style = metricStyles["Step"];
-            drawTimeDomainPath(
-                ctx,
-                interpEngine.interpStep,
-                width,
-                height,
-                style.color,
-                style.lineWidth,
-                style.lineDash,
-                "Step",
-                interactionState,
-                getImpulseValueInterpolated,
-                hasTimeDomainActive
-            );
-        }
-
         if (activeMetrics.includes("Simulated Magnitude") && !hasTimeDomainActive && frequencyLUT.length > 0) {
             const style = metricStyles["Simulated Magnitude"] || { color: "#00ffff", lineWidth: 1.5, lineDash: [4, 4] };
             drawSimulatedMagnitudePath(

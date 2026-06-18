@@ -20,7 +20,6 @@ async function initWebFFT(fftSize: number): Promise<void> {
         webfftEngine = new WebFFT(fftSize);
         await webfftEngine.profile();
         webfftSize = fftSize;
-        console.log('[dspWorker] WebFFT initialized:', webfftEngine.toString());
     } catch (e) {
         console.warn('[dspWorker] WebFFT not available, using Radix-2 fallback:', e);
         webfftEngine = null;

@@ -7,6 +7,7 @@
     import { uiStore } from '$lib/stores/ui.svelte';
     import { mathOrchestrator } from '$lib/stores/mathOrchestrator.svelte';
     import { loadConfig, saveConfig } from "$lib/utils/configPersistence";
+    import '$lib/stores/eqStore.svelte';  // Asegura inicialización del $effect.root
 
     onMount(() => {
         // Cargar configuración persistida

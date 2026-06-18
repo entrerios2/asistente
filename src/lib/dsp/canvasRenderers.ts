@@ -13,10 +13,6 @@ import {
 } from './canvasInteraction';
 import { palettes, type PaletteType } from './colorPalettes';
 
-interface Trace {
-    id: string;
-    data: Float32Array;
-}
 
 export function drawGrid(
     ctx: CanvasRenderingContext2D,

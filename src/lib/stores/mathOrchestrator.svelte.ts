@@ -31,8 +31,8 @@ class MathOrchestrator {
     outputStep = $state.raw(new Float32Array(this.FFT_SIZE));
     outputCrestFactor = $state.raw(new Float32Array(this.BINS));
 
-    hReal = new Float32Array(this.BINS);
-    hImag = new Float32Array(this.BINS);
+    hReal = $state.raw(new Float32Array(this.BINS));
+    hImag = $state.raw(new Float32Array(this.BINS));
 
     // Cache for EQ response
     eqResponseCache = new Float32Array(this.BINS);
