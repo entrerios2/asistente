@@ -14,7 +14,7 @@ const config = {
 			fallback: '404.html'
 		}),
 		paths: {
-			base: '/asistente'
+			base: process.env.BASE_PATH || '/asistente'
 		}
 	}
 };
