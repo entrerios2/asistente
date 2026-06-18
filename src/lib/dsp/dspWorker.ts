@@ -89,7 +89,8 @@ function computeCoherence(output: Float32Array, bins: number): void {
     for (let k = 0; k < bins; k++) {
         const crossMagSq = cohGxyR[k] * cohGxyR[k] + cohGxyI[k] * cohGxyI[k];
         const denom = cohGxx[k] * cohGyy[k] + 1e-12;
-        output[k] = Math.min(1, Math.max(0, crossMagSq / denom));
+        // γ = |Gxy| / √(Gxx·Gyy) — como OSM (no γ²)
+        output[k] = Math.min(1, Math.max(0, Math.sqrt(crossMagSq) / Math.sqrt(denom)));
     }
 }
 
@@ -199,6 +200,19 @@ self.onmessage = (event) => {
         if (winType !== 'Rectangular') {
             windowProcessor.apply(meas, winType);
             windowProcessor.apply(ref, winType);
+        }
+
+        // 3b. DC removal (como OSM: resta media integrada post-ventana)
+        let dcMeas = 0, dcRef = 0;
+        for (let i = 0; i < FFT_SIZE; i++) {
+            dcMeas += meas[i];
+            dcRef += ref[i];
+        }
+        dcMeas /= FFT_SIZE;
+        dcRef /= FFT_SIZE;
+        for (let i = 0; i < FFT_SIZE; i++) {
+            meas[i] -= dcMeas;
+            ref[i] -= dcRef;
         }
 
         // 4. FFT de ambos canales → espectros complejos REALES

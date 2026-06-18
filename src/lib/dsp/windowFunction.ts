@@ -27,8 +27,17 @@ export class WindowFunction {
                 } else if (type === 'BlackmanHarris') {
                     w_n = 0.35875 - 0.48829 * Math.cos(phi) + 0.14128 * Math.cos(2 * phi) - 0.01168 * Math.cos(3 * phi);
                 } else if (type === 'HFT223D') {
-                    // Ventana Heinzel-Heinzel-Rüdiger de muy alta resolución
-                    w_n = 1.0 - 1.9329348896 * Math.cos(phi) + 1.2813988316 * Math.cos(2 * phi) - 0.3807315853 * Math.cos(3 * phi) + 0.0293292167 * Math.cos(4 * phi);
+                    // Ventana HFT223D — 10 coeficientes (Heinzel et al., OSM)
+                    w_n = 1.0
+                        - 1.98298997309 * Math.cos(phi)
+                        + 1.75556083063 * Math.cos(2 * phi)
+                        - 1.19037717712 * Math.cos(3 * phi)
+                        + 0.56155440797 * Math.cos(4 * phi)
+                        - 0.17296769663 * Math.cos(5 * phi)
+                        + 0.03233247087 * Math.cos(6 * phi)
+                        - 0.00324954578 * Math.cos(7 * phi)
+                        + 0.00013801040 * Math.cos(8 * phi)
+                        - 0.00000132725 * Math.cos(9 * phi);
                 } else if (type === 'Exponential') {
                     const tau = size / 5.0; // constante de tiempo
                     w_n = Math.exp(-n / tau);

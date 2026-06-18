@@ -1,7 +1,7 @@
 import { type MetricConfig } from './quadrantState';
 
-export const freqMin = 10;    // Hz (sub-bajo audible)
-export const freqMax = 22000; // Hz (cercano a Nyquist @ 44.1kHz)
+export const freqMin = 20;    // Hz (como OSM)
+export const freqMax = 20000; // Hz (como OSM)
 export const timeMin = -10; // ms
 export const timeMax = 100; // ms
 export const dbMin = -30; // dB
