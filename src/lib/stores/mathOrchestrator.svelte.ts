@@ -113,14 +113,14 @@ class MathOrchestrator {
 
     private handleWorkerMessage(data: any) {
         if (data.type === 'dsp-results') {
-            this.outputMagnitude.set(new Float32Array(data.outputMagnitude));
-            this.outputPhase.set(new Float32Array(data.outputPhase));
-            this.outputCoherence.set(new Float32Array(data.outputCoherence));
-            this.outputGroupDelay.set(new Float32Array(data.outputGroupDelay));
-            this.outputImpulse.set(new Float32Array(data.outputImpulse));
-            this.outputStep.set(new Float32Array(data.outputStep));
+            this.outputMagnitude = new Float32Array(data.outputMagnitude);
+            this.outputPhase = new Float32Array(data.outputPhase);
+            this.outputCoherence = new Float32Array(data.outputCoherence);
+            this.outputGroupDelay = new Float32Array(data.outputGroupDelay);
+            this.outputImpulse = new Float32Array(data.outputImpulse);
+            this.outputStep = new Float32Array(data.outputStep);
             if (data.outputCrestFactor) {
-                this.outputCrestFactor.set(new Float32Array(data.outputCrestFactor));
+                this.outputCrestFactor = new Float32Array(data.outputCrestFactor);
             }
             
             // PROPAGAR VÚMETROS DINÁMICAMENTE CONFORME A LOS CANALES ACTIVOS (PROMPT 7)

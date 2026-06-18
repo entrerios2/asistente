@@ -522,16 +522,34 @@ self.onmessage = (event) => {
             calculateGroupDelay(tempPhaseRadians, 24000 / BINS, outputGroupDelay);
         }
 
+        // Crear copias para transferir (el worker pierde ownership)
+        const magBuf = outputMagnitude.buffer;
+        const phaseBuf = outputPhase.buffer;
+        const cohBuf = outputCoherence.buffer;
+        const gdBuf = outputGroupDelay.buffer;
+        const impBuf = outputImpulse.buffer;
+        const stepBuf = outputStep.buffer;
+        const cfBuf = outputCrestFactor.buffer;
+
         (self as any).postMessage({
             type: 'dsp-results',
-            outputMagnitude: outputMagnitude.slice().buffer,
-            outputPhase: outputPhase.slice().buffer,
-            outputCoherence: outputCoherence.slice().buffer,
-            outputGroupDelay: outputGroupDelay.slice().buffer,
-            outputImpulse: outputImpulse.slice().buffer,
-            outputStep: outputStep.slice().buffer,
-            outputCrestFactor: outputCrestFactor.slice().buffer,
+            outputMagnitude: magBuf,
+            outputPhase: phaseBuf,
+            outputCoherence: cohBuf,
+            outputGroupDelay: gdBuf,
+            outputImpulse: impBuf,
+            outputStep: stepBuf,
+            outputCrestFactor: cfBuf,
             dbIn
-        });
+        }, [magBuf, phaseBuf, cohBuf, gdBuf, impBuf, stepBuf, cfBuf]);
+
+        // Reallocar buffers en el worker (los anteriores fueron transferidos)
+        outputMagnitude = new Float32Array(currentBins);
+        outputPhase = new Float32Array(currentBins);
+        outputCoherence = new Float32Array(currentBins);
+        outputGroupDelay = new Float32Array(currentBins);
+        outputImpulse = new Float32Array(currentFftSize);
+        outputStep = new Float32Array(currentFftSize);
+        outputCrestFactor = new Float32Array(currentBins);
     }
 };
