@@ -1,53 +1,10 @@
 <script lang="ts">
     import { uiStore } from "$lib/stores/ui.svelte";
-    import { onMount } from "svelte";
 
     import TabMedicion from "./TabMedicion.svelte";
     import TabEcualizar from "./TabEcualizar.svelte";
     import TabInstantaneas from "./TabInstantaneas.svelte";
     import TabConfig from "./TabConfig.svelte";
-
-    onMount(async () => {
-        const stored = localStorage.getItem("asistente_config");
-        if (stored) {
-            try {
-                const config = JSON.parse(stored);
-                if (config.layout) uiStore.setLayout(config.layout);
-                if (config.themeMode) {
-                    uiStore.setThemeMode(config.themeMode);
-                } else if (config.isDarkMode !== undefined) {
-                    uiStore.setThemeMode(config.isDarkMode ? 'dark' : 'light');
-                }
-                if (config.audioInDevice)
-                    uiStore.audioInDevice = config.audioInDevice;
-                if (config.audioOutDevice)
-                    uiStore.audioOutDevice = config.audioOutDevice;
-                if (config.inChannels) uiStore.inChannels = config.inChannels;
-                if (config.outChannels)
-                    uiStore.outChannels = config.outChannels;
-                if (config.referenceChannel) {
-                    uiStore.referenceChannel = config.referenceChannel;
-                }
-            } catch (e) {
-                console.error("Error cargando configuración guardada:", e);
-            }
-        } else {
-            uiStore.setLayout("1x1");
-        }
-    });
-
-    $effect(() => {
-        const dataToSave = {
-            layout: uiStore.layout,
-            themeMode: uiStore.themeMode,
-            audioInDevice: uiStore.audioInDevice,
-            audioOutDevice: uiStore.audioOutDevice,
-            inChannels: $state.snapshot(uiStore.inChannels),
-            outChannels: $state.snapshot(uiStore.outChannels),
-            referenceChannel: uiStore.referenceChannel,
-        };
-        localStorage.setItem("asistente_config", JSON.stringify(dataToSave));
-    });
 
     let statusText = $state("Listo para medir");
 </script>

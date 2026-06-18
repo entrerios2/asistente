@@ -6,8 +6,28 @@
     import { traceManager } from '$lib/stores/traceManager.svelte';
     import { uiStore } from '$lib/stores/ui.svelte';
     import { mathOrchestrator } from '$lib/stores/mathOrchestrator.svelte';
+    import { loadConfig, saveConfig } from "$lib/utils/configPersistence";
 
     onMount(() => {
+        // Cargar configuración persistida
+        const config = loadConfig();
+        if (config) {
+            if (config.layout) uiStore.setLayout(config.layout);
+            if (config.themeMode) {
+                uiStore.setThemeMode(config.themeMode);
+            }
+            if (config.audioInDevice) uiStore.audioInDevice = config.audioInDevice;
+            if (config.audioOutDevice) uiStore.audioOutDevice = config.audioOutDevice;
+            if (config.inChannels) uiStore.inChannels = config.inChannels;
+            if (config.outChannels) uiStore.outChannels = config.outChannels;
+            if (config.referenceChannel) uiStore.referenceChannel = config.referenceChannel;
+            if (config.sampleRate) uiStore.sampleRate = config.sampleRate;
+            if (config.fftSize) uiStore.fftSize = config.fftSize;
+            if (config.dspUpdateRate) uiStore.dspUpdateRate = config.dspUpdateRate;
+        } else {
+            uiStore.setLayout('1x1');
+        }
+
         // Hotkeys globales
         const handleKey = (e: KeyboardEvent) => {
             // No interceptar hotkeys cuando el usuario escribe en inputs
@@ -28,6 +48,22 @@
 
         window.addEventListener('keydown', handleKey);
         return () => window.removeEventListener('keydown', handleKey);
+    });
+
+    $effect(() => {
+        saveConfig({
+            _version: 2,
+            layout: uiStore.layout,
+            themeMode: uiStore.themeMode,
+            audioInDevice: uiStore.audioInDevice,
+            audioOutDevice: uiStore.audioOutDevice,
+            inChannels: $state.snapshot(uiStore.inChannels),
+            outChannels: $state.snapshot(uiStore.outChannels),
+            referenceChannel: uiStore.referenceChannel,
+            sampleRate: uiStore.sampleRate,
+            fftSize: uiStore.fftSize,
+            dspUpdateRate: uiStore.dspUpdateRate,
+        });
     });
 </script>
 
