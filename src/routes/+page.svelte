@@ -7,7 +7,7 @@
     import { uiStore } from '$lib/stores/ui.svelte';
     import { mathOrchestrator } from '$lib/stores/mathOrchestrator.svelte';
     import { loadConfig, saveConfig } from "$lib/utils/configPersistence";
-    import '$lib/stores/eqStore.svelte';  // Asegura inicialización del $effect.root
+    import { eqStore } from '$lib/stores/eqStore.svelte';  // Asegura inicialización del $effect.root
 
     onMount(() => {
         // Cargar configuración persistida
@@ -25,6 +25,7 @@
             if (config.sampleRate) uiStore.sampleRate = config.sampleRate;
             if (config.fftSize) uiStore.fftSize = config.fftSize;
             if (config.dspUpdateRate) uiStore.dspUpdateRate = config.dspUpdateRate;
+            eqStore.loadFromConfig(config);
         } else {
             uiStore.setLayout('1x1');
         }
@@ -53,7 +54,7 @@
 
     $effect(() => {
         saveConfig({
-            _version: 2,
+            _version: 3,
             layout: uiStore.layout,
             themeMode: uiStore.themeMode,
             audioInDevice: uiStore.audioInDevice,
@@ -64,6 +65,7 @@
             sampleRate: uiStore.sampleRate,
             fftSize: uiStore.fftSize,
             dspUpdateRate: uiStore.dspUpdateRate,
+            ...eqStore.toConfig(),
         });
     });
 </script>

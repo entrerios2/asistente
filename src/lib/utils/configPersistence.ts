@@ -3,7 +3,7 @@
  */
 
 const CONFIG_KEY = 'asistente_config';
-const CONFIG_VERSION = 2;
+const CONFIG_VERSION = 3;
 const SAVE_DEBOUNCE_MS = 1000;
 
 export interface PersistedConfig {
@@ -18,6 +18,10 @@ export interface PersistedConfig {
     sampleRate: number;
     fftSize: number;
     dspUpdateRate: number;
+    eqType?: 'grafico' | 'parametrico';
+    eqShowEQ?: boolean;
+    eqGraphicBands?: { freq: number; gain: number }[];
+    eqParametricFilters?: { id: number; freq: number; gain: number; q: number; type: string; supportedTypes: string[] }[];
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;

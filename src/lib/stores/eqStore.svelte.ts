@@ -78,6 +78,32 @@ class EQStore {
             });
         });
     }
+
+    loadFromConfig(config: any) {
+        if (config.eqType) this.eqType = config.eqType;
+        if (config.eqShowEQ !== undefined) this.showEQ = config.eqShowEQ;
+        if (config.eqGraphicBands && Array.isArray(config.eqGraphicBands)) {
+            this.graphicBands = config.eqGraphicBands;
+        }
+        if (config.eqParametricFilters && Array.isArray(config.eqParametricFilters)) {
+            this.parametricFilters = config.eqParametricFilters.map((f: any) => ({
+                ...f,
+                showConfig: false,
+                supportedTypes: f.supportedTypes || ['peaking'],
+            }));
+        }
+    }
+
+    toConfig() {
+        return {
+            eqType: this.eqType,
+            eqShowEQ: this.showEQ,
+            eqGraphicBands: $state.snapshot(this.graphicBands).map(b => ({ freq: b.freq, gain: b.gain })),
+            eqParametricFilters: $state.snapshot(this.parametricFilters).map(f => ({
+                id: f.id, freq: f.freq, gain: f.gain, q: f.q, type: f.type, supportedTypes: f.supportedTypes,
+            })),
+        };
+    }
 }
 
 export const eqStore = new EQStore();
