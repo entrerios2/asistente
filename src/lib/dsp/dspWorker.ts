@@ -116,6 +116,7 @@ self.onmessage = (event) => {
             averagingType,
             averagingDepth,
             averagingAlpha,
+            averagingThresholdDb,
             enableSourceWindow,
             sourceWindowWidthMs,
             sourceWindowOffsetMs,
@@ -223,7 +224,7 @@ self.onmessage = (event) => {
         // 6. Averaging sobre H(f)
         if (averagingProcessor && averagingType !== 'None' && needMagnitude) {
             if (averagingType === 'FIFO') {
-                averagingProcessor.processFIFO(hReal, hImag, avgHReal, avgHImag);
+                averagingProcessor.processFIFO(hReal, hImag, avgHReal, avgHImag, averagingThresholdDb);
                 hReal.set(avgHReal);
                 hImag.set(avgHImag);
                 // Recalcular magnitud desde H promediada

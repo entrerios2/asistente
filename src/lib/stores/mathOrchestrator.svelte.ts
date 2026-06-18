@@ -335,6 +335,7 @@ class MathOrchestrator {
                 averagingType: uiStore.averagingType,
                 averagingDepth: uiStore.averagingDepth,
                 averagingAlpha: uiStore.averagingAlpha,
+                averagingThresholdDb: uiStore.averagingThresholdDb,
                 enableSourceWindow: uiStore.enableSourceWindow,
                 sourceWindowWidthMs: uiStore.sourceWindowWidthMs,
                 sourceWindowOffsetMs: uiStore.sourceWindowOffsetMs,
