@@ -2,7 +2,11 @@ const DB_NAME = 'asistente_db';
 const DB_VERSION = 1;
 const STORE_NAME = 'instantaneas';
 
+let cachedDB: IDBDatabase | null = null;
+
 function openDB(): Promise<IDBDatabase> {
+    if (cachedDB) return Promise.resolve(cachedDB);
+
     return new Promise((resolve, reject) => {
         if (typeof indexedDB === 'undefined') {
             reject(new Error('IndexedDB no está soportado en este entorno.'));
@@ -15,7 +19,12 @@ function openDB(): Promise<IDBDatabase> {
                 db.createObjectStore(STORE_NAME, { keyPath: 'id' });
             }
         };
-        request.onsuccess = () => resolve(request.result);
+        request.onsuccess = () => {
+            cachedDB = request.result;
+            // Si la conexión se cierra externamente, limpiar el cache
+            cachedDB.onclose = () => { cachedDB = null; };
+            resolve(cachedDB);
+        };
         request.onerror = () => reject(request.error);
     });
 }

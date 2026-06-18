@@ -9,11 +9,10 @@ import { traceManager } from './traceManager.svelte';
 import { uiStore } from './ui.svelte';
 import { meterStore } from './meterStore.svelte';
 import { calibrationStore } from './calibrationStore.svelte';
-import { peakingCoeffs, lowShelfCoeffs, highShelfCoeffs, getCoeffsForType, biquadResponse } from '../dsp/biquad';
+import { getCoeffsForType, biquadResponse } from '../dsp/biquad';
 import {
     calculateMagnitude,
     calculatePhase,
-    calculateImpulseResponse,
     calculateStepResponse,
     calculateGroupDelay,
 } from '../dsp/osmMetrics';
@@ -33,8 +32,7 @@ class MathOrchestrator {
     BINS = 4096;
     private FFT_SIZE = 8192;
 
-    // Bridge for unused imports check
-    _dummy = [peakingCoeffs, biquadResponse];
+
 
     // Shared calculation buffers (for fallback synchronous execution)
     fftInputReal = new Float32Array(this.BINS);

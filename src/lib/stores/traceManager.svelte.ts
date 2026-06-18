@@ -168,11 +168,7 @@ class TraceManager {
             this.instantaneas = items.map((item: any) => {
                 const data: Record<string, Float32Array> = {};
                 for (const metric in item.data) {
-                    if (item.data[metric] instanceof ArrayBuffer || Array.isArray(item.data[metric]) || item.data[metric].buffer) {
-                        data[metric] = new Float32Array(item.data[metric]);
-                    } else {
-                        data[metric] = new Float32Array(item.data[metric]);
-                    }
+                    data[metric] = new Float32Array(item.data[metric]);
                 }
                 return {
                     id: item.id,

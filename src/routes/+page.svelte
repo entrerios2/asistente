@@ -9,11 +9,13 @@
     onMount(() => {
         // Hotkeys globales
         const handleKey = (e: KeyboardEvent) => {
+            // No interceptar hotkeys cuando el usuario escribe en inputs
+            const tag = (e.target as HTMLElement)?.tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
             if (e.code === 'Space') {
                 e.preventDefault();
                 traceManager.captureSnapshot('live-1', 'Captura manual', 'manual');
-            } else if (e.code === 'KeyD') {
-                console.log("Disparando Find Delay");
             } else if (e.key >= '1' && e.key <= '9') {
                 const index = parseInt(e.key) - 1;
                 const snapshots = traceManager.snapshots;
