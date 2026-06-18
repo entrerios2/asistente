@@ -25,6 +25,13 @@ export class WebAudioProvider implements AudioProvider {
 	private animationFrameId: number | null = null;
 	private leqCalculator: LeqCalculator | null = null;
 
+	private analyserRef: AnalyserNode | null = null;
+	private splitterNode: ChannelSplitterNode | null = null;
+	private refSab: SharedArrayBuffer | null = null;
+	private measSab: SharedArrayBuffer | null = null;
+	private refTimeDomain: Float32Array | null = null;
+	private measTimeDomain: Float32Array | null = null;
+
 	// Nodos del generador
 	private generatorNode: AudioNode | null = null;
 	private generatorGainNode: GainNode | null = null;
@@ -59,33 +66,56 @@ export class WebAudioProvider implements AudioProvider {
 		this.freqDataArray = new Float32Array(this.analyserNode.frequencyBinCount);
 		source.connect(this.analyserNode);
 
-		const bufferSize = uiStore.sampleRate;
-		let writeIndex = 0;
+		// Dual-channel: separar L/R para captura independiente
+		this.splitterNode = this.audioContext.createChannelSplitter(2);
+		source.connect(this.splitterNode);
+
+		// AnalyserNode dedicado para canal de referencia
+		this.analyserRef = this.audioContext.createAnalyser();
+		this.analyserRef.fftSize = uiStore.fftSize;
+		this.analyserRef.smoothingTimeConstant = 0;
+
+		// Conectar canales según routing del usuario
+		const refCh = uiStore.refChannel;
+		const measCh = uiStore.measChannel;
+		this.splitterNode.connect(this.analyserRef, refCh);
+
+		// Reasignar analyserNode existente al canal de medición
+		this.analyserNode!.smoothingTimeConstant = 0;
+		this.splitterNode.connect(this.analyserNode!, measCh);
+
+		// Buffers time-domain para dual-channel
+		this.refTimeDomain = new Float32Array(uiStore.fftSize);
+		this.measTimeDomain = new Float32Array(uiStore.fftSize);
+
+		const fftSize = uiStore.fftSize;
 		const hasSAB = typeof SharedArrayBuffer !== 'undefined';
 
 		if (hasSAB) {
-			this.sab = new SharedArrayBuffer(bufferSize * Float32Array.BYTES_PER_ELEMENT);
-			this.sharedArray = new Float32Array(this.sab);
-		} else {
-			console.warn('[AudioProvider] SharedArrayBuffer no disponible. Usando fallback ArrayBuffer.');
-			this.sab = null;
-			this.sharedArray = new Float32Array(bufferSize);
+			this.refSab = new SharedArrayBuffer(fftSize * Float32Array.BYTES_PER_ELEMENT);
+			this.measSab = new SharedArrayBuffer(fftSize * Float32Array.BYTES_PER_ELEMENT);
 		}
 
-		this.workletNode = new AudioWorkletNode(this.audioContext, 'audio-capture-processor');
-		
+		this.workletNode = new AudioWorkletNode(this.audioContext, 'audio-capture-processor', {
+			channelCount: 2,
+			channelCountMode: 'explicit',
+		});
+
 		if (hasSAB) {
-			this.workletNode.port.postMessage({ sab: this.sab });
+			this.workletNode.port.postMessage({
+				type: 'init',
+				fftSize,
+				refSab: this.refSab,
+				measSab: this.measSab
+			});
 		} else {
+			this.workletNode.port.postMessage({ type: 'init', fftSize });
+
 			this.workletNode.port.addEventListener('message', (event) => {
-				if (event.data && event.data.type === 'AUDIO_CHUNK' && event.data.buffer) {
-					const chunk = new Float32Array(event.data.buffer);
-					if (this.sharedArray) {
-						for (let i = 0; i < chunk.length; i++) {
-							this.sharedArray[writeIndex] = chunk[i];
-							writeIndex = (writeIndex + 1) % bufferSize;
-						}
-					}
+				if (event.data && event.data.type === 'DUAL_BLOCK') {
+					// Bloque dual-channel recibido via postMessage
+					this.refTimeDomain = new Float32Array(event.data.ref);
+					this.measTimeDomain = new Float32Array(event.data.meas);
 				}
 			});
 			this.workletNode.port.start();
@@ -94,26 +124,37 @@ export class WebAudioProvider implements AudioProvider {
 		source.connect(this.workletNode);
 
 		const readData = () => {
-			if (this.sharedArray) {
-				listener.onAudioData(this.sharedArray);
-			}
-
+			// Fast-path RTA (AnalyserNode de medición, solo para Spectrum)
 			if (this.analyserNode && this.freqDataArray && listener.onFrequencyData) {
 				this.analyserNode.getFloatFrequencyData(this.freqDataArray as any);
 				listener.onFrequencyData(this.freqDataArray as any);
+			}
 
-				if (uiStore.enableLeq) {
-					if (!this.leqCalculator) {
-						this.leqCalculator = new LeqCalculator(uiStore.leqWindowSeconds, uiStore.sampleRate);
-					} else {
-						this.leqCalculator.setWindowSeconds(uiStore.leqWindowSeconds);
-					}
-					const timeData = new Float32Array(this.analyserNode.fftSize);
-					this.analyserNode.getFloatTimeDomainData(timeData);
-					uiStore.leqValue = this.leqCalculator.processBlock(timeData);
-				} else {
-					this.leqCalculator = null;
+			// Dual-channel time-domain para el worker DSP
+			if (listener.onTimeDomainData && this.analyserRef && this.analyserNode) {
+				if (hasSAB && this.refSab && this.measSab) {
+					// Leer desde SAB (el worklet ya los llena)
+					const refData = new Float32Array(this.refSab);
+					const measData = new Float32Array(this.measSab);
+					listener.onTimeDomainData(measData, refData);
+				} else if (this.refTimeDomain && this.measTimeDomain) {
+					// Fallback: datos ya recibidos via postMessage
+					listener.onTimeDomainData(this.measTimeDomain, this.refTimeDomain);
 				}
+			}
+
+			// Leq calculator (mantener existente)
+			if (this.analyserNode && uiStore.enableLeq) {
+				if (!this.leqCalculator) {
+					this.leqCalculator = new LeqCalculator(uiStore.leqWindowSeconds, uiStore.sampleRate);
+				} else {
+					this.leqCalculator.setWindowSeconds(uiStore.leqWindowSeconds);
+				}
+				const timeData = new Float32Array(this.analyserNode.fftSize);
+				this.analyserNode.getFloatTimeDomainData(timeData);
+				uiStore.leqValue = this.leqCalculator.processBlock(timeData);
+			} else {
+				this.leqCalculator = null;
 			}
 
 			this.animationFrameId = requestAnimationFrame(readData);
@@ -126,12 +167,18 @@ export class WebAudioProvider implements AudioProvider {
 		if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
 		if (this.workletNode) this.workletNode.disconnect();
 		if (this.analyserNode) this.analyserNode.disconnect();
+		if (this.analyserRef) this.analyserRef.disconnect();
+		if (this.splitterNode) this.splitterNode.disconnect();
 		if (this.stream) this.stream.getTracks().forEach(track => track.stop());
 		
 		this.stream = null;
 		this.workletNode = null;
 		this.analyserNode = null;
+		this.analyserRef = null;
+		this.splitterNode = null;
 		this.freqDataArray = null;
+		this.refTimeDomain = null;
+		this.measTimeDomain = null;
 	}
 
 	async playWavFile(file: File, level: number): Promise<void> {
