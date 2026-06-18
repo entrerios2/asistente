@@ -922,6 +922,48 @@ La firma de `run()` ya no necesita el parámetro. Verificar que no haya otras ll
 
 ---
 
+## Tarea D4: Conectar TabMedicion.svelte con el pipeline dual-channel
+
+**Archivo a modificar:** `src/components/medicion/TabMedicion.svelte`
+
+**Contexto:** `startCapture()` en `TabMedicion.svelte` (L169) pasa callbacks `onAudioData` y `onFrequencyData` al HAL, pero NO pasa `onTimeDomainData`. Sin esta callback, `mathOrchestrator.feedTimeDomain()` nunca recibe datos y el pipeline DSP no ejecuta — la magnitud queda en 0.
+
+**Instrucción:**
+
+### Paso 1: Agregar import de mathOrchestrator
+
+Al inicio del `<script>` (L1-6), agregar:
+
+```diff
+     import { uiStore } from "$lib/stores/ui.svelte";
+     import { traceManager } from "$lib/stores/traceManager.svelte";
+     import { getAudioProvider } from "$lib/hal";
++    import { mathOrchestrator } from "$lib/stores/mathOrchestrator.svelte";
+```
+
+### Paso 2: Agregar callback onTimeDomainData en startCapture
+
+En `startMeasurement()` (L169-178), agregar la callback después de `onFrequencyData`:
+
+```diff
+             if (uiStore.measurementMode === "manual") {
+                 await provider.startCapture({
+                     onAudioData: () => {},
+                     onFrequencyData: (data) => {
+                         if (traceManager.liveFrequencyData.length !== data.length) {
+                             traceManager.liveFrequencyData = new Float32Array(data.length);
+                         }
+                         traceManager.liveFrequencyData.set(data);
+                         traceManager.version++;
+                     },
++                    onTimeDomainData: (measSamples, refSamples) => {
++                        mathOrchestrator.feedTimeDomain(measSamples, refSamples);
++                    },
+                 });
+```
+
+---
+
 ## Verificación Grupo D
 
 ```bash
@@ -1129,6 +1171,7 @@ npm run build
 | D1 | `src/lib/dsp/dspWorker.ts` | Modify (eliminar) |
 | D2 | `src/lib/dsp/dspWorker.ts` | Modify (reescribir) |
 | D3 | `src/lib/stores/mathOrchestrator.svelte.ts` | Modify |
+| D4 | `src/components/medicion/TabMedicion.svelte` | Modify |
 | E1 | `src/lib/dsp/canvasRenderers.ts` | Modify |
 | E2 | `src/components/medicion/MetricConfigPopover.svelte` | Modify |
 | E3 | `src/lib/dsp/canvasRenderers.ts` | Modify |

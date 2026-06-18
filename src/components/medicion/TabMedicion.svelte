@@ -3,6 +3,7 @@
     import { uiStore } from "$lib/stores/ui.svelte";
     import { traceManager } from "$lib/stores/traceManager.svelte";
     import { getAudioProvider } from "$lib/hal";
+    import { mathOrchestrator } from "$lib/stores/mathOrchestrator.svelte";
 
     const provider = getAudioProvider();
 
@@ -174,6 +175,9 @@
                         }
                         traceManager.liveFrequencyData.set(data);
                         traceManager.version++;
+                    },
+                    onTimeDomainData: (measSamples, refSamples) => {
+                        mathOrchestrator.feedTimeDomain(measSamples, refSamples);
                     },
                 });
                 statusText = "Medición en vivo activa";
