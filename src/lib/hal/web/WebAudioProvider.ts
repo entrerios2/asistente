@@ -84,7 +84,9 @@ export class WebAudioProvider implements AudioProvider {
 		// Conectar cada canal del splitter a su analyser dedicado
 		const refCh = uiStore.refChannel;
 		const measCh = uiStore.measChannel;
-		this.splitterNode.connect(this.analyserRef, refCh);
+		if (refCh >= 0) {
+			this.splitterNode.connect(this.analyserRef, refCh);
+		}
 		this.splitterNode.connect(this.analyserNode, measCh);
 
 		// Buffers time-domain para dual-channel
