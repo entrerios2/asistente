@@ -353,10 +353,17 @@ class MathOrchestrator {
                     ? this.compensationDelaySamples
                     : Math.round(uiStore.compensationDelayMs * uiStore.sampleRate / 1000),
                 autoDelayCompensation: uiStore.autoDelayCompensation,
+                inputGain: uiStore.inputGain,
+                displayOffset: uiStore.displayOffset,
+                polarity: uiStore.polarity,
             }, [measCopy.buffer, refCopy.buffer]);
 
             this.dirty = false;
         }
+    }
+
+    resetAveraging(): void {
+        this.worker?.postMessage({ type: 'reset-averaging' });
     }
 }
 

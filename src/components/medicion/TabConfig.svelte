@@ -2,6 +2,7 @@
     import { onMount } from "svelte";
     import { uiStore } from "$lib/stores/ui.svelte";
     import { calibrationStore } from "$lib/stores/calibrationStore.svelte";
+    import { mathOrchestrator } from "$lib/stores/mathOrchestrator.svelte";
     import { getAudioProvider } from "$lib/hal";
 
     const provider = getAudioProvider();
@@ -316,6 +317,28 @@
                     </span>
                 </div>
             {/if}
+        </div>
+
+        <!-- Polarity + Reset Average -->
+        <div class="flex items-center gap-2">
+            <button
+                class="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[10px] font-bold transition-all cursor-pointer border
+                       {uiStore.polarity
+                    ? 'bg-[#ef4444]/15 text-[#ef4444] border-[#ef4444]/30'
+                    : 'bg-[#121216] text-gray-500 border-[#1a1a24]/40 hover:text-gray-300'}"
+                onclick={() => uiStore.polarity = !uiStore.polarity}
+                title="Inversión de polaridad del canal de medición"
+            >
+                <span class="text-sm">⊘</span> Polarity
+            </button>
+            <button
+                class="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[10px] font-bold transition-all cursor-pointer border
+                       bg-[#121216] text-gray-500 border-[#1a1a24]/40 hover:text-gray-300 hover:border-[#ec4899]/30"
+                onclick={() => mathOrchestrator.resetAveraging()}
+                title="Reiniciar todos los promedios (FIFO + Complex Averaging)"
+            >
+                <span class="material-symbols-outlined text-sm">restart_alt</span> Reset Avg
+            </button>
         </div>
 
         <!-- Función de Ventana -->

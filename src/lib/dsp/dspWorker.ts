@@ -157,6 +157,9 @@ self.onmessage = (event) => {
             sampleRate,
             compensationDelaySamples,
             autoDelayCompensation,
+            inputGain,
+            displayOffset,
+            polarity,
         } = event.data;
 
         const sr = sampleRate || 48000;
@@ -226,6 +229,21 @@ self.onmessage = (event) => {
             circularShift(ref, compensationDelaySamples);
         }
 
+        // 2b. Input Gain (solo meas, pre-ventana)
+        if (inputGain && inputGain !== 0) {
+            const gainLinear = Math.pow(10, inputGain / 20);
+            for (let i = 0; i < FFT_SIZE; i++) {
+                meas[i] *= gainLinear;
+            }
+        }
+
+        // 2c. Polarity inversion (solo meas, pre-ventana)
+        if (polarity) {
+            for (let i = 0; i < FFT_SIZE; i++) {
+                meas[i] = -meas[i];
+            }
+        }
+
         // 3. Aplicar ventana pre-FFT a ambos canales
         const winType = windowType || 'Hann';
         if (winType !== 'Rectangular') {
@@ -258,6 +276,12 @@ self.onmessage = (event) => {
             for (let k = 0; k < BINS; k++) {
                 const mag = Math.sqrt(fftInputReal[k] * fftInputReal[k] + fftInputImag[k] * fftInputImag[k]);
                 outputSpectrum[k] = 20 * Math.log10((mag / FFT_SIZE) * Math.SQRT2 + 1e-12);  // 1/N + √2 (como OSM)
+            }
+            // Display Offset (solo Spectrum, en dB)
+            if (displayOffset && displayOffset !== 0) {
+                for (let k = 0; k < BINS; k++) {
+                    outputSpectrum[k] += displayOffset;
+                }
             }
         }
 
@@ -293,6 +317,13 @@ self.onmessage = (event) => {
                     const mag = Math.sqrt(hReal[k] * hReal[k] + hImag[k] * hImag[k]);
                     outputMagnitude[k] = 20 * Math.log10(mag + 1e-8);
                 }
+            }
+        }
+
+        // 6b. Display Offset (solo Magnitude, en dB)
+        if (displayOffset && displayOffset !== 0 && needMagnitude) {
+            for (let k = 0; k < BINS; k++) {
+                outputMagnitude[k] += displayOffset;
             }
         }
 
@@ -396,5 +427,15 @@ self.onmessage = (event) => {
         outputSpectrum = new Float32Array(currentBins);
         hReal = new Float32Array(currentBins);
         hImag = new Float32Array(currentBins);
+    }
+
+    // --- RESET AVERAGING ---
+    if (event.data && event.data.type === 'reset-averaging') {
+        if (currentBins > 0) {
+            initCoherenceFIFO(currentBins, COH_DEFAULT_DEPTH);
+        }
+        if (averagingProcessor) {
+            averagingProcessor.reset();
+        }
     }
 };

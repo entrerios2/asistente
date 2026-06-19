@@ -42,6 +42,7 @@ class UIStore {
     // NUEVOS CONTROLES DE CALIBRACIÓN GLOBAL Y GANANCIA (PROMPT 7)
     inputGain = $state(0); // Ganancia de entrada en dB (-20 a +20)
     displayOffset = $state(0); // Offset de visualización en dB (-100 a +100)
+    polarity = $state(false);  // Inversión de fase del canal de medición
 
     // NUEVOS CONTROLES DSP AVANZADOS - PARIDAD OSM (PROMPT 9)
     weightingType = $state<'A' | 'B' | 'C' | 'Z'>('Z');
