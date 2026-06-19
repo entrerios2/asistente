@@ -23,16 +23,9 @@
     // Calcular si la entrada y salida están balanceadas/calibradas
     const isCalibrated = $derived.by(() => {
         if (!uiStore.genActive) return false;
-
-        // Calcular promedio de entrada y salida
-        const inAvg =
-            meterStore.inLevels.reduce((a, b) => a + b, 0) /
-            Math.max(1, meterStore.inLevels.length);
-        const outAvg =
-            meterStore.outLevels.reduce((a, b) => a + b, 0) /
-            Math.max(1, meterStore.outLevels.length);
-
-        // Si la diferencia absoluta es menor a 2.0 dB, se considera empatado
+        // Comparar promedio de ref+meas vs out
+        const inAvg = (meterStore.refLevel + meterStore.measLevel) / 2;
+        const outAvg = meterStore.outLevel;
         return Math.abs(inAvg - outAvg) < 2.0;
     });
 
@@ -182,31 +175,32 @@
 
         <div class="header-sep"></div>
 
-        <!-- Vúmetro compacto -->
+        <!-- Vúmetro compacto: REF + MEAS + OUT -->
         <div
             class="vu-outer-container cursor-pointer"
             onclick={() => { uiStore.activeTab = "config"; }}
             title="Hacer clic para ir a Configuración de Audio"
         >
             <div class="vu-container">
+                <!-- Canal REF -->
                 <div class="vu-group">
-                    <span class="vu-label">IN</span>
-                    <div class="vu-bars">
-                        {#each meterStore.inLevels as level}
-                            <div class="vu-track">
-                                <div class="vu-fill in" style="width: {getVuWidth(level)}%"></div>
-                            </div>
-                        {/each}
+                    <span class="vu-label">REF</span>
+                    <div class="vu-track">
+                        <div class="vu-fill {uiStore.isMeasuring ? 'in' : 'inactive'}" style="width: {getVuWidth(meterStore.refLevel)}%"></div>
                     </div>
                 </div>
+                <!-- Canal MEAS -->
+                <div class="vu-group">
+                    <span class="vu-label">MEAS</span>
+                    <div class="vu-track">
+                        <div class="vu-fill {uiStore.isMeasuring ? 'in' : 'inactive'}" style="width: {getVuWidth(meterStore.measLevel)}%"></div>
+                    </div>
+                </div>
+                <!-- Canal OUT -->
                 <div class="vu-group">
                     <span class="vu-label">OUT</span>
-                    <div class="vu-bars">
-                        {#each meterStore.outLevels as level}
-                            <div class="vu-track">
-                                <div class="vu-fill out" style="width: {getVuWidth(level)}%"></div>
-                            </div>
-                        {/each}
+                    <div class="vu-track">
+                        <div class="vu-fill {uiStore.genActive ? 'out' : 'inactive'}" style="width: {getVuWidth(meterStore.outLevel)}%"></div>
                     </div>
                 </div>
             </div>
@@ -298,11 +292,6 @@
         letter-spacing: 0.05em;
     }
 
-    .vu-bars {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-    }
 
     .vu-track {
         width: 110px;
@@ -330,12 +319,16 @@
 
     .vu-fill.out {
         background: linear-gradient(90deg, 
-            #004411 0%, 
-            #00ff88 85.7%, 
+            #0a1628 0%, 
+            #3b82f6 85.7%, 
             #facc15 87%, 
             #ef4444 100%
         );
         background-size: 110px 100%;
+    }
+
+    .vu-fill.inactive {
+        background: #1f1f26;
     }
 
     /* Contenedor del LED de Calibración */
