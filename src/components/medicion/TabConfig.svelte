@@ -258,6 +258,27 @@
             </div>
         </div>
 
+        <!-- PPO Smoothing -->
+        <div class="flex flex-col gap-1.5">
+            <label
+                class="text-[10px] font-bold text-gray-500 uppercase tracking-wider"
+                >Suavizado (PPO Smoothing)</label
+            >
+            <div class="flex bg-[#121216] p-0.5 rounded-md border border-[#1a1a24]/40">
+                {#each [['0', 'Off'], ['1', '1'], ['3', '1/3'], ['6', '1/6'], ['12', '1/12'], ['24', '1/24'], ['48', '1/48']] as [val, label]}
+                    <button
+                        class="flex-1 py-1.5 text-[9px] font-bold rounded transition-all cursor-pointer min-h-[28px]
+                               {String(uiStore.ppoSmoothing) === val
+                            ? 'bg-[#8b5cf6]/15 text-[#8b5cf6] shadow'
+                            : 'text-gray-500 hover:text-gray-300'}"
+                        onclick={() => uiStore.ppoSmoothing = Number(val)}
+                    >
+                        {label}
+                    </button>
+                {/each}
+            </div>
+        </div>
+
         <!-- Promediado Complejo -->
         <div class="flex flex-col gap-1.5">
             <label

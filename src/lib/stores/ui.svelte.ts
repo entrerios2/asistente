@@ -50,6 +50,7 @@ class UIStore {
     averagingDepth = $state(16);
     averagingAlpha = $state(0.1);
     besselSpeed = $state<'Slow' | 'Medium' | 'Fast'>('Medium'); // 0.25, 0.5, 1.0 Hz
+    ppoSmoothing = $state(0); // 0=off, valores comunes: 1,3,6,12,24,48 PPO
     windowType = $state<'Rectangular' | 'Hann' | 'Hamming' | 'FlatTop' | 'BlackmanHarris' | 'HFT223D' | 'Exponential'>('Hann');
     enableLeq = $state(false);
     leqWindowSeconds = $state(10);

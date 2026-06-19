@@ -13,6 +13,7 @@ import { WindowFunction } from './windowFunction';
 import { fft } from './fft';
 import { createInputFilter, type InputFilterType, type BiquadIIR } from './iirFilter';
 import { BesselAveraging, type BesselFrequency } from './besselLPF';
+import { applyPPOSmoothing, applyPPOSmoothingPhase } from './ppoSmoothing';
 
 // WebFFT: motor FFT acelerado (WASM/GPU)
 let webfftEngine: any = null;
@@ -175,6 +176,7 @@ self.onmessage = (event) => {
             calibrationGain,
             inputFilter,
             besselSpeed,
+            ppoSmoothing,
         } = event.data;
 
         const sr = sampleRate || 48000;
@@ -449,6 +451,14 @@ self.onmessage = (event) => {
                     detectedDelaySamples = i;
                 }
             }
+        }
+
+        // 14. PPO Fractional-Octave Smoothing (display smoothing)
+        if (ppoSmoothing && ppoSmoothing > 0) {
+            if (needMagnitude) applyPPOSmoothing(outputMagnitude, BINS, sr, ppoSmoothing);
+            if (needPhase) applyPPOSmoothingPhase(outputPhase, BINS, sr, ppoSmoothing);
+            applyPPOSmoothing(outputCoherence, BINS, sr, ppoSmoothing);
+            if (metricsSet.has('Spectrum')) applyPPOSmoothing(outputSpectrum, BINS, sr, ppoSmoothing);
         }
 
         // --- ENVIAR RESULTADOS ---

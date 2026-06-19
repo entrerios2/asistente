@@ -374,6 +374,7 @@ class MathOrchestrator {
                 calibrationGain: calGainBuf,
                 inputFilter: uiStore.inputFilter,
                 besselSpeed: uiStore.besselSpeed,
+                ppoSmoothing: uiStore.ppoSmoothing,
             }, transferables);
 
             this.dirty = false;
