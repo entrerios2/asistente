@@ -116,6 +116,7 @@ class MathOrchestrator {
 
     private handleWorkerMessage(data: any) {
         if (data.type === 'dsp-results') {
+            this.lastMathTime = performance.now();
             this.outputMagnitude = new Float32Array(data.outputMagnitude);
             this.outputPhase = new Float32Array(data.outputPhase);
             this.outputCoherence = new Float32Array(data.outputCoherence);
@@ -350,8 +351,6 @@ class MathOrchestrator {
         if (!this.dirty) {
             return;
         }
-
-        this.lastMathTime = performance.now();
 
         if (this.worker) {
             const measCopy = new Float32Array(this.measTimeDomain);

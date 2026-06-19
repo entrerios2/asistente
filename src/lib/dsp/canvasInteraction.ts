@@ -263,15 +263,7 @@ export function handleMouseMove(
 export function handleMouseDown(
     e: MouseEvent,
     state: InteractionState,
-    showSelector: boolean,
-    settingsBtn: HTMLButtonElement | undefined
 ) {
-    if (
-        showSelector &&
-        settingsBtn &&
-        settingsBtn.contains(e.target as Node)
-    )
-        return;
     state.isDragging = true;
     state.lastMouseX = e.clientX;
     state.lastMouseY = e.clientY;

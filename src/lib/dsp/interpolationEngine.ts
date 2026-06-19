@@ -15,6 +15,9 @@ export class InterpolationEngine {
     public prevCoherence: Float32Array;
     public prevGroupDelay: Float32Array;
 
+    // Timestamp de cuando se guardó el snapshot previo (para cálculo de intervalo real)
+    public historyTime: number = 0;
+
     constructor() {
         this.interpMagnitude = new Float32Array(this.BINS);
         this.interpPhase = new Float32Array(this.BINS);
@@ -47,6 +50,7 @@ export class InterpolationEngine {
             this.interpImpulse[i] = 0;
             this.interpStep[i] = 0;
         }
+        this.historyTime = 0;
     }
 
     public getMetricValueInterpolated(freq: number, dataArray: Float32Array, sampleRate: number = 48000): number {
@@ -77,10 +81,19 @@ export class InterpolationEngine {
     public interpolateBuffers(snap: boolean, mathOrchestrator: any) {
         const now = performance.now();
         const throttleMs = mathOrchestrator.throttleMs;
-        const timeElapsed = now - mathOrchestrator.lastMathTime;
+        const timeSinceNew = now - mathOrchestrator.lastMathTime;
+
         // If no new data for >2 intervals, freeze display (don't decay to stale data)
-        if (!snap && timeElapsed > throttleMs * 2) return;
-        const t = snap ? 1.0 : Math.max(0, Math.min(1.0, timeElapsed / throttleMs));
+        if (!snap && timeSinceNew > throttleMs * 2) return;
+
+        // Calcular t basado en intervalo real entre resultados
+        const realInterval = this.historyTime > 0
+            ? Math.max(mathOrchestrator.lastMathTime - this.historyTime, throttleMs)
+            : throttleMs;
+        const tLinear = snap ? 1.0 : Math.min(1.0, timeSinceNew / realInterval);
+
+        // Ease-out cuadrático: respuesta rápida al inicio, desaceleración suave
+        const t = 1 - (1 - tLinear) * (1 - tLinear);
 
         for (let i = 0; i < this.BINS; i++) {
             this.interpMagnitude[i] = this.prevMagnitude[i] * (1 - t) + mathOrchestrator.outputMagnitude[i] * t;
@@ -88,7 +101,6 @@ export class InterpolationEngine {
             this.interpCoherence[i] = this.prevCoherence[i] * (1 - t) + mathOrchestrator.outputCoherence[i] * t;
             this.interpGroupDelay[i] = this.prevGroupDelay[i] * (1 - t) + mathOrchestrator.outputGroupDelay[i] * t;
         }
-
 
         const factor = snap ? 1.0 : this.SMOOTHING_FACTOR;
         for (let i = 0; i < this.FFT_SIZE; i++) {
@@ -100,6 +112,7 @@ export class InterpolationEngine {
     }
 
     public updateHistory() {
+        this.historyTime = performance.now();
         this.prevMagnitude.set(this.interpMagnitude);
         this.prevPhase.set(this.interpPhase);
         this.prevCoherence.set(this.interpCoherence);

@@ -15,7 +15,7 @@
     } from "$lib/dsp/quadrantState";
 
     import ZoomControls from "./ZoomControls.svelte";
-    import GlobalConfigPopover from "./GlobalConfigPopover.svelte";
+
     import MetricConfigPopover from "./MetricConfigPopover.svelte";
     import AddMetricDropdown from "./AddMetricDropdown.svelte";
     import LayerPanel from "./LayerPanel.svelte";
@@ -49,7 +49,6 @@
 
     let canvas: HTMLCanvasElement;
     let container: HTMLDivElement;
-    let settingsBtn: HTMLButtonElement;
 
     // Lista de métricas activas
     let activeMetrics = $state<string[]>(["Magnitude"]);
@@ -66,8 +65,7 @@
     let showEQOverlay = $state(false);
     let draggingEQNode = $state<number | null>(null);
     let hoveringEQNode = $state<number | null>(null);
-    let smoothing = $state(1 / 48);
-    let showSelector = $state(false);
+
 
     let metricStyles = $state<
         Record<string, { color: string; lineWidth: number; lineDash: number[] }>
@@ -519,8 +517,6 @@
         interactionHandleMouseDown(
             e,
             interactionState,
-            showSelector,
-            settingsBtn,
         );
     }
 
@@ -580,10 +576,7 @@
         return 1.0;
     }
 
-    function toggleSelector(e: MouseEvent) {
-        e.stopPropagation();
-        showSelector = !showSelector;
-    }
+
 
     function onLayerDrop(e: DragEvent) {
         e.preventDefault();
@@ -768,18 +761,6 @@
         <!-- ETIQUETA DE CAPA ACTIVA + BOTÓN DE CAPAS CON BADGE (CON ML-AUTO Y BOTÓN SETTINGS INTEGRADO) -->
         <div class="flex items-center gap-1.5 ml-auto">
             <LayerPanel quadrantId={id} {quadrantLayers} bind:showEQOverlay />
-
-            <!-- Botón settings (MOVIDO AQUÍ) -->
-            <button
-                bind:this={settingsBtn}
-                class="settings-btn flex items-center justify-center w-8 h-8 rounded-lg border border-[#1a1a24] text-gray-400 hover:text-gray-200 transition-all cursor-pointer hover:bg-[#121216]"
-                onclick={toggleSelector}
-                title="Configuración Global del Gráfico"
-            >
-                <span class="material-symbols-outlined text-[16px]"
-                    >settings</span
-                >
-            </button>
         </div>
     </div>
 
@@ -802,13 +783,7 @@
     <!-- BOTÓN ÚNICO DE ZOOM CON MENÚ -->
     <ZoomControls bind:interactionState onDoubleClick={handleDoubleClick} />
 
-    <!-- POPOVER FLOTANTE ABSOLUTO OSM (CONFIGURACIÓN GLOBAL) -->
-    <GlobalConfigPopover
-        show={showSelector}
-        bind:smoothing
-        onClose={() => (showSelector = false)}
-        onResetView={handleDoubleClick}
-    />
+
 
     <!-- POPOVER DE CONFIGURACIÓN POR MÉTRICA (OSM PARIDAD) -->
     <MetricConfigPopover
@@ -871,23 +846,5 @@
         flex-wrap: wrap;
     }
 
-    .settings-btn {
-        background: rgba(255, 255, 255, 0.03);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        color: #9ca3af;
-        width: 24px;
-        height: 24px;
-        border-radius: 6px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    .settings-btn:hover {
-        background: rgba(255, 255, 255, 0.07);
-        border-color: rgba(255, 255, 255, 0.18);
-        color: #fff;
-    }
 </style>
+
