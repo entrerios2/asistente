@@ -164,13 +164,8 @@
             if (uiStore.measurementMode === "manual") {
                 await provider.startCapture({
                     onAudioData: () => {},
-                    onFrequencyData: (data) => {
-                        if (traceManager.liveFrequencyData.length !== data.length) {
-                            traceManager.liveFrequencyData = new Float32Array(data.length);
-                        }
-                        traceManager.liveFrequencyData.set(data);
-                        traceManager.version++;
-                    },
+                    // Spectrum ahora se calcula en el dspWorker (C1)
+                    // y se escribe a liveFrequencyData vía mathOrchestrator (C2)
                     onTimeDomainData: (measSamples, refSamples) => {
                         mathOrchestrator.feedTimeDomain(measSamples, refSamples);
                     },
