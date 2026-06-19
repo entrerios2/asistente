@@ -375,6 +375,7 @@ class MathOrchestrator {
                 inputFilter: uiStore.inputFilter,
                 besselSpeed: uiStore.besselSpeed,
                 ppoSmoothing: uiStore.ppoSmoothing,
+                fftOverlap: uiStore.fftOverlap,
             }, transferables);
 
             this.dirty = false;

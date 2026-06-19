@@ -139,6 +139,11 @@ let currentInputFilterSR: number = 0;
 // Bessel averaging state (G2)
 let besselAveraging: BesselAveraging | null = null;
 
+// Overlap FFT state (H2)
+let overlapMeasHistory: Float32Array | null = null;
+let overlapRefHistory: Float32Array | null = null;
+let overlapFftSize: number = 0;
+
 function circularShift(buffer: Float32Array, samples: number): void {
     const N = buffer.length;
     const shift = ((samples % N) + N) % N;
@@ -177,6 +182,7 @@ self.onmessage = (event) => {
             inputFilter,
             besselSpeed,
             ppoSmoothing,
+            fftOverlap,
         } = event.data;
 
         const sr = sampleRate || 48000;
@@ -235,8 +241,43 @@ self.onmessage = (event) => {
 
         // --- PIPELINE REAL ---
 
-        const meas = new Float32Array(measTimeDomain);
-        const ref = new Float32Array(refTimeDomain);
+        let meas = new Float32Array(measTimeDomain);
+        let ref = new Float32Array(refTimeDomain);
+
+        // 0. Overlap: construct overlapping frame from history + new data
+        const overlap = fftOverlap || 0;
+        if (overlap > 0 && FFT_SIZE > 0) {
+            // Initialize history buffers if needed
+            if (!overlapMeasHistory || overlapFftSize !== FFT_SIZE) {
+                overlapMeasHistory = new Float32Array(FFT_SIZE);
+                overlapRefHistory = new Float32Array(FFT_SIZE);
+                overlapFftSize = FFT_SIZE;
+            }
+
+            const keepFraction = overlap / 100; // 0.5 or 0.75
+            const keepSamples = Math.round(FFT_SIZE * keepFraction);
+            const newSamples = FFT_SIZE - keepSamples;
+
+            // Build overlapped frame: [tail of history | head of new block]
+            const overlappedMeas = new Float32Array(FFT_SIZE);
+            const overlappedRef = new Float32Array(FFT_SIZE);
+
+            // Copy tail of history (keepSamples from the end)
+            overlappedMeas.set(overlapMeasHistory.subarray(newSamples), 0);
+            overlappedRef.set(overlapRefHistory.subarray(newSamples), 0);
+
+            // Copy head of new block
+            overlappedMeas.set(meas.subarray(0, newSamples), keepSamples);
+            overlappedRef.set(ref.subarray(0, newSamples), keepSamples);
+
+            // Save current full block as history for next iteration
+            overlapMeasHistory.set(meas);
+            overlapRefHistory.set(ref);
+
+            // Use the overlapped frame
+            meas = overlappedMeas;
+            ref = overlappedRef;
+        }
 
         // 1. Calcular niveles Peak/RMS ANTES de aplicar ventana
         const refLevel = processSignalLevel(ref);

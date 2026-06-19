@@ -279,6 +279,27 @@
             </div>
         </div>
 
+        <!-- FFT Overlap -->
+        <div class="flex flex-col gap-1.5">
+            <label
+                class="text-[10px] font-bold text-gray-500 uppercase tracking-wider"
+                >FFT Overlap</label
+            >
+            <div class="flex bg-[#121216] p-0.5 rounded-md border border-[#1a1a24]/40">
+                {#each [[0, '0%'], [50, '50%'], [75, '75%']] as [val, label]}
+                    <button
+                        class="flex-1 py-1.5 text-[10px] font-bold rounded transition-all cursor-pointer min-h-[28px]
+                               {uiStore.fftOverlap === val
+                            ? 'bg-[#f59e0b]/15 text-[#f59e0b] shadow'
+                            : 'text-gray-500 hover:text-gray-300'}"
+                        onclick={() => uiStore.fftOverlap = val as 0 | 50 | 75}
+                    >
+                        {label}
+                    </button>
+                {/each}
+            </div>
+        </div>
+
         <!-- Promediado Complejo -->
         <div class="flex flex-col gap-1.5">
             <label

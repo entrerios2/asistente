@@ -51,6 +51,7 @@ class UIStore {
     averagingAlpha = $state(0.1);
     besselSpeed = $state<'Slow' | 'Medium' | 'Fast'>('Medium'); // 0.25, 0.5, 1.0 Hz
     ppoSmoothing = $state(0); // 0=off, valores comunes: 1,3,6,12,24,48 PPO
+    fftOverlap = $state<0 | 50 | 75>(0); // 0%, 50%, 75% overlap
     windowType = $state<'Rectangular' | 'Hann' | 'Hamming' | 'FlatTop' | 'BlackmanHarris' | 'HFT223D' | 'Exponential'>('Hann');
     enableLeq = $state(false);
     leqWindowSeconds = $state(10);
@@ -69,9 +70,6 @@ class UIStore {
 
     // Input filter pre-FFT (como OSM)
     inputFilter = $state<'None' | 'Notch1k' | 'BP100' | 'LP200'>('None');
-
-    // FFT overlap
-    fftOverlap = $state(0.5);        // 0, 0.5, 0.75
 
     // Delay compensation
     compensationDelayMs = $state(0);       // Delay manual en ms
