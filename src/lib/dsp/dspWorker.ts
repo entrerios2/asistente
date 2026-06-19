@@ -160,6 +160,7 @@ self.onmessage = (event) => {
             inputGain,
             displayOffset,
             polarity,
+            calibrationGain,
         } = event.data;
 
         const sr = sampleRate || 48000;
@@ -324,6 +325,21 @@ self.onmessage = (event) => {
         if (displayOffset && displayOffset !== 0 && needMagnitude) {
             for (let k = 0; k < BINS; k++) {
                 outputMagnitude[k] += displayOffset;
+            }
+        }
+
+        // 6c. Calibración de micrófono (solo Magnitude y Spectrum, en dB)
+        if (calibrationGain) {
+            const cal = new Float32Array(calibrationGain);
+            if (needMagnitude) {
+                for (let k = 0; k < BINS; k++) {
+                    outputMagnitude[k] += cal[k];
+                }
+            }
+            if (metricsSet.has("Spectrum")) {
+                for (let k = 0; k < BINS; k++) {
+                    outputSpectrum[k] += cal[k];
+                }
             }
         }
 

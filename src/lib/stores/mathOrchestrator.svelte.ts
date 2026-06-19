@@ -332,6 +332,21 @@ class MathOrchestrator {
             const measCopy = new Float32Array(this.measTimeDomain);
             const refCopy = new Float32Array(this.refTimeDomain);
 
+            // E1: Interpolar curva de calibración a bins del FFT
+            let calGainBuf: ArrayBuffer | undefined;
+            if (calibrationStore.calibrationPoints.length > 0) {
+                const calGain = new Float32Array(this.BINS);
+                const sr = uiStore.sampleRate;
+                for (let k = 0; k < this.BINS; k++) {
+                    const freq = (k * sr / 2) / this.BINS;
+                    calGain[k] = calibrationStore.getCalibrationGainAt(freq);
+                }
+                calGainBuf = calGain.buffer;
+            }
+
+            const transferables: ArrayBuffer[] = [measCopy.buffer, refCopy.buffer];
+            if (calGainBuf) transferables.push(calGainBuf);
+
             this.worker.postMessage({
                 type: 'run-dsp',
                 measTimeDomain: measCopy.buffer,
@@ -356,7 +371,8 @@ class MathOrchestrator {
                 inputGain: uiStore.inputGain,
                 displayOffset: uiStore.displayOffset,
                 polarity: uiStore.polarity,
-            }, [measCopy.buffer, refCopy.buffer]);
+                calibrationGain: calGainBuf,
+            }, transferables);
 
             this.dirty = false;
         }
