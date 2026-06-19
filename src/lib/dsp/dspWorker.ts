@@ -12,6 +12,7 @@ import { applySourceWindow } from './sourceWindowing';
 import { WindowFunction } from './windowFunction';
 import { fft } from './fft';
 import { createInputFilter, type InputFilterType, type BiquadIIR } from './iirFilter';
+import { BesselAveraging, type BesselFrequency } from './besselLPF';
 
 // WebFFT: motor FFT acelerado (WASM/GPU)
 let webfftEngine: any = null;
@@ -134,6 +135,9 @@ let currentInputFilterRef: BiquadIIR | null = null;
 let currentInputFilterType: string = 'None';
 let currentInputFilterSR: number = 0;
 
+// Bessel averaging state (G2)
+let besselAveraging: BesselAveraging | null = null;
+
 function circularShift(buffer: Float32Array, samples: number): void {
     const N = buffer.length;
     const shift = ((samples % N) + N) % N;
@@ -146,6 +150,7 @@ function circularShift(buffer: Float32Array, samples: number): void {
 
 self.onmessage = (event) => {
     if (event.data && event.data.type === 'run-dsp') {
+      try {
         const {
             measTimeDomain,
             refTimeDomain,
@@ -169,6 +174,7 @@ self.onmessage = (event) => {
             polarity,
             calibrationGain,
             inputFilter,
+            besselSpeed,
         } = event.data;
 
         const sr = sampleRate || 48000;
@@ -215,6 +221,7 @@ self.onmessage = (event) => {
             initCoherenceFIFO(BINS, averagingDepth || COH_DEFAULT_DEPTH);
 
             averagingProcessor = new ComplexAveraging(BINS, averagingDepth || 16);
+            besselAveraging = null; // Reset Bessel when BINS changes
         }
 
         if (averagingProcessor) {
@@ -327,23 +334,39 @@ self.onmessage = (event) => {
         }
 
         // 6. Averaging sobre H(f)
-        if (averagingProcessor && averagingType !== 'None' && needMagnitude) {
-            if (averagingType === 'FIFO') {
+        if (averagingType !== 'None' && needMagnitude) {
+            if (averagingType === 'FIFO' && averagingProcessor) {
                 averagingProcessor.processFIFO(hReal, hImag, avgHReal, avgHImag, averagingThresholdDb);
                 hReal.set(avgHReal);
                 hImag.set(avgHImag);
-                // Recalcular magnitud desde H promediada
                 for (let k = 0; k < BINS; k++) {
                     const mag = Math.sqrt(hReal[k] * hReal[k] + hImag[k] * hImag[k]);
                     outputMagnitude[k] = 20 * Math.log10(mag + 1e-8);
                 }
-            } else if (averagingType === 'LPF') {
+            } else if (averagingType === 'EMA' && averagingProcessor) {
                 averagingProcessor.processLPF(hReal, hImag, avgHReal, avgHImag, averagingAlpha || 0.1);
                 hReal.set(avgHReal);
                 hImag.set(avgHImag);
                 for (let k = 0; k < BINS; k++) {
                     const mag = Math.sqrt(hReal[k] * hReal[k] + hImag[k] * hImag[k]);
                     outputMagnitude[k] = 20 * Math.log10(mag + 1e-8);
+                }
+            } else if (averagingType === 'LPF') {
+                // Bessel 5th order LPF (como OSM)
+                try {
+                    if (!besselAveraging) {
+                        besselAveraging = new BesselAveraging(BINS, (besselSpeed as BesselFrequency) || 'Medium');
+                    }
+                    besselAveraging.setFrequency((besselSpeed as BesselFrequency) || 'Medium');
+                    besselAveraging.process(hReal, hImag, avgHReal, avgHImag);
+                    hReal.set(avgHReal);
+                    hImag.set(avgHImag);
+                    for (let k = 0; k < BINS; k++) {
+                        const mag = Math.sqrt(hReal[k] * hReal[k] + hImag[k] * hImag[k]);
+                        outputMagnitude[k] = 20 * Math.log10(mag + 1e-8);
+                    }
+                } catch (e) {
+                    // Fallback: skip averaging this frame
                 }
             }
         }
@@ -470,6 +493,10 @@ self.onmessage = (event) => {
         outputSpectrum = new Float32Array(currentBins);
         hReal = new Float32Array(currentBins);
         hImag = new Float32Array(currentBins);
+
+      } catch (e) {
+          console.error('[dspWorker] Error in run-dsp:', e);
+      }
     }
 
     // --- RESET AVERAGING ---
@@ -479,6 +506,9 @@ self.onmessage = (event) => {
         }
         if (averagingProcessor) {
             averagingProcessor.reset();
+        }
+        if (besselAveraging) {
+            besselAveraging.reset();
         }
     }
 };

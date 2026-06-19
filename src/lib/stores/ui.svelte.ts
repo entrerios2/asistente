@@ -46,9 +46,10 @@ class UIStore {
 
     // NUEVOS CONTROLES DSP AVANZADOS - PARIDAD OSM (PROMPT 9)
     weightingType = $state<'A' | 'B' | 'C' | 'Z'>('Z');
-    averagingType = $state<'None' | 'FIFO' | 'LPF'>('LPF');
+    averagingType = $state<'None' | 'FIFO' | 'EMA' | 'LPF'>('LPF');
     averagingDepth = $state(16);
     averagingAlpha = $state(0.1);
+    besselSpeed = $state<'Slow' | 'Medium' | 'Fast'>('Medium'); // 0.25, 0.5, 1.0 Hz
     windowType = $state<'Rectangular' | 'Hann' | 'Hamming' | 'FlatTop' | 'BlackmanHarris' | 'HFT223D' | 'Exponential'>('Hann');
     enableLeq = $state(false);
     leqWindowSeconds = $state(10);

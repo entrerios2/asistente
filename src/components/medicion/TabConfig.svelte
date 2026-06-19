@@ -265,15 +265,15 @@
                 >Promediado (Averaging)</label
             >
             <div class="flex bg-[#121216] p-0.5 rounded-md border border-[#1a1a24]/40">
-                {#each ['None', 'FIFO', 'LPF'] as avgType}
+                {#each [['None', 'Off'], ['FIFO', 'FIFO'], ['EMA', 'EMA'], ['LPF', 'Bessel']] as [val, label]}
                     <button
                         class="flex-1 py-1.5 text-[10px] font-bold rounded transition-all cursor-pointer min-h-[28px]
-                               {uiStore.averagingType === avgType
+                               {uiStore.averagingType === val
                             ? 'bg-[#ec4899]/15 text-[#ec4899] shadow'
                             : 'text-gray-500 hover:text-gray-300'}"
-                        onclick={() => uiStore.averagingType = avgType as 'None' | 'FIFO' | 'LPF'}
+                        onclick={() => uiStore.averagingType = val as 'None' | 'FIFO' | 'EMA' | 'LPF'}
                     >
-                        {avgType}
+                        {label}
                     </button>
                 {/each}
             </div>
@@ -289,7 +289,7 @@
                     />
                     <span class="text-[10px] font-mono text-[#ec4899] w-8 text-right">{uiStore.averagingDepth}</span>
                 </div>
-            {:else if uiStore.averagingType === 'LPF'}
+            {:else if uiStore.averagingType === 'EMA'}
                 <div class="flex items-center gap-2 mt-1">
                     <span class="text-[9px] text-gray-500 font-bold uppercase w-16">Alpha</span>
                     <input
@@ -300,6 +300,23 @@
                         title="Doble clic para reiniciar a 0.1"
                     />
                     <span class="text-[10px] font-mono text-[#ec4899] w-10 text-right">{uiStore.averagingAlpha.toFixed(2)}</span>
+                </div>
+            {:else if uiStore.averagingType === 'LPF'}
+                <div class="flex items-center gap-2 mt-1">
+                    <span class="text-[9px] text-gray-500 font-bold uppercase w-16">Speed</span>
+                    <div class="flex flex-1 bg-[#121216] p-0.5 rounded-md border border-[#1a1a24]/40">
+                        {#each [['Slow', '0.25 Hz'], ['Medium', '0.5 Hz'], ['Fast', '1 Hz']] as [val, label]}
+                            <button
+                                class="flex-1 py-1 text-[9px] font-bold rounded transition-all cursor-pointer
+                                       {uiStore.besselSpeed === val
+                                    ? 'bg-[#ec4899]/15 text-[#ec4899] shadow'
+                                    : 'text-gray-500 hover:text-gray-300'}"
+                                onclick={() => uiStore.besselSpeed = val as 'Slow' | 'Medium' | 'Fast'}
+                            >
+                                {label}
+                            </button>
+                        {/each}
+                    </div>
                 </div>
             {/if}
             {#if uiStore.averagingType !== 'None'}

@@ -47,6 +47,11 @@
 
     function toggleMeasurement() {
         uiStore.isMeasuring = !uiStore.isMeasuring;
+        // Si se inicia la medición, asegurar que el tab Medir esté montado
+        // (la lógica de audio/generador vive en su $effect)
+        if (uiStore.isMeasuring && uiStore.activeTab !== 'medir') {
+            uiStore.activeTab = 'medir';
+        }
     }
 
     function isHighlighted(col: number, row: number) {

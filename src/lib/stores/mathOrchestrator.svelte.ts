@@ -373,6 +373,7 @@ class MathOrchestrator {
                 polarity: uiStore.polarity,
                 calibrationGain: calGainBuf,
                 inputFilter: uiStore.inputFilter,
+                besselSpeed: uiStore.besselSpeed,
             }, transferables);
 
             this.dirty = false;
