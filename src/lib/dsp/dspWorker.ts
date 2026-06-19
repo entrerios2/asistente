@@ -49,6 +49,7 @@ let outputImpulse: Float32Array;
 let outputStep: Float32Array;
 let tempPhaseRadians: Float32Array;
 let outputCrestFactor: Float32Array;
+let outputSpectrum: Float32Array;
 
 // Averaging buffers (applied on H(f), not raw Y)
 let avgHReal: Float32Array;
@@ -193,6 +194,7 @@ self.onmessage = (event) => {
             outputStep = new Float32Array(FFT_SIZE);
             tempPhaseRadians = new Float32Array(BINS);
             outputCrestFactor = new Float32Array(BINS);
+            outputSpectrum = new Float32Array(BINS);
 
             avgHReal = new Float32Array(BINS);
             avgHImag = new Float32Array(BINS);
@@ -250,6 +252,14 @@ self.onmessage = (event) => {
 
         // Tomar solo la primera mitad (bins positivos)
         // fft() ya devuelve el espectro completo; usamos los primeros BINS
+
+        // 4b. Spectrum (RTA) — magnitud absoluta del canal de medición con normalización 1/N
+        if (metricsSet.has("Spectrum")) {
+            for (let k = 0; k < BINS; k++) {
+                const mag = Math.sqrt(fftInputReal[k] * fftInputReal[k] + fftInputImag[k] * fftInputImag[k]);
+                outputSpectrum[k] = 20 * Math.log10((mag / FFT_SIZE) * Math.SQRT2 + 1e-12);  // 1/N + √2 (como OSM)
+            }
+        }
 
         // 5. Transfer Function H(f) = Y·conj(X) / |X|²
         const needMagnitude = metricsSet.has("Magnitude") || metricsSet.has("Impulse") || metricsSet.has("Step");
@@ -354,6 +364,7 @@ self.onmessage = (event) => {
         const cfBuf = outputCrestFactor.buffer;
         const hRealBuf = hReal.buffer;
         const hImagBuf = hImag.buffer;
+        const specBuf = outputSpectrum.buffer;
 
         (self as any).postMessage({
             type: 'dsp-results',
@@ -364,6 +375,7 @@ self.onmessage = (event) => {
             outputImpulse: impBuf,
             outputStep: stepBuf,
             outputCrestFactor: cfBuf,
+            outputSpectrum: specBuf,
             hReal: hRealBuf,
             hImag: hImagBuf,
             refPeakDb: refLevel.peakDb,
@@ -371,7 +383,7 @@ self.onmessage = (event) => {
             measPeakDb: measLevel.peakDb,
             measRmsDb: measLevel.rmsDb,
             detectedDelaySamples,
-        }, [magBuf, phaseBuf, cohBuf, gdBuf, impBuf, stepBuf, cfBuf, hRealBuf, hImagBuf]);
+        }, [magBuf, phaseBuf, cohBuf, gdBuf, impBuf, stepBuf, cfBuf, specBuf, hRealBuf, hImagBuf]);
 
         // Realocar buffers transferidos
         outputMagnitude = new Float32Array(currentBins);
@@ -381,6 +393,7 @@ self.onmessage = (event) => {
         outputImpulse = new Float32Array(currentFftSize);
         outputStep = new Float32Array(currentFftSize);
         outputCrestFactor = new Float32Array(currentBins);
+        outputSpectrum = new Float32Array(currentBins);
         hReal = new Float32Array(currentBins);
         hImag = new Float32Array(currentBins);
     }

@@ -111,6 +111,15 @@ class MathOrchestrator {
             meterStore.updateIn([data.refPeakDb ?? -60]);
             meterStore.updateOut([data.measPeakDb ?? -60]);
 
+            // Spectrum del worker → liveFrequencyData para el rendering
+            if (data.outputSpectrum) {
+                const specData = new Float32Array(data.outputSpectrum);
+                if (traceManager.liveFrequencyData.length !== specData.length) {
+                    traceManager.liveFrequencyData = new Float32Array(specData.length);
+                }
+                traceManager.liveFrequencyData.set(specData);
+            }
+
             // Auto delay compensation
             if (data.detectedDelaySamples !== undefined) {
                 this.compensationDelaySamples = data.detectedDelaySamples;
