@@ -6,6 +6,8 @@ class UIStore {
     layout = $state('1x1'); // '1x1' | '1x2' | '2x1' | '2x2' | '3x1' | '3x2'
     themeMode = $state<'system' | 'light' | 'dark'>('dark');
     showSidebar = $state(true);
+    showAdvanced = $state(false);
+    showMinorGrid = $state(true);
     
     // Configuración de Audio
     audioInDevice = $state('');
@@ -18,9 +20,9 @@ class UIStore {
     isMeasuring = $state(false);
 
     // Configuración de Rendimiento y DSP (Fase 2)
-    targetFps = $state(10);
-    dspUpdateRate = $state(15); // Hz
-    fftSize = $state(8192);
+    targetFps = $state(30);
+    dspUpdateRate = $state(4); // Hz
+    fftSize = $state(16384);
     sampleRate = $state(48000); // 44100 | 48000 | 96000
 
     // Estado del Generador de Audio
@@ -43,11 +45,11 @@ class UIStore {
     // NUEVOS CONTROLES DSP AVANZADOS - PARIDAD OSM (PROMPT 9)
     weightingType = $state<'A' | 'B' | 'C' | 'Z'>('Z');
     averagingType = $state<'None' | 'FIFO' | 'EMA' | 'LPF'>('LPF');
-    averagingDepth = $state(16);
+    averagingDepth = $state(8);
     averagingAlpha = $state(0.1);
-    besselSpeed = $state<'Slow' | 'Medium' | 'Fast'>('Medium'); // 0.25, 0.5, 1.0 Hz
+    besselSpeed = $state<'Slow' | 'Medium' | 'Fast'>('Slow'); // 0.25, 0.5, 1.0 Hz
     ppoSmoothing = $state(0); // 0=off, valores comunes: 1,3,6,12,24,48 PPO
-    fftOverlap = $state<0 | 50 | 75>(0); // 0%, 50%, 75% overlap
+    fftOverlap = $state<0 | 50 | 75>(50); // 0%, 50%, 75% overlap
     windowType = $state<'Rectangular' | 'Hann' | 'Hamming' | 'FlatTop' | 'BlackmanHarris' | 'HFT223D' | 'Exponential'>('Hann');
     enableLeq = $state(false);
     leqWindowSeconds = $state(10);

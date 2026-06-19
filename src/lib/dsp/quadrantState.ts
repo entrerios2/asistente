@@ -7,6 +7,109 @@ export interface Metric {
     label: string;
 }
 
+// --- Global metric defaults & per-metric override system ---
+
+export interface GlobalMetricCommon {
+    lineWidth: number;
+    lineDash: number[];
+    smoothingPPO: number;
+    invertY: boolean;
+    yShift: number;
+}
+
+export interface GlobalMagnitudeDefaults {
+    modeY: string;
+    enableCoherence: boolean;
+    coherenceThreshold: number;
+    coherenceMinAlpha: number;
+}
+
+export interface GlobalPhaseDefaults {
+    unwrapMode: string;
+    rotate: number;
+    range: number;
+}
+
+export interface GlobalCoherenceDefaults {
+    cohType: string;
+    displayMode: 'line' | 'bg-fade' | 'bg-gradient';
+    showThresholdLine: boolean;
+    thresholdValue: number;
+    thresholdColor: string;
+}
+
+export interface GlobalSpectrogramDefaults {
+    palette: string;
+}
+
+export interface GlobalImpulseDefaults {
+    modeY: string;
+}
+
+export interface GlobalMetricDefaults {
+    common: GlobalMetricCommon;
+    magnitude: GlobalMagnitudeDefaults;
+    phase: GlobalPhaseDefaults;
+    coherence: GlobalCoherenceDefaults;
+    spectrogram: GlobalSpectrogramDefaults;
+    impulse: GlobalImpulseDefaults;
+}
+
+export const defaultGlobalMetricDefaults: GlobalMetricDefaults = {
+    common: {
+        lineWidth: 1,
+        lineDash: [],
+        smoothingPPO: 48,
+        invertY: false,
+        yShift: 0,
+    },
+    magnitude: {
+        modeY: 'dB',
+        enableCoherence: true,
+        coherenceThreshold: 0.2,
+        coherenceMinAlpha: 0.15,
+    },
+    phase: {
+        unwrapMode: '±180',
+        rotate: 0,
+        range: 360,
+    },
+    coherence: {
+        cohType: 'normal',
+        displayMode: 'bg-fade',
+        showThresholdLine: true,
+        thresholdValue: 0.2,
+        thresholdColor: '#eab308',
+    },
+    spectrogram: {
+        palette: 'Magma',
+    },
+    impulse: {
+        modeY: 'Linear',
+    },
+};
+
+/**
+ * Resolves the effective value for a metric config field.
+ * If the per-metric override has a value, use it; otherwise fall back to global.
+ */
+export function getEffectiveConfig<T>(
+    overrideValue: T | undefined,
+    globalValue: T
+): T {
+    return overrideValue !== undefined ? overrideValue : globalValue;
+}
+
+/**
+ * Returns true if a MetricConfig has any overrides (non-undefined fields besides 'hidden').
+ */
+export function hasOverrides(config: MetricConfig | undefined): boolean {
+    if (!config) return false;
+    return Object.entries(config).some(
+        ([key, val]) => key !== 'hidden' && val !== undefined
+    );
+}
+
 export const allMetrics: Metric[] = [
     {
         name: "Spectrum",
@@ -108,6 +211,7 @@ export interface MetricConfig {
     invertY?: boolean;
     enableCoherence?: boolean;
     coherenceThreshold?: number;
+    coherenceMinAlpha?: number;
     yShift?: number;
     hidden?: boolean;
     // Phase
@@ -116,6 +220,7 @@ export interface MetricConfig {
     range?: number;
     // Coherence
     cohType?: string;
+    displayMode?: 'line' | 'bg-fade' | 'bg-gradient';
     showThresholdLine?: boolean;
     thresholdColor?: string;
     thresholdValue?: number;
@@ -141,10 +246,10 @@ export const defaultMetricStyles: Record<string, MetricStyle> = {
 };
 
 export const defaultMetricConfigs: Record<string, MetricConfig> = {
-    "Spectrum": { modeY: "dB", sensorResistance: 10, smoothingPPO: 48, invertY: false, enableCoherence: false, coherenceThreshold: 0.5, yShift: 0 },
-    "Magnitude": { modeY: "dB", sensorResistance: 10, smoothingPPO: 48, invertY: false, enableCoherence: false, coherenceThreshold: 0.5, yShift: 0 },
-    "Simulated Magnitude": { modeY: "dB", sensorResistance: 10, smoothingPPO: 48, invertY: false, enableCoherence: false, coherenceThreshold: 0.5, yShift: 0 },
+    "Spectrum": { modeY: "dB", sensorResistance: 10, smoothingPPO: 48, invertY: false, enableCoherence: false, coherenceThreshold: 0.2, coherenceMinAlpha: 0.15, yShift: 0 },
+    "Magnitude": { modeY: "dB", sensorResistance: 10, smoothingPPO: 48, invertY: false, enableCoherence: true, coherenceThreshold: 0.2, coherenceMinAlpha: 0.15, yShift: 0 },
+    "Simulated Magnitude": { modeY: "dB", sensorResistance: 10, smoothingPPO: 48, invertY: false, enableCoherence: false, coherenceThreshold: 0.2, coherenceMinAlpha: 0.15, yShift: 0 },
     "Phase": { unwrapMode: "±180", rotate: 0, range: 360, yShift: 0 },
-    "Coherence": { cohType: "normal", showThresholdLine: false, thresholdColor: "#eab308", thresholdValue: 0.5, yShift: 0 },
+    "Coherence": { cohType: "normal", displayMode: "bg-fade", showThresholdLine: true, thresholdColor: "#eab308", thresholdValue: 0.2, yShift: 0 },
     "Spectrogram": { palette: "Magma" as PaletteType },
 };

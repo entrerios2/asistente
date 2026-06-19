@@ -1,0 +1,261 @@
+# Plan consolidado: mejoras UI/UX
+
+---
+
+## Grupo A — Estado global y modelo de datos
+
+### [MODIFY] [ui.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/ui.svelte.ts)
+- `showAdvanced = $state(false)` — toggle global compartido por todas las tabs
+- `showMinorGrid = $state(true)` — líneas intermedias del grid
+- `globalMetricDefaults: GlobalMetricDefaults` — defaults para métricas (ver Grupo F)
+- Persistir ambos en `configPersistence`
+- **Actualizar defaults:**
+  - `fftSize`: 8192 → **16384**
+  - `fftOverlap`: 0 → **50**
+  - `besselSpeed`: 'Medium' → **'Slow'**
+  - `averagingDepth`: 16 → **8**
+  - `dspUpdateRate`: 2 → **4**
+
+### [MODIFY] [quadrantState.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/quadrantState.ts)
+Nuevas interfaces:
+
+```typescript
+interface GlobalMetricConfig {
+    lineWidth: number;        // default: 1
+    lineDash: number[];       // default: [] (sólido)
+    smoothingPPO: number;     // default: 48
+    invertY: boolean;         // default: false
+    yShift: number;           // default: 0
+}
+
+interface GlobalMetricDefaults {
+    common: GlobalMetricConfig;
+    magnitude: {
+        modeY: string;                // 'dB'
+        enableCoherence: boolean;     // true
+        coherenceThreshold: number;   // 0.2
+        coherenceMinAlpha: number;    // 0.15
+    };
+    phase: { unwrapMode: string; rotate: number; range: number; };
+    coherence: {
+        cohType: string;              // 'normal'
+        displayMode: 'line' | 'bg-fade' | 'bg-gradient'; // 'bg-fade'
+        showThresholdLine: boolean;   // true
+        thresholdValue: number;       // 0.2
+        thresholdColor: string;       // '#eab308'
+    };
+    spectrogram: { palette: string; };
+    impulse: { modeY: string; };
+}
+```
+
+`MetricConfig` existente pasa a ser override: campos `undefined` = usar global.
+
+Helper: `getEffectiveConfig(metricName, globalDefaults, overrides)`.
+
+### [MODIFY] [configPersistence.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/utils/configPersistence.ts)
+- Agregar `showAdvanced`, `showMinorGrid`, `globalMetricDefaults`
+
+### [MODIFY] [+page.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/routes/+page.svelte)
+- Cargar los nuevos campos desde config persistida
+
+---
+
+## Grupo B — TabConfig: básico/avanzado + paleta unificada + idioma
+
+### [MODIFY] [TabConfig.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/components/medicion/TabConfig.svelte)
+
+**Estructura final (avanzados intercalados con sección relacionada):**
+
+1. **Hardware de audio** (básico)
+   - Dispositivo entrada/salida
+   - Routing dual-channel (ref/meas)
+   - 🔧 *Avanzado:* Calibración (.cal), ganancia entrada, offset visualización
+
+2. **Compensación de retardo** (básico)
+   - Auto delay checkbox + manual slider
+   - Reiniciar promedios (botón)
+
+3. **Procesamiento DSP** 🔧 *toda la sección es avanzada*
+   - Ponderación, PPO smoothing, overlap (eliminar select duplicado L509-518)
+   - Promediado + sub-params, polaridad, filtro de entrada
+   - Ventana, source window, Leq
+   - Target FPS, DSP rate, FFT size
+
+4. **Configuración global de métricas** 🔧 *avanzada* (nuevo, ver Grupo F)
+
+5. **Pantalla y preferencias** (básico)
+   - Grilla: **una sola línea horizontal** de 6 botones compactos
+   - Tema visual
+   - 🔧 *Avanzado:* mostrar líneas intermedias del grid (toggle)
+   - **Toggle "Mostrar controles avanzados"** (último control)
+
+**Ícono avanzado:** `tune` de Material Symbols (14px, gris sutil) junto al label de cada sección/control avanzado.
+
+**Animación:** secciones avanzadas con `max-height` + `opacity` transition (slide/fade suave).
+
+**Paleta unificada:** todos los toggles/botones/sliders activos usan `#3b82f6`. Headers de sección mantienen iconos diferenciados.
+
+**Idioma español** (mayúscula solo inicial de frase y nombres propios):
+- "Polarity" → "Polaridad"
+- "Reset Avg" → "Reiniciar promedios"
+- "Input Filter" → "Filtro de entrada"
+- "Source Window (Time Gate)" → "Ventana temporal (time gate)"
+- "Auto Delay Compensation" → "Compensación automática de retardo"
+- "Depth" → "Profundidad", "Speed" → "Velocidad", "Thresh" → "Umbral"
+
+---
+
+## Grupo C — TabMedicion: básico/avanzado + etiquetas informativas
+
+### [MODIFY] [TabMedicion.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/components/medicion/TabMedicion.svelte)
+
+**Básico:**
+- Selector manual/secuencial
+- Etiquetas informativas compactas inline:
+  - 🎵 `Ruido rosa` • ⏱ `Retardo: automático` (o `12.5 ms manual`)
+- Botón medir/detener + status
+
+**Avanzado** 🔧:
+- Automatización (auto-guardar, vincular generador)
+- Selector de generador (dropdown) + opciones dinámicas
+- Canal de salida → **toggle buttons** (Estéreo / L / R) en vez de select
+- Nivel de señal slider + botones generar/detener
+- Sección retardo manual (calcular/usar)
+
+---
+
+## Grupo D — TabInstantaneas: básico/avanzado + badge en sidebar
+
+### [MODIFY] [TabInstantaneas.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/components/medicion/TabInstantaneas.svelte)
+
+**Básico:**
+- Botón "Capturar instantánea"
+- Lista de instantáneas (ojito, borrar, exportar)
+
+**Avanzado** 🔧:
+- Métricas a capturar en paralelo
+- Importar .snapshot.json
+- Ordenación (recientes/antiguos)
+- Cargar curvas de prueba
+
+### [MODIFY] [Sidebar.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/components/medicion/Sidebar.svelte)
+- Importar `traceManager`
+- Tab `snaps`: badge numérico con cantidad cuando > 0
+
+---
+
+## Grupo E — VU meters rediseñados
+
+### [MODIFY] [meterStore.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/meterStore.svelte.ts)
+```typescript
+class MeterStore {
+    refLevel = $state.raw(-60);   // dBFS canal referencia
+    measLevel = $state.raw(-60);  // dBFS canal medición
+    outLevel = $state.raw(-60);   // dBFS salida generador
+}
+```
+
+### [MODIFY] [mathOrchestrator.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/mathOrchestrator.svelte.ts)
+- L137: `meterStore.refLevel = data.refPeakDb ?? -60`
+- L138: `meterStore.measLevel = data.measPeakDb ?? -60`
+
+### [MODIFY] [WebAudioProvider.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/hal/web/WebAudioProvider.ts)
+- L259: `meterStore.outLevel = -60`
+- L263: `meterStore.outLevel = level`
+
+### [MODIFY] [Header.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/components/medicion/Header.svelte)
+- **Input:** 2 barras — REF (label "LOOP" si `refChannel === -1`) + MEAS
+- **Output:** 1 barra mono
+- **Estado inactivo** (`!isMeasuring`): opacity-40, barras quedan con últimos valores (no se vacían)
+- Pulso suave en botón generador cuando activo
+- LED calibración: comparar refLevel vs measLevel
+
+### [MODIFY] [canvasRenderers.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/canvasRenderers.ts)
+- L240-241, L320-321: actualizar a `meterStore.refLevel`, `meterStore.measLevel`
+
+---
+
+## Grupo F — Config global de métricas + override por pill
+
+### [MODIFY] [TabConfig.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/components/medicion/TabConfig.svelte)
+- Nueva sección avanzada "Configuración de métricas" con subsecciones colapsables:
+  - Comunes: lineWidth (rango 0.5-5), lineDash, smoothingPPO, invertY, yShift
+  - Magnitude: modeY, coherencia (blanking on, threshold 0.2, minAlpha 0.15)
+  - Phase: unwrap, rotación, rango
+  - Coherence: tipo, displayMode (línea / bg-fade / bg-gradient), threshold line
+
+### [MODIFY] [MetricConfigPopover.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/components/medicion/MetricConfigPopover.svelte)
+
+**Popover básico:**
+- Visible en gráfico (toggle)
+- Color de curva
+- Grosor de línea + estilo (sólido / discontinuo / punteado)
+- Modo visualización coherencia (línea / bg-fade / bg-gradient) — solo para Coherence
+
+**Popover avanzado** 🔧:
+- Suavizado PPO
+- Modo eje Y
+- Invertir eje Y, desplazamiento eje Y
+- Coherencia (activar + umbral + alpha mínimo)
+- Opciones específicas (fase, coherencia, espectrograma, impulso)
+- Resistencia sensor
+
+**Override automático:** el usuario cambia un valor → se convierte en override. Botón "Restablecer a global" al final. Dot indicador en la pill cuando hay overrides.
+
+**Posicionamiento:** `position: fixed` con coordenadas calculadas desde el click (fix clipping).
+
+**Idioma:** "Dashed" → "Discontinuo", "Dotted" → "Punteado"
+
+---
+
+## Grupo G — Grid logarítmico con líneas intermedias
+
+### [MODIFY] [canvasRenderers.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/canvasRenderers.ts)
+- Mantener líneas principales: 20, 50, 100, 200, 500, 1k, 2k, 5k, 10k, 20k
+- Agregar líneas intermedias (30, 40, 60, 70, 80, 90, 300, 400, 600, etc.) con menor opacidad y grosor
+- Respetar `uiStore.showMinorGrid`
+- Sin labels en las intermedias
+
+---
+
+## Grupo H — Coherencia: fondo coloreado + alpha mínimo
+
+### [MODIFY] [canvasRenderers.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/canvasRenderers.ts)
+
+**Nuevo modo de visualización de coherencia** (`displayMode`):
+- `line` — línea clásica (como ahora)
+- `bg-fade` — columnas de fondo: transparente (coh=1) → rojo semitransparente (coh=0)
+- `bg-gradient` — columnas de fondo: verde (coh=1) → rojo (coh=0)
+
+**Alpha mínimo para coherence blanking en magnitude:**
+- Cuando coherencia < threshold, curva con `alpha = max(0.15, coherence)` en vez de `alpha = 0`
+
+---
+
+## Grupo I — Cambios cosméticos puntuales
+
+### [MODIFY] [+page.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/routes/+page.svelte)
+- Botón colapsar sidebar (L134-146): `bg-amber-500` → **`bg-[#8B0000]`** (rojo sangre)
+
+### [MODIFY] [AddMetricDropdown.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/components/medicion/AddMetricDropdown.svelte)
+- Botón "+": invertir colores → fondo `#3b82f6`, texto blanco
+
+---
+
+## Grupo J — Custom sliders (CSS global)
+
+### [MODIFY] [app.css](file:///c:/Users/Abel/Documents/Asistente/asistente/src/app.css) o layout
+- `input[type="range"]` global:
+  - Fill track coloreado (`#3b82f6` hasta el thumb, gris después)
+  - Thumb redondeado customizado
+  - Track con borde sutil
+  - Rango lineWidth: **0.5 — 5 px**
+
+---
+
+## Verificación
+- `npm run build` sin errores
+- Verificar visual en 1x1, 2x2, 3x2 layouts
+- Verificar popover no se recorta en layout multi-cuadrante
+- Verificar VU meters en modo activo e inactivo

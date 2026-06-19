@@ -48,6 +48,9 @@
             if (config.enableSourceWindow !== undefined) uiStore.enableSourceWindow = config.enableSourceWindow;
             if (config.sourceWindowWidthMs !== undefined) uiStore.sourceWindowWidthMs = config.sourceWindowWidthMs;
             if (config.sourceWindowOffsetMs !== undefined) uiStore.sourceWindowOffsetMs = config.sourceWindowOffsetMs;
+            // UI preferences (v4)
+            if (config.showAdvanced !== undefined) uiStore.showAdvanced = config.showAdvanced;
+            if (config.showMinorGrid !== undefined) uiStore.showMinorGrid = config.showMinorGrid;
             eqStore.loadFromConfig(config);
         } else {
             uiStore.setLayout('1x1');
@@ -111,6 +114,9 @@
             enableSourceWindow: uiStore.enableSourceWindow,
             sourceWindowWidthMs: uiStore.sourceWindowWidthMs,
             sourceWindowOffsetMs: uiStore.sourceWindowOffsetMs,
+            // UI preferences
+            showAdvanced: uiStore.showAdvanced,
+            showMinorGrid: uiStore.showMinorGrid,
             ...eqStore.toConfig(),
         });
     });

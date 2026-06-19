@@ -3,7 +3,7 @@
  */
 
 const CONFIG_KEY = 'asistente_config';
-const CONFIG_VERSION = 3;
+const CONFIG_VERSION = 4;
 const SAVE_DEBOUNCE_MS = 1000;
 
 export interface PersistedConfig {
@@ -46,6 +46,11 @@ export interface PersistedConfig {
     enableSourceWindow?: boolean;
     sourceWindowWidthMs?: number;
     sourceWindowOffsetMs?: number;
+
+    // UI preferences (v4)
+    showAdvanced?: boolean;
+    showMinorGrid?: boolean;
+    globalMetricDefaults?: Record<string, unknown>;
 
     // Legacy (kept for migration)
     inChannels?: boolean[];
