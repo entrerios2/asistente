@@ -372,6 +372,7 @@ class MathOrchestrator {
                 displayOffset: uiStore.displayOffset,
                 polarity: uiStore.polarity,
                 calibrationGain: calGainBuf,
+                inputFilter: uiStore.inputFilter,
             }, transferables);
 
             this.dirty = false;

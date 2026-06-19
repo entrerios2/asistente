@@ -341,6 +341,27 @@
             </button>
         </div>
 
+        <!-- Input Filter (como OSM) -->
+        <div class="flex flex-col gap-1.5">
+            <label
+                class="text-[10px] font-bold text-gray-500 uppercase tracking-wider"
+                >Input Filter</label
+            >
+            <div class="flex bg-[#121216] p-0.5 rounded-md border border-[#1a1a24]/40">
+                {#each [['None', 'Off'], ['Notch1k', 'Notch 1k'], ['BP100', 'BP 100'], ['LP200', 'LP 200']] as [val, label]}
+                    <button
+                        class="flex-1 py-1.5 text-[10px] font-bold rounded transition-all cursor-pointer min-h-[28px]
+                               {uiStore.inputFilter === val
+                            ? 'bg-[#ec4899]/15 text-[#ec4899] shadow'
+                            : 'text-gray-500 hover:text-gray-300'}"
+                        onclick={() => uiStore.inputFilter = val as 'None' | 'Notch1k' | 'BP100' | 'LP200'}
+                    >
+                        {label}
+                    </button>
+                {/each}
+            </div>
+        </div>
+
         <!-- Función de Ventana -->
         <div class="flex flex-col gap-1.5">
             <label

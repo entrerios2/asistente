@@ -65,6 +65,9 @@ class UIStore {
     // Modo de referencia
     refSourceMode = $state<'channel' | 'generator-tap' | 'analytical' | 'loopback'>('channel');
 
+    // Input filter pre-FFT (como OSM)
+    inputFilter = $state<'None' | 'Notch1k' | 'BP100' | 'LP200'>('None');
+
     // FFT overlap
     fftOverlap = $state(0.5);        // 0, 0.5, 0.75
 

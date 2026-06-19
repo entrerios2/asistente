@@ -11,6 +11,7 @@ import { deconvolve } from './deconvolution';
 import { applySourceWindow } from './sourceWindowing';
 import { WindowFunction } from './windowFunction';
 import { fft } from './fft';
+import { createInputFilter, type InputFilterType, type BiquadIIR } from './iirFilter';
 
 // WebFFT: motor FFT acelerado (WASM/GPU)
 let webfftEngine: any = null;
@@ -127,6 +128,12 @@ let currentFftSize = 0;
 let averagingProcessor: ComplexAveraging | null = null;
 const windowProcessor = new WindowFunction();
 
+// Input filter state (F3)
+let currentInputFilterMeas: BiquadIIR | null = null;
+let currentInputFilterRef: BiquadIIR | null = null;
+let currentInputFilterType: string = 'None';
+let currentInputFilterSR: number = 0;
+
 function circularShift(buffer: Float32Array, samples: number): void {
     const N = buffer.length;
     const shift = ((samples % N) + N) % N;
@@ -161,6 +168,7 @@ self.onmessage = (event) => {
             displayOffset,
             polarity,
             calibrationGain,
+            inputFilter,
         } = event.data;
 
         const sr = sampleRate || 48000;
@@ -242,6 +250,25 @@ self.onmessage = (event) => {
         if (polarity) {
             for (let i = 0; i < FFT_SIZE; i++) {
                 meas[i] = -meas[i];
+            }
+        }
+
+        // 2d. Input Filter pre-FFT (ambos canales, como OSM)
+        if (inputFilter && inputFilter !== 'None') {
+            if (!currentInputFilterMeas || currentInputFilterType !== inputFilter || currentInputFilterSR !== sr) {
+                currentInputFilterType = inputFilter;
+                currentInputFilterSR = sr;
+                currentInputFilterMeas = createInputFilter(inputFilter as InputFilterType, sr);
+                currentInputFilterRef = createInputFilter(inputFilter as InputFilterType, sr);
+            }
+            if (currentInputFilterMeas) currentInputFilterMeas.process(meas);
+            if (currentInputFilterRef) currentInputFilterRef.process(ref);
+        } else {
+            // Filter disabled: reset to avoid stale state
+            if (currentInputFilterMeas) {
+                currentInputFilterMeas = null;
+                currentInputFilterRef = null;
+                currentInputFilterType = 'None';
             }
         }
 
