@@ -1,5 +1,6 @@
 <script lang="ts">
     import { traceManager } from "$lib/stores/traceManager.svelte";
+    import { uiStore } from "$lib/stores/ui.svelte";
 
     let { statusText = $bindable("Listo para medir") } = $props();
 
@@ -141,94 +142,97 @@
             </span>
         </div>
 
-        <!-- Configuración de métricas a capturar en paralelo -->
-        <div class="flex flex-col gap-2 bg-[#121216]/40 border border-[#1a1a24]/30 rounded-lg p-3 select-none">
-            <span class="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Métricas a capturar en paralelo:</span>
-            <div class="grid grid-cols-2 gap-2 mt-1">
-                {#each Object.keys(traceManager.metricsToCapture) as metric}
-                    <label class="flex items-center gap-1.5 text-[10px] text-gray-300 cursor-pointer">
-                        <input
-                            type="checkbox"
-                            bind:checked={traceManager.metricsToCapture[metric]}
-                            class="accent-[#a855f7] scale-90"
-                        />
-                        <span>{metric === 'GroupDelay' ? 'Group Delay' : metric}</span>
-                    </label>
-                {/each}
-            </div>
-        </div>
-
-        <!-- Botón Capturar Instantánea Rápida -->
+        <!-- Botón capturar instantánea -->
         <button
-            class="w-full min-h-[40px] bg-gradient-to-r from-[#a855f7] to-[#8b5cf6] hover:from-[#8b5cf6] hover:to-[#7c3aed] text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shadow-lg transition-all duration-300 border border-[#a855f7]/20"
+            class="w-full min-h-[40px] bg-gradient-to-r from-[#3b82f6] to-[#2563eb] hover:from-[#2563eb] hover:to-[#1d4ed8] text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shadow-lg transition-all duration-300 border border-[#3b82f6]/20"
             onclick={captureActiveLive}
         >
-            <span class="material-symbols-outlined text-sm"
-                >photo_camera</span
-            >
-            Capturar Instantánea
+            <span class="material-symbols-outlined text-sm">photo_camera</span>
+            Capturar instantánea
         </button>
 
-        <!-- Importar archivo local .snapshot.json (Prompt 8) -->
-        <div class="flex flex-col gap-1.5 border-t border-[#1a1a24]/20 pt-2.5">
-            <input
-                type="file"
-                accept=".snapshot.json"
-                class="hidden"
-                id="import-snap-input"
-                onchange={async (e) => {
-                    const file = e.currentTarget.files?.[0];
-                    if (file) {
-                        const text = await file.text();
-                        const imported = await traceManager.importInstantaneaFromJSON(text);
-                        if (imported) {
-                            statusText = "Instantánea importada con éxito";
-                        } else {
-                            statusText = "Error importando instantánea";
-                        }
-                    }
-                }}
-            />
-            <label
-                for="import-snap-input"
-                class="w-full bg-[#121216] border border-[#1a1a24] hover:border-gray-500 text-gray-300 hover:text-white rounded-lg py-2 text-xs font-semibold text-center cursor-pointer transition-all flex items-center justify-center gap-1.5"
-            >
-                <span class="material-symbols-outlined text-sm">upload_file</span>
-                Importar .snapshot.json
-            </label>
-        </div>
-
-        <!-- Ordenación y Configuración -->
-        <div
-            class="flex justify-between items-center gap-3 pt-2 border-t border-[#1a1a24]/20"
-        >
-            <label
-                class="text-[10px] text-gray-500 font-bold uppercase"
-                >Ordenar por fecha</label
-            >
-            <div
-                class="flex bg-[#121216] p-0.5 rounded-md border border-[#1a1a24]/40"
-            >
-                <button
-                    class="px-2 py-1 text-[10px] font-semibold rounded transition-all cursor-pointer min-h-[24px]
-                           {sortOrder === 'desc'
-                        ? 'bg-[#a855f7] text-white shadow'
-                        : 'text-gray-400 hover:text-gray-200'}"
-                    onclick={() => (sortOrder = "desc")}
-                >
-                    Recientes
-                </button>
-                <button
-                    class="px-2 py-1 text-[10px] font-semibold rounded transition-all cursor-pointer min-h-[24px]
-                           {sortOrder === 'asc'
-                        ? 'bg-[#a855f7] text-white shadow'
-                        : 'text-gray-400 hover:text-gray-200'}"
-                    onclick={() => (sortOrder = "asc")}
-                >
-                    Antiguos
-                </button>
+        <!-- 🔧 AVANZADO: Métricas a capturar en paralelo -->
+        {#if uiStore.showAdvanced}
+            <div class="flex flex-col gap-2 bg-[#121216]/40 border border-[#1a1a24]/30 rounded-lg p-3 select-none">
+                <div class="flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-[12px] text-gray-600">tune</span>
+                    <span class="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Métricas a capturar en paralelo:</span>
+                </div>
+                <div class="grid grid-cols-2 gap-2 mt-1">
+                    {#each Object.keys(traceManager.metricsToCapture) as metric}
+                        <label class="flex items-center gap-1.5 text-[10px] text-gray-300 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                bind:checked={traceManager.metricsToCapture[metric]}
+                                class="accent-[#3b82f6] scale-90"
+                            />
+                            <span>{metric === 'GroupDelay' ? 'Group Delay' : metric}</span>
+                        </label>
+                    {/each}
+                </div>
             </div>
-        </div>
+        {/if}
+
+        <!-- 🔧 AVANZADO: Importar, ordenación, cargar pruebas -->
+        {#if uiStore.showAdvanced}
+            <div class="flex flex-col gap-2.5 border-t border-[#1a1a24]/20 pt-2.5">
+                <!-- Importar archivo local .snapshot.json -->
+                <input
+                    type="file"
+                    accept=".snapshot.json"
+                    class="hidden"
+                    id="import-snap-input"
+                    onchange={async (e) => {
+                        const file = e.currentTarget.files?.[0];
+                        if (file) {
+                            const text = await file.text();
+                            const imported = await traceManager.importInstantaneaFromJSON(text);
+                            if (imported) {
+                                statusText = "Instantánea importada con éxito";
+                            } else {
+                                statusText = "Error importando instantánea";
+                            }
+                        }
+                    }}
+                />
+                <label
+                    for="import-snap-input"
+                    class="w-full bg-[#121216] border border-[#1a1a24] hover:border-gray-500 text-gray-300 hover:text-white rounded-lg py-2 text-xs font-semibold text-center cursor-pointer transition-all flex items-center justify-center gap-1.5"
+                >
+                    <span class="material-symbols-outlined text-[12px] text-gray-600">tune</span>
+                    <span class="material-symbols-outlined text-sm">upload_file</span>
+                    Importar .snapshot.json
+                </label>
+
+                <!-- Ordenación -->
+                <div class="flex justify-between items-center gap-3">
+                    <div class="flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-[12px] text-gray-600">tune</span>
+                        <label class="text-[10px] text-gray-500 font-bold uppercase">Ordenar por fecha</label>
+                    </div>
+                    <div class="flex bg-[#121216] p-0.5 rounded-md border border-[#1a1a24]/40">
+                        <button
+                            class="px-2 py-1 text-[10px] font-semibold rounded transition-all cursor-pointer min-h-[24px]
+                                   {sortOrder === 'desc'
+                                ? 'bg-[#3b82f6] text-white shadow'
+                                : 'text-gray-400 hover:text-gray-200'}"
+                            onclick={() => (sortOrder = "desc")}
+                        >
+                            Recientes
+                        </button>
+                        <button
+                            class="px-2 py-1 text-[10px] font-semibold rounded transition-all cursor-pointer min-h-[24px]
+                                   {sortOrder === 'asc'
+                                ? 'bg-[#3b82f6] text-white shadow'
+                                : 'text-gray-400 hover:text-gray-200'}"
+                            onclick={() => (sortOrder = "asc")}
+                        >
+                            Antiguos
+                        </button>
+                    </div>
+                </div>
+            </div>
+        {/if}
     </div>
 
     <!-- Lista de Capturas -->
@@ -253,12 +257,14 @@
                         referencia.
                     </p>
                 </div>
-                <button
-                    class="min-h-[32px] px-3 bg-[#a855f7]/10 text-[#a855f7] border border-[#a855f7]/20 hover:bg-[#a855f7]/20 rounded-md text-[10px] font-bold cursor-pointer transition-all"
-                    onclick={ensureMockSnapshots}
-                >
-                    Cargar Curvas de Prueba
-                </button>
+                {#if uiStore.showAdvanced}
+                    <button
+                        class="min-h-[32px] px-3 bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20 hover:bg-[#3b82f6]/20 rounded-md text-[10px] font-bold cursor-pointer transition-all"
+                        onclick={ensureMockSnapshots}
+                    >
+                        Cargar curvas de prueba
+                    </button>
+                {/if}
             </div>
         {:else}
             <ul class="flex flex-col gap-3">

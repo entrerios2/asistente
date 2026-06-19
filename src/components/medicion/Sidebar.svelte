@@ -1,5 +1,6 @@
 <script lang="ts">
     import { uiStore } from "$lib/stores/ui.svelte";
+    import { traceManager } from "$lib/stores/traceManager.svelte";
 
     import TabMedicion from "./TabMedicion.svelte";
     import TabEcualizar from "./TabEcualizar.svelte";
@@ -7,6 +8,8 @@
     import TabConfig from "./TabConfig.svelte";
 
     let statusText = $state("Listo para medir");
+
+    const snapCount = $derived(traceManager.instantaneas.length);
 </script>
 
 <aside
@@ -23,7 +26,7 @@
                 { id: 'config', icon: 'settings', label: 'CONFIG' },
             ] as tab}
                 <button
-                    class="flex-1 h-[48px] rounded-lg flex flex-col items-center justify-center transition-all duration-200 cursor-pointer gap-0.5
+                    class="relative flex-1 h-[48px] rounded-lg flex flex-col items-center justify-center transition-all duration-200 cursor-pointer gap-0.5
                            {uiStore.activeTab === tab.id
                         ? 'bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20'
                         : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}"
@@ -32,6 +35,11 @@
                 >
                     <span class="material-symbols-outlined text-[20px]">{tab.icon}</span>
                     <span class="text-[7px] font-bold uppercase tracking-wider leading-none">{tab.label}</span>
+                    {#if tab.id === 'snaps' && snapCount > 0}
+                        <span class="absolute top-1 right-1 min-w-[16px] h-[16px] flex items-center justify-center bg-[#3b82f6] text-white text-[8px] font-bold rounded-full px-1">
+                            {snapCount}
+                        </span>
+                    {/if}
                 </button>
             {/each}
         </nav>
