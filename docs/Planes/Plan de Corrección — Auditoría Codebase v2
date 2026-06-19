@@ -1,0 +1,145 @@
+# Plan de Corrección — Auditoría Codebase v2
+
+## Decisiones del Grill-Me
+
+| Decisión | Resultado |
+|----------|-----------|
+| BUG-2 SAB sync | ✅ Implementar Atomics completa |
+| `inChannels`/`outChannels` | ✅ Eliminar (cosméticos) |
+| FSK/Goertzel | ✅ Conservar detrás de flag `fskEnabled` |
+| `isSimulating` / `simulatedMagnitudeRequest` | ✅ Conservar + agregar trigger desde tab EQ |
+| `referenceChannel` vs `refChannel` | ✅ Conectar `refSourceMode` realmente (loopback/generator-tap) |
+| Persistencia | ✅ Todos los estados DSP |
+| `_deprecated/` | ❌ Conservar |
+| Build | Al final de todo |
+
+---
+
+## Grupo A — Bugs Críticos
+
+### A1: Fix Overlap Doble (worklet tiene 50% hardcodeado)
+
+#### [MODIFY] [audio-capture-processor.js](file:///c:/Users/Abel/Documents/Asistente/asistente/static/worklets/audio-capture-processor.js)
+- Cambiar `this.overlapFraction = 0.5` → `this.overlapFraction = 0` (línea 39)
+- El overlap queda únicamente en el dspWorker bajo control del usuario
+
+### A2: Fix dspUpdateRate default (2Hz → 15Hz)
+
+#### [MODIFY] [ui.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/ui.svelte.ts)
+- Cambiar `dspUpdateRate = $state(2)` → `dspUpdateRate = $state(15)` (línea 26)
+
+### A3: SAB sincronización con Atomics
+
+#### [MODIFY] [audio-capture-processor.js](file:///c:/Users/Abel/Documents/Asistente/asistente/static/worklets/audio-capture-processor.js)
+- Agregar `Atomics.store(flagArray, 0, 1)` después de escribir bloque completo en SAB
+- Crear un `Int32Array` flag en un SAB adicional de 4 bytes
+
+#### [MODIFY] [WebAudioProvider.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/hal/web/WebAudioProvider.ts)
+- Crear el SAB flag de 4 bytes en `startCapture()`
+- Enviarlo al worklet en el init message
+- En `readData()`: leer solo si `Atomics.load(flagArray, 0) === 1`, luego `Atomics.store(flagArray, 0, 0)` (reset)
+- Eliminar listener de `BLOCK_READY` (no necesario con Atomics)
+
+---
+
+## Grupo B — Optimización de Buffers
+
+### B1: Pre-alocar buffers PPO smoothing
+
+#### [MODIFY] [ppoSmoothing.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/ppoSmoothing.ts)
+- Variables estáticas `let smoothedBuf: Float32Array | null = null; let bufBins = 0;`
+- Re-alocar solo cuando `bins !== bufBins`
+- Misma lógica para la variante de fase
+
+### B2: Pre-alocar buffers overlap en worker
+
+#### [MODIFY] [dspWorker.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/dspWorker.ts)
+- `overlappedMeasBuf` y `overlappedRefBuf` como variables de módulo
+- Re-alocar junto con los demás buffers cuando FFT_SIZE cambia
+
+### B3: Cache de calibration gain en orchestrator
+
+#### [MODIFY] [mathOrchestrator.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/mathOrchestrator.svelte.ts)
+- `calGainCache: Float32Array`, `calGainHash: number`
+- Recalcular solo cuando `calibrationStore.calibrationPoints` cambian
+- Enviar buffer cacheado en `run()`
+
+---
+
+## Grupo C — Persistencia de Configuración DSP
+
+### C1: Ampliar tipo AppConfig
+
+#### [MODIFY] [configPersistence.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/utils/configPersistence.ts)
+- Agregar todos los campos DSP nuevos al tipo
+
+### C2: Guardar/restaurar en +page.svelte
+
+#### [MODIFY] [+page.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/routes/+page.svelte)
+- `saveConfig()`: agregar weightingType, averagingType, averagingDepth, averagingAlpha, besselSpeed, ppoSmoothing, fftOverlap, windowType, inputGain, displayOffset, polarity, inputFilter, compensationDelayMs, autoDelayCompensation, refChannel, measChannel, generatorType, genLevel, genRouting, targetFps, linkGeneratorToMeasurement, enableLeq, enableSourceWindow, sourceWindowWidthMs, sourceWindowOffsetMs
+- `onMount()`: restaurar cada uno
+
+---
+
+## Grupo D — Limpieza + Conexiones Funcionales
+
+### D1: Eliminar estados muertos
+
+#### [MODIFY] [ui.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/ui.svelte.ts)
+- Eliminar `showSnapshots`, `toggleSnapshots()` (sin efecto)
+- Eliminar `channelAssignment` (sin UI ni consumidores)
+- Eliminar `inChannels`, `outChannels` (cosméticos, no afectan captura)
+- Eliminar `referenceChannel` (reemplazado por refChannel)
+
+#### [MODIFY] [TabConfig.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/components/medicion/TabConfig.svelte)
+- Eliminar toggle `isInternalLoopback` y su $effect
+- Eliminar UI de canales individuales (`inChannels`/`outChannels` toggles)
+- Reemplazar por UI de `refSourceMode` (ver D3)
+
+#### [MODIFY] [+page.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/routes/+page.svelte)
+- Eliminar persistencia de `inChannels`, `outChannels`, `referenceChannel`
+
+### D2: Conectar refSourceMode + loopback real
+
+> [!IMPORTANT]
+> Implementar el modo generator-tap: cuando `refSourceMode === 'loopback'`, el canal de referencia usa el generador como señal de referencia en vez del canal físico.
+
+#### [MODIFY] [TabConfig.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/components/medicion/TabConfig.svelte)
+- Reemplazar toggle cosmético de loopback por selector de `refSourceMode`:
+  - `channel`: Referencia desde canal físico (actual default)
+  - `loopback`: Referencia desde generador (generator-tap)
+- Los otros modos (`analytical`) quedan como futuro
+
+#### [MODIFY] [WebAudioProvider.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/hal/web/WebAudioProvider.ts)
+- Cuando `uiStore.refSourceMode === 'loopback'`:
+  - Conectar el nodo del generador a un AnalyserNode dedicado para referencia
+  - En `readData()`, leer time-domain del generador como `refData` en lugar del canal de entrada
+
+### D3: Trigger Simulated Magnitude desde tab EQ
+
+#### [MODIFY] Sidebar/TabEQ (componente de ecualización)
+- Agregar botón/toggle "Mostrar predicción" que active `uiStore.isSimulating = true`
+- Esto disparará el $effect en Quadrant que agrega la pill "Simulated Magnitude"
+
+---
+
+## Grupo E — Limpieza de Worklet
+
+### E1: FSK detrás de flag
+
+#### [MODIFY] [audio-capture-processor.js](file:///c:/Users/Abel/Documents/Asistente/asistente/static/worklets/audio-capture-processor.js)
+- Agregar `this.fskEnabled = false` al constructor
+- Envolver toda la lógica FSK en `if (this.fskEnabled) { ... }`
+- Agregar handler `setFskEnabled` en el port.onmessage
+
+#### [MODIFY] [WebAudioProvider.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/hal/web/WebAudioProvider.ts)
+- Enviar `{ type: 'setFskEnabled', enabled: uiStore.measurementMode === 'secuencial' }` al worklet cuando cambia el modo
+
+---
+
+## Verificación
+
+```bash
+npm run build
+```
+Se ejecuta al final del último grupo.

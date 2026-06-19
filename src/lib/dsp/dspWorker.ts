@@ -142,6 +142,8 @@ let besselAveraging: BesselAveraging | null = null;
 // Overlap FFT state (H2)
 let overlapMeasHistory: Float32Array | null = null;
 let overlapRefHistory: Float32Array | null = null;
+let overlappedMeasBuf: Float32Array | null = null;
+let overlappedRefBuf: Float32Array | null = null;
 let overlapFftSize: number = 0;
 
 function circularShift(buffer: Float32Array, samples: number): void {
@@ -251,6 +253,8 @@ self.onmessage = (event) => {
             if (!overlapMeasHistory || overlapFftSize !== FFT_SIZE) {
                 overlapMeasHistory = new Float32Array(FFT_SIZE);
                 overlapRefHistory = new Float32Array(FFT_SIZE);
+                overlappedMeasBuf = new Float32Array(FFT_SIZE);
+                overlappedRefBuf = new Float32Array(FFT_SIZE);
                 overlapFftSize = FFT_SIZE;
             }
 
@@ -259,8 +263,8 @@ self.onmessage = (event) => {
             const newSamples = FFT_SIZE - keepSamples;
 
             // Build overlapped frame: [tail of history | head of new block]
-            const overlappedMeas = new Float32Array(FFT_SIZE);
-            const overlappedRef = new Float32Array(FFT_SIZE);
+            const overlappedMeas = overlappedMeasBuf!;
+            const overlappedRef = overlappedRefBuf!;
 
             // Copy tail of history (keepSamples from the end)
             overlappedMeas.set(overlapMeasHistory.subarray(newSamples), 0);

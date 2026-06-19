@@ -9,6 +9,29 @@
  * as a display-only smoothing operation.
  */
 
+// Pre-allocated static buffers to avoid GC pressure
+let _smoothedMag: Float32Array | null = null;
+let _smoothedPhase: Float32Array | null = null;
+let _bufBins = 0;
+
+function getSmoothedMag(bins: number): Float32Array {
+    if (!_smoothedMag || _bufBins !== bins) {
+        _smoothedMag = new Float32Array(bins);
+        _smoothedPhase = new Float32Array(bins);
+        _bufBins = bins;
+    }
+    return _smoothedMag;
+}
+
+function getSmoothedPhase(bins: number): Float32Array {
+    if (!_smoothedPhase || _bufBins !== bins) {
+        _smoothedMag = new Float32Array(bins);
+        _smoothedPhase = new Float32Array(bins);
+        _bufBins = bins;
+    }
+    return _smoothedPhase;
+}
+
 /**
  * Apply fractional-octave smoothing to a frequency-domain buffer (in dB).
  * @param data - Input array in dB (modified in-place)
@@ -29,8 +52,8 @@ export function applyPPOSmoothing(
     // Half-octave bandwidth factor: 2^(1/(2*PPO))
     const factor = Math.pow(2, 1 / (2 * ppo));
 
-    // Work with a copy to avoid accumulation errors
-    const smoothed = new Float32Array(bins);
+    // Reuse pre-allocated buffer
+    const smoothed = getSmoothedMag(bins);
 
     for (let k = 1; k < bins; k++) {
         const fc = k * freqPerBin;
@@ -74,7 +97,7 @@ export function applyPPOSmoothingPhase(
     const DEG2RAD = Math.PI / 180;
     const RAD2DEG = 180 / Math.PI;
 
-    const smoothed = new Float32Array(bins);
+    const smoothed = getSmoothedPhase(bins);
 
     for (let k = 1; k < bins; k++) {
         const fc = k * freqPerBin;

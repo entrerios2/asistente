@@ -19,12 +19,35 @@
             }
             if (config.audioInDevice) uiStore.audioInDevice = config.audioInDevice;
             if (config.audioOutDevice) uiStore.audioOutDevice = config.audioOutDevice;
-            if (config.inChannels) uiStore.inChannels = config.inChannels;
-            if (config.outChannels) uiStore.outChannels = config.outChannels;
-            if (config.referenceChannel) uiStore.referenceChannel = config.referenceChannel;
             if (config.sampleRate) uiStore.sampleRate = config.sampleRate;
             if (config.fftSize) uiStore.fftSize = config.fftSize;
             if (config.dspUpdateRate) uiStore.dspUpdateRate = config.dspUpdateRate;
+            // DSP advanced (v4)
+            if (config.weightingType) uiStore.weightingType = config.weightingType as any;
+            if (config.averagingType) uiStore.averagingType = config.averagingType as any;
+            if (config.averagingDepth !== undefined) uiStore.averagingDepth = config.averagingDepth;
+            if (config.averagingAlpha !== undefined) uiStore.averagingAlpha = config.averagingAlpha;
+            if (config.besselSpeed) uiStore.besselSpeed = config.besselSpeed as any;
+            if (config.ppoSmoothing !== undefined) uiStore.ppoSmoothing = config.ppoSmoothing;
+            if (config.fftOverlap !== undefined) uiStore.fftOverlap = config.fftOverlap as any;
+            if (config.windowType) uiStore.windowType = config.windowType as any;
+            if (config.inputGain !== undefined) uiStore.inputGain = config.inputGain;
+            if (config.displayOffset !== undefined) uiStore.displayOffset = config.displayOffset;
+            if (config.polarity !== undefined) uiStore.polarity = config.polarity;
+            if (config.inputFilter) uiStore.inputFilter = config.inputFilter as any;
+            if (config.compensationDelayMs !== undefined) uiStore.compensationDelayMs = config.compensationDelayMs;
+            if (config.autoDelayCompensation !== undefined) uiStore.autoDelayCompensation = config.autoDelayCompensation;
+            if (config.refChannel !== undefined) uiStore.refChannel = config.refChannel;
+            if (config.measChannel !== undefined) uiStore.measChannel = config.measChannel;
+            if (config.generatorType) uiStore.generatorType = config.generatorType;
+            if (config.genLevel !== undefined) uiStore.genLevel = config.genLevel;
+            if (config.genRouting) uiStore.genRouting = config.genRouting as any;
+            if (config.targetFps !== undefined) uiStore.targetFps = config.targetFps;
+            if (config.linkGeneratorToMeasurement !== undefined) uiStore.linkGeneratorToMeasurement = config.linkGeneratorToMeasurement;
+            if (config.enableLeq !== undefined) uiStore.enableLeq = config.enableLeq;
+            if (config.enableSourceWindow !== undefined) uiStore.enableSourceWindow = config.enableSourceWindow;
+            if (config.sourceWindowWidthMs !== undefined) uiStore.sourceWindowWidthMs = config.sourceWindowWidthMs;
+            if (config.sourceWindowOffsetMs !== undefined) uiStore.sourceWindowOffsetMs = config.sourceWindowOffsetMs;
             eqStore.loadFromConfig(config);
         } else {
             uiStore.setLayout('1x1');
@@ -54,17 +77,40 @@
 
     $effect(() => {
         saveConfig({
-            _version: 3,
+            _version: 4,
             layout: uiStore.layout,
             themeMode: uiStore.themeMode,
             audioInDevice: uiStore.audioInDevice,
             audioOutDevice: uiStore.audioOutDevice,
-            inChannels: $state.snapshot(uiStore.inChannels),
-            outChannels: $state.snapshot(uiStore.outChannels),
-            referenceChannel: uiStore.referenceChannel,
             sampleRate: uiStore.sampleRate,
             fftSize: uiStore.fftSize,
             dspUpdateRate: uiStore.dspUpdateRate,
+            // DSP advanced
+            weightingType: uiStore.weightingType,
+            averagingType: uiStore.averagingType,
+            averagingDepth: uiStore.averagingDepth,
+            averagingAlpha: uiStore.averagingAlpha,
+            besselSpeed: uiStore.besselSpeed,
+            ppoSmoothing: uiStore.ppoSmoothing,
+            fftOverlap: uiStore.fftOverlap,
+            windowType: uiStore.windowType,
+            inputGain: uiStore.inputGain,
+            displayOffset: uiStore.displayOffset,
+            polarity: uiStore.polarity,
+            inputFilter: uiStore.inputFilter,
+            compensationDelayMs: uiStore.compensationDelayMs,
+            autoDelayCompensation: uiStore.autoDelayCompensation,
+            refChannel: uiStore.refChannel,
+            measChannel: uiStore.measChannel,
+            generatorType: uiStore.generatorType,
+            genLevel: uiStore.genLevel,
+            genRouting: uiStore.genRouting,
+            targetFps: uiStore.targetFps,
+            linkGeneratorToMeasurement: uiStore.linkGeneratorToMeasurement,
+            enableLeq: uiStore.enableLeq,
+            enableSourceWindow: uiStore.enableSourceWindow,
+            sourceWindowWidthMs: uiStore.sourceWindowWidthMs,
+            sourceWindowOffsetMs: uiStore.sourceWindowOffsetMs,
             ...eqStore.toConfig(),
         });
     });

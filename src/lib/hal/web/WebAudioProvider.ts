@@ -27,6 +27,8 @@ export class WebAudioProvider implements AudioProvider {
 	private splitterNode: ChannelSplitterNode | null = null;
 	private refSab: SharedArrayBuffer | null = null;
 	private measSab: SharedArrayBuffer | null = null;
+	private flagSab: SharedArrayBuffer | null = null;
+	private flagArray: Int32Array | null = null;
 	private refTimeDomain: Float32Array | null = null;
 	private measTimeDomain: Float32Array | null = null;
 
@@ -95,6 +97,8 @@ export class WebAudioProvider implements AudioProvider {
 		if (hasSAB) {
 			this.refSab = new SharedArrayBuffer(fftSize * Float32Array.BYTES_PER_ELEMENT);
 			this.measSab = new SharedArrayBuffer(fftSize * Float32Array.BYTES_PER_ELEMENT);
+			this.flagSab = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT);
+			this.flagArray = new Int32Array(this.flagSab);
 		}
 
 		this.workletNode = new AudioWorkletNode(this.audioContext, 'audio-capture-processor', {
@@ -107,7 +111,8 @@ export class WebAudioProvider implements AudioProvider {
 				type: 'init',
 				fftSize,
 				refSab: this.refSab,
-				measSab: this.measSab
+				measSab: this.measSab,
+				flagSab: this.flagSab
 			});
 		} else {
 			this.workletNode.port.postMessage({ type: 'init', fftSize });
@@ -133,11 +138,14 @@ export class WebAudioProvider implements AudioProvider {
 
 			// Dual-channel time-domain para el worker DSP
 			if (listener.onTimeDomainData && this.analyserRef && this.analyserNode) {
-				if (hasSAB && this.refSab && this.measSab) {
-					// Copias defensivas — el worklet sigue escribiendo en el SAB
-					const refData = Float32Array.from(new Float32Array(this.refSab));
-					const measData = Float32Array.from(new Float32Array(this.measSab));
-					listener.onTimeDomainData(measData, refData);
+				if (hasSAB && this.refSab && this.measSab && this.flagArray) {
+					// Solo leer si el worklet señalizó bloque listo (Atomics sync)
+					if (Atomics.load(this.flagArray, 0) === 1) {
+						const refData = Float32Array.from(new Float32Array(this.refSab));
+						const measData = Float32Array.from(new Float32Array(this.measSab));
+						Atomics.store(this.flagArray, 0, 0); // Reset flag
+						listener.onTimeDomainData(measData, refData);
+					}
 				} else if (this.refTimeDomain && this.measTimeDomain) {
 					// Fallback: datos ya recibidos via postMessage
 					listener.onTimeDomainData(this.measTimeDomain, this.refTimeDomain);

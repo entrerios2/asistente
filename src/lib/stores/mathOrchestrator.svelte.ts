@@ -47,6 +47,10 @@ class MathOrchestrator {
     private lastMeasuring = false;
     private lastSimulating = false;
 
+    // Cache for calibration gain
+    private calGainCache: Float32Array | null = null;
+    private calGainHash = 0;
+
     // Worker & autonomous timer
     private worker: Worker | null = null;
     private timerId: ReturnType<typeof setInterval> | null = null;
@@ -332,16 +336,27 @@ class MathOrchestrator {
             const measCopy = new Float32Array(this.measTimeDomain);
             const refCopy = new Float32Array(this.refTimeDomain);
 
-            // E1: Interpolar curva de calibración a bins del FFT
+            // E1: Interpolar curva de calibración a bins del FFT (cached)
             let calGainBuf: ArrayBuffer | undefined;
             if (calibrationStore.calibrationPoints.length > 0) {
-                const calGain = new Float32Array(this.BINS);
-                const sr = uiStore.sampleRate;
-                for (let k = 0; k < this.BINS; k++) {
-                    const freq = (k * sr / 2) / this.BINS;
-                    calGain[k] = calibrationStore.getCalibrationGainAt(freq);
+                // Simple hash to detect changes
+                let calHash = calibrationStore.calibrationPoints.length * 1e6;
+                for (const p of calibrationStore.calibrationPoints) {
+                    calHash += p.frequency * 1e3 + p.gain;
                 }
-                calGainBuf = calGain.buffer;
+                if (calHash !== this.calGainHash || !this.calGainCache || this.calGainCache.length !== this.BINS) {
+                    const calGain = new Float32Array(this.BINS);
+                    const sr = uiStore.sampleRate;
+                    for (let k = 0; k < this.BINS; k++) {
+                        const freq = (k * sr / 2) / this.BINS;
+                        calGain[k] = calibrationStore.getCalibrationGainAt(freq);
+                    }
+                    this.calGainCache = calGain;
+                    this.calGainHash = calHash;
+                }
+                // Copy for transfer (cache stays intact)
+                const calCopy = new Float32Array(this.calGainCache);
+                calGainBuf = calCopy.buffer;
             }
 
             const transferables: ArrayBuffer[] = [measCopy.buffer, refCopy.buffer];

@@ -9,21 +9,12 @@
 
     let inputDevices = $state<{ id: string; name: string; channels?: number }[]>([]);
     let outputDevices = $state<{ id: string; name: string; channels?: number }[]>([]);
-    let isInternalLoopback = $state(uiStore.referenceChannel === "Loopback");
 
     const activeInDevice = $derived(inputDevices.find(d => d.id === uiStore.audioInDevice));
     const inputChannelsCount = $derived(activeInDevice && activeInDevice.channels ? activeInDevice.channels : 2);
 
     const activeOutDevice = $derived(outputDevices.find(d => d.id === uiStore.audioOutDevice));
     const outputChannelsCount = $derived(activeOutDevice && activeOutDevice.channels ? activeOutDevice.channels : 2);
-
-    $effect(() => {
-        if (isInternalLoopback) {
-            uiStore.referenceChannel = "Loopback";
-        } else if (uiStore.referenceChannel === "Loopback") {
-            uiStore.referenceChannel = "Input 1";
-        }
-    });
 
     async function loadDevices() {
         try {
@@ -87,27 +78,6 @@
         }
     }
 
-    function toggleInputChannel(index: number) {
-        if (index >= uiStore.inChannels.length) {
-            const newCh = [...uiStore.inChannels];
-            while (newCh.length <= index) newCh.push(false);
-            newCh[index] = !newCh[index];
-            uiStore.inChannels = newCh;
-        } else {
-            uiStore.inChannels[index] = !uiStore.inChannels[index];
-        }
-    }
-
-    function toggleOutputChannel(index: number) {
-        if (index >= uiStore.outChannels.length) {
-            const newCh = [...uiStore.outChannels];
-            while (newCh.length <= index) newCh.push(false);
-            newCh[index] = !newCh[index];
-            uiStore.outChannels = newCh;
-        } else {
-            uiStore.outChannels[index] = !uiStore.outChannels[index];
-        }
-    }
 
     onMount(async () => {
         await loadDevices();
@@ -625,49 +595,6 @@
                 {/each}
             </select>
         </div>
-
-        <!-- Habilitar Canales de Entrada -->
-        <div class="flex flex-col gap-1.5">
-            <label
-                class="text-[10px] font-bold text-gray-500 uppercase tracking-wider"
-                >Canales de Entrada Activos</label
-            >
-            <div class="grid grid-cols-4 gap-2">
-                {#each Array.from({ length: inputChannelsCount }) as _, chIdx}
-                    <button
-                        class="py-1.5 rounded-lg text-xs font-mono font-bold border transition-all cursor-pointer min-h-[36px]
-                               {uiStore.inChannels[chIdx]
-                            ? 'bg-[#3b82f6]/10 border-[#3b82f6] text-[#3b82f6] shadow'
-                            : 'bg-[#121216] border-[#1a1a24] text-gray-500 hover:text-gray-300 hover:bg-white/5'}"
-                        onclick={() => toggleInputChannel(chIdx)}
-                    >
-                        CH {chIdx + 1}
-                    </button>
-                {/each}
-            </div>
-        </div>
-
-        <!-- Habilitar Canales de Salida -->
-        <div class="flex flex-col gap-1.5">
-            <label
-                class="text-[10px] font-bold text-gray-500 uppercase tracking-wider"
-                >Canales de Salida Activos</label
-            >
-            <div class="grid grid-cols-4 gap-2">
-                {#each Array.from({ length: outputChannelsCount }) as _, chIdx}
-                    <button
-                        class="py-1.5 rounded-lg text-xs font-mono font-bold border transition-all cursor-pointer min-h-[36px]
-                               {uiStore.outChannels[chIdx]
-                            ? 'bg-[#3b82f6]/10 border-[#3b82f6] text-[#3b82f6] shadow'
-                            : 'bg-[#121216] border-[#1a1a24] text-gray-500 hover:text-gray-300 hover:bg-white/5'}"
-                        onclick={() => toggleOutputChannel(chIdx)}
-                    >
-                        CH {chIdx + 1}
-                    </button>
-                {/each}
-            </div>
-        </div>
-
         <!-- Routing Dual-Channel -->
         <div class="flex flex-col gap-3 pt-2 border-t border-[#1a1a24]/20">
             <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
@@ -706,16 +633,25 @@
                 </div>
             </div>
 
-            <label
-                class="flex items-center gap-2 text-xs text-gray-300 cursor-pointer py-1"
-            >
-                <input
-                    type="checkbox"
-                    bind:checked={isInternalLoopback}
-                    class="w-4 h-4 rounded border-[#1a1a24] bg-[#121216] text-[#3b82f6] accent-[#3b82f6] cursor-pointer"
-                />
-                <span class="font-semibold select-none">Loopback interno</span>
-            </label>
+            <!-- Modo de referencia -->
+            <div class="flex flex-col gap-1.5">
+                <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                    Fuente de Referencia
+                </label>
+                <div class="flex bg-[#121216] p-0.5 rounded-md border border-[#1a1a24]/40">
+                    {#each [['channel', 'Canal'], ['loopback', 'Loopback']] as [val, label]}
+                        <button
+                            class="flex-1 py-1.5 text-[10px] font-bold rounded transition-all cursor-pointer min-h-[28px]
+                                   {uiStore.refSourceMode === val
+                                ? 'bg-[#3b82f6]/15 text-[#3b82f6] shadow'
+                                : 'text-gray-500 hover:text-gray-300'}"
+                            onclick={() => uiStore.refSourceMode = val as any}
+                        >
+                            {label}
+                        </button>
+                    {/each}
+                </div>
+            </div>
         </div>
     </div>
 

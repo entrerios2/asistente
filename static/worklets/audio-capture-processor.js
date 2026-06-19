@@ -32,11 +32,12 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
         this.measWriteIdx = 0;
         this.bufferSize = 0;
         this.hasSAB = false;
+        this.flagArray = null; // Int32Array para Atomics sync
 
         // Acumulación de bloques FFT
         this.fftSize = 8192;
         this.samplesAccumulated = 0;
-        this.overlapFraction = 0.5; // 50% overlap default
+        this.overlapFraction = 0; // Overlap controlado por dspWorker (UI)
 
         // Parámetros FSK
         this.sampleRate = 48000;
@@ -54,6 +55,7 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
         this.bitBuffer = [];
         this.samplesCount = 0;
         this.currentBit = 1;
+        this.fskEnabled = false; // Solo activo en modo secuencial
 
         this.port.onmessage = (event) => {
             if (event.data && event.data.type === 'init') {
@@ -63,6 +65,10 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
                     this.refBuffer = new Float32Array(event.data.refSab);
                     this.measBuffer = new Float32Array(event.data.measSab);
                     this.hasSAB = true;
+                    // Flag SAB para Atomics sync
+                    if (event.data.flagSab) {
+                        this.flagArray = new Int32Array(event.data.flagSab);
+                    }
                 } else {
                     this.refBuffer = new Float32Array(this.bufferSize);
                     this.measBuffer = new Float32Array(this.bufferSize);
@@ -85,9 +91,8 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
             if (event.data && event.data.type === 'setOverlap') {
                 this.overlapFraction = event.data.overlap;
             }
-            // Mantener compatibilidad con el protocolo SAB antiguo
-            if (event.data && event.data.sab) {
-                // Legacy single-channel SAB — ignorar o migrar
+            if (event.data && event.data.type === 'setFskEnabled') {
+                this.fskEnabled = !!event.data.enabled;
             }
         };
     }
@@ -128,8 +133,10 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
                     meas: measBlock.buffer
                 }, [refBlock.buffer, measBlock.buffer]);
             } else {
-                // SAB: notificar que hay un bloque listo
-                this.port.postMessage({ type: 'BLOCK_READY' });
+                // SAB: señalizar bloque listo via Atomics
+                if (this.flagArray) {
+                    Atomics.store(this.flagArray, 0, 1);
+                }
             }
 
             // Overlap: retroceder el contador
@@ -137,21 +144,23 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
             this.samplesAccumulated -= hopSize;
         }
 
-        // Mantener lógica FSK/Goertzel existente sobre ch0
-        const channelData = ch0;
-        for (let i = 0; i < len; i++) {
-            this.samplesCount++;
-            if (this.samplesCount % this.blockSize === 0) {
-                const block = channelData.slice(Math.max(0, i - this.blockSize + 1), i + 1);
-                const markEnergy = this.markDetector.process(block);
-                const spaceEnergy = this.spaceDetector.process(block);
-                if (markEnergy > spaceEnergy && markEnergy > this.threshold) {
-                    this.currentBit = 1;
-                } else if (spaceEnergy > markEnergy && spaceEnergy > this.threshold) {
-                    this.currentBit = 0;
+        // FSK/Goertzel solo en modo secuencial
+        if (this.fskEnabled) {
+            const channelData = ch0;
+            for (let i = 0; i < len; i++) {
+                this.samplesCount++;
+                if (this.samplesCount % this.blockSize === 0) {
+                    const block = channelData.slice(Math.max(0, i - this.blockSize + 1), i + 1);
+                    const markEnergy = this.markDetector.process(block);
+                    const spaceEnergy = this.spaceDetector.process(block);
+                    if (markEnergy > spaceEnergy && markEnergy > this.threshold) {
+                        this.currentBit = 1;
+                    } else if (spaceEnergy > markEnergy && spaceEnergy > this.threshold) {
+                        this.currentBit = 0;
+                    }
                 }
+                this.handleFskState();
             }
-            this.handleFskState();
         }
 
         return true;

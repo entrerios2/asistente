@@ -12,9 +12,6 @@ export interface PersistedConfig {
     themeMode: 'system' | 'light' | 'dark';
     audioInDevice: string;
     audioOutDevice: string;
-    inChannels: boolean[];
-    outChannels: boolean[];
-    referenceChannel: string;
     sampleRate: number;
     fftSize: number;
     dspUpdateRate: number;
@@ -22,6 +19,38 @@ export interface PersistedConfig {
     eqShowEQ?: boolean;
     eqGraphicBands?: { freq: number; gain: number }[];
     eqParametricFilters?: { id: number; freq: number; gain: number; q: number; type: string; supportedTypes: string[] }[];
+
+    // DSP advanced (v4)
+    weightingType?: string;
+    averagingType?: string;
+    averagingDepth?: number;
+    averagingAlpha?: number;
+    besselSpeed?: string;
+    ppoSmoothing?: number;
+    fftOverlap?: number;
+    windowType?: string;
+    inputGain?: number;
+    displayOffset?: number;
+    polarity?: boolean;
+    inputFilter?: string;
+    compensationDelayMs?: number;
+    autoDelayCompensation?: boolean;
+    refChannel?: number;
+    measChannel?: number;
+    generatorType?: string;
+    genLevel?: number;
+    genRouting?: string;
+    targetFps?: number;
+    linkGeneratorToMeasurement?: boolean;
+    enableLeq?: boolean;
+    enableSourceWindow?: boolean;
+    sourceWindowWidthMs?: number;
+    sourceWindowOffsetMs?: number;
+
+    // Legacy (kept for migration)
+    inChannels?: boolean[];
+    outChannels?: boolean[];
+    referenceChannel?: string;
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;

@@ -4,16 +4,12 @@
 
 class UIStore {
     layout = $state('1x1'); // '1x1' | '1x2' | '2x1' | '2x2' | '3x1' | '3x2'
-    showSnapshots = $state(true); // Aunque ahora esté en el sidebar, mantenemos el control
     themeMode = $state<'system' | 'light' | 'dark'>('dark');
     showSidebar = $state(true);
     
     // Configuración de Audio
     audioInDevice = $state('');
     audioOutDevice = $state('');
-    inChannels = $state([true, false]); // Canal 1 activo, Canal 2 inactivo (ejemplo)
-    outChannels = $state([true, true]);
-    referenceChannel = $state('Loopback'); // 'Loopback' o índice del canal
     isSimulating = $state(false);
 
     // NUEVOS ESTADOS COMPARTIDOS FASE 2A.3
@@ -23,7 +19,7 @@ class UIStore {
 
     // Configuración de Rendimiento y DSP (Fase 2)
     targetFps = $state(10);
-    dspUpdateRate = $state(2); // Hz
+    dspUpdateRate = $state(15); // Hz
     fftSize = $state(8192);
     sampleRate = $state(48000); // 44100 | 48000 | 96000
 
@@ -63,7 +59,6 @@ class UIStore {
     // Routing de canales dual-channel
     refChannel = $state(0);           // Canal físico para referencia (0=L, 1=R)
     measChannel = $state(1);          // Canal físico para medición
-    channelAssignment = $state<'manual' | 'auto'>('manual');
 
     // Modo de referencia
     refSourceMode = $state<'channel' | 'generator-tap' | 'analytical' | 'loopback'>('channel');
@@ -90,10 +85,6 @@ class UIStore {
                 this.applyTheme();
             }, 0);
         }
-    }
-
-    toggleSnapshots() {
-        this.showSnapshots = !this.showSnapshots;
     }
 
     setLayout(newLayout: string) {
