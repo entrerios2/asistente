@@ -588,11 +588,12 @@ export function drawMetricPath(
     ctx.setLineDash(lineDash || []);
     
     const cfg = metricConfigs[metricType];
-    const path = new Path2D();
 
     // Construir array de puntos (un punto por bin FFT visible)
-    const points: {x: number, y: number}[] = [];
+    const points: {x: number, y: number, cohAlpha: number}[] = [];
     const binWidth = (sampleRate / 2) / dataArray.length;
+    const cohEnabled = cfg && cfg.enableCoherence;
+    const cohThreshold = cfg?.coherenceThreshold ?? 0.5;
 
     for (let bin = 0; bin < dataArray.length; bin++) {
         const freq = bin * binWidth;
@@ -600,8 +601,15 @@ export function drawMetricPath(
         const x = valToX(freq, width, false, state);
         if (x < -10 || x > width + 10) continue;
 
-        // Coherence threshold masking (si aplica)
-        if (cfg && cfg.enableCoherence && interpCoherence[bin] < (cfg.coherenceThreshold ?? 0.5)) continue;
+        // Coherence alpha attenuation (min 0.15 instead of hard blanking)
+        let cohAlpha = 1.0;
+        if (cohEnabled && metricType !== "Coherence") {
+            const coh = interpCoherence[bin] ?? 0;
+            if (coh < cohThreshold) {
+                // Proportional fade: 0 coherence → 0.15, threshold → 1.0
+                cohAlpha = Math.max(0.15, coh / cohThreshold);
+            }
+        }
 
         let val = (cfg && cfg.smoothingPPO)
             ? getPPOSmoothedValue(bin, dataArray, cfg.smoothingPPO ?? 48)
@@ -627,24 +635,47 @@ export function drawMetricPath(
         }
 
         const y = valToY(val, height, metricType, metricConfigs, state) + (cfg?.yShift || 0);
-        points.push({ x, y });
+        points.push({ x, y, cohAlpha });
     }
 
-    // Dibujar con spline (quadratic curve through midpoints)
+    // Draw with coherence-aware alpha segments
     if (points.length > 0) {
-        path.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length - 1; i++) {
-            const midX = (points[i].x + points[i + 1].x) / 2;
-            const midY = (points[i].y + points[i + 1].y) / 2;
-            path.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+        const savedAlpha = ctx.globalAlpha;
+        let segStart = 0;
+
+        while (segStart < points.length) {
+            // Determine segment alpha (use first point's alpha)
+            const segAlpha = points[segStart].cohAlpha;
+            let segEnd = segStart + 1;
+
+            // Extend segment while alpha is similar (within 0.1 tolerance)
+            while (segEnd < points.length && Math.abs(points[segEnd].cohAlpha - segAlpha) < 0.1) {
+                segEnd++;
+            }
+
+            // Draw this segment
+            ctx.globalAlpha = savedAlpha * segAlpha;
+            const segPath = new Path2D();
+            // Start from 1 point before for continuity (if possible)
+            const drawStart = Math.max(0, segStart - 1);
+            segPath.moveTo(points[drawStart].x, points[drawStart].y);
+            for (let i = drawStart + 1; i < Math.min(segEnd + 1, points.length); i++) {
+                if (i + 1 < points.length) {
+                    const midX = (points[i].x + points[i + 1].x) / 2;
+                    const midY = (points[i].y + points[i + 1].y) / 2;
+                    segPath.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+                } else {
+                    segPath.lineTo(points[i].x, points[i].y);
+                }
+            }
+            ctx.stroke(segPath);
+
+            segStart = segEnd;
         }
-        if (points.length > 1) {
-            const last = points[points.length - 1];
-            path.lineTo(last.x, last.y);
-        }
+
+        ctx.globalAlpha = savedAlpha;
     }
 
-    ctx.stroke(path);
     ctx.setLineDash([]);
 
     // Coherence horizontal threshold line
@@ -686,13 +717,13 @@ export function drawSpectrumPath(
     ctx.setLineDash(lineDash || []);
     
     const cfg = metricConfigs["Spectrum"] || { modeY: "dB", smoothingPPO: 48 };
-    const path = new Path2D();
+
     const hasLive = liveData && liveData.length > 0;
     const dataArray = hasLive ? liveData : interpMagnitude;
     const offset = hasLive ? 0 : 68;
 
     // Construir array de puntos (un punto por bin FFT visible)
-    const points: {x: number, y: number}[] = [];
+    const points: {x: number, y: number, cohAlpha: number}[] = [];
     const binWidth = (sampleRate / 2) / dataArray.length;
 
     for (let bin = 0; bin < dataArray.length; bin++) {
@@ -701,8 +732,15 @@ export function drawSpectrumPath(
         const x = valToX(freq, width, false, state);
         if (x < -10 || x > width + 10) continue;
 
-        // Coherence threshold masking for Spectrum
-        if (cfg.enableCoherence && interpCoherence[bin] < (cfg.coherenceThreshold ?? 0.5)) continue;
+        // Coherence alpha attenuation for Spectrum (min 0.15)
+        let cohAlpha = 1.0;
+        const cohThreshold = cfg.coherenceThreshold ?? 0.5;
+        if (cfg.enableCoherence) {
+            const coh = interpCoherence[bin] ?? 0;
+            if (coh < cohThreshold) {
+                cohAlpha = Math.max(0.15, coh / cohThreshold);
+            }
+        }
 
         let val = 0;
         if (hasLive) {
@@ -723,24 +761,38 @@ export function drawSpectrumPath(
         }
 
         const y = valToY(val, height, "Spectrum", metricConfigs, state) + (cfg.yShift || 0);
-        points.push({ x, y });
+        points.push({ x, y, cohAlpha });
     }
 
-    // Dibujar con spline (quadratic curve through midpoints)
+    // Draw with coherence-aware alpha segments
     if (points.length > 0) {
-        path.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length - 1; i++) {
-            const midX = (points[i].x + points[i + 1].x) / 2;
-            const midY = (points[i].y + points[i + 1].y) / 2;
-            path.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+        const savedAlpha = ctx.globalAlpha;
+        let segStart = 0;
+        while (segStart < points.length) {
+            const segAlpha = points[segStart].cohAlpha;
+            let segEnd = segStart + 1;
+            while (segEnd < points.length && Math.abs(points[segEnd].cohAlpha - segAlpha) < 0.1) {
+                segEnd++;
+            }
+            ctx.globalAlpha = savedAlpha * segAlpha;
+            const segPath = new Path2D();
+            const drawStart = Math.max(0, segStart - 1);
+            segPath.moveTo(points[drawStart].x, points[drawStart].y);
+            for (let i = drawStart + 1; i < Math.min(segEnd + 1, points.length); i++) {
+                if (i + 1 < points.length) {
+                    const midX = (points[i].x + points[i + 1].x) / 2;
+                    const midY = (points[i].y + points[i + 1].y) / 2;
+                    segPath.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+                } else {
+                    segPath.lineTo(points[i].x, points[i].y);
+                }
+            }
+            ctx.stroke(segPath);
+            segStart = segEnd;
         }
-        if (points.length > 1) {
-            const last = points[points.length - 1];
-            path.lineTo(last.x, last.y);
-        }
+        ctx.globalAlpha = savedAlpha;
     }
 
-    ctx.stroke(path);
     ctx.setLineDash([]);
 }
 
@@ -822,12 +874,14 @@ export function drawSimulatedMagnitudePath(
     
     const cfg = metricConfigs["Simulated Magnitude"] || { modeY: "dB", smoothingPPO: 48, enableCoherence: false, coherenceThreshold: 0.5 };
     
-    const path = new Path2D();
+
     const sr = sampleRate;
     const binWidth = sr / 2 / bins;
 
+    const cohThreshold = cfg.coherenceThreshold ?? 0.5;
+
     // Pixel-distance based decimation: adapts to log scale
-    let started = false;
+    const points: {x: number, y: number, cohAlpha: number}[] = [];
     let prevX = -100;
 
     for (let bin = 0; bin < bins; bin++) {
@@ -838,7 +892,14 @@ export function drawSimulatedMagnitudePath(
         if (x - prevX < 2 && prevX > -100) continue;
         prevX = x;
 
-        if (cfg.enableCoherence && interpCoherence[bin] < (cfg.coherenceThreshold ?? 0.5)) continue;
+        // Coherence alpha attenuation (min 0.15)
+        let cohAlpha = 1.0;
+        if (cfg.enableCoherence) {
+            const coh = interpCoherence[bin] ?? 0;
+            if (coh < cohThreshold) {
+                cohAlpha = Math.max(0.15, coh / cohThreshold);
+            }
+        }
 
         let val = getPPOSmoothedValue(bin, interpMagnitude, cfg.smoothingPPO ?? 48);
         const f = freq || 1e-6;
@@ -851,16 +912,32 @@ export function drawSimulatedMagnitudePath(
         }
 
         const y = valToY(val, height, "Simulated Magnitude", metricConfigs, state) + (cfg.yShift || 0);
-        
-        if (!started) {
-            path.moveTo(x, y);
-            started = true;
-        } else {
-            path.lineTo(x, y);
-        }
+        points.push({ x, y, cohAlpha });
     }
 
-    ctx.stroke(path);
+    // Draw with coherence-aware alpha segments
+    if (points.length > 0) {
+        const savedAlpha = ctx.globalAlpha;
+        let segStart = 0;
+        while (segStart < points.length) {
+            const segAlpha = points[segStart].cohAlpha;
+            let segEnd = segStart + 1;
+            while (segEnd < points.length && Math.abs(points[segEnd].cohAlpha - segAlpha) < 0.1) {
+                segEnd++;
+            }
+            ctx.globalAlpha = savedAlpha * segAlpha;
+            const segPath = new Path2D();
+            const drawStart = Math.max(0, segStart - 1);
+            segPath.moveTo(points[drawStart].x, points[drawStart].y);
+            for (let i = drawStart + 1; i < Math.min(segEnd + 1, points.length); i++) {
+                segPath.lineTo(points[i].x, points[i].y);
+            }
+            ctx.stroke(segPath);
+            segStart = segEnd;
+        }
+        ctx.globalAlpha = savedAlpha;
+    }
+
     ctx.setLineDash([]);
 }
 
