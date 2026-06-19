@@ -294,268 +294,250 @@
     <!-- CONTENIDO MODO MANUAL -->
     {#if uiStore.measurementMode === "manual"}
         <div class="flex flex-col gap-4">
-            <!-- AUTOMATIZACIÓN DE MEDICIÓN (F27) -->
-            <div class="flex flex-col gap-2 border rounded-xl p-3 mt-3" style="background: var(--bg-tertiary); opacity: 0.8; border-color: var(--border-primary)">
-                <div class="flex items-center gap-2 border-b pb-1.5" style="border-color: var(--border-primary)">
-                    <span class="material-symbols-outlined text-[#a855f7] text-sm">bolt</span>
-                    <h3 class="text-[10px] font-bold uppercase tracking-wider" style="color: var(--text-muted)">Automatización</h3>
+            <!-- ETIQUETAS INFORMATIVAS (modo básico) -->
+            {#if !uiStore.showAdvanced}
+                <div class="flex flex-wrap items-center gap-2 text-xs text-gray-400 px-1">
+                    <span class="flex items-center gap-1">
+                        <span class="material-symbols-outlined text-[14px] text-gray-500">music_note</span>
+                        <span class="text-gray-300 font-medium">
+                            {uiStore.generatorType === 'pink' ? 'Ruido rosa' :
+                             uiStore.generatorType === 'white' ? 'Ruido blanco' :
+                             uiStore.generatorType === 'brown' ? 'Ruido brown' :
+                             uiStore.generatorType === 'music' ? 'Music-noise' :
+                             uiStore.generatorType === 'sine' ? `Seno ${uiStore.genFreq} Hz` :
+                             uiStore.generatorType === 'sweep' ? 'Sweep logarítmico' :
+                             uiStore.generatorType === 'burst' ? 'Burst' :
+                             uiStore.generatorType === 'sinburst' ? 'SinBurst' :
+                             uiStore.generatorType === 'mls' ? 'MLS+' : uiStore.generatorType}
+                        </span>
+                    </span>
+                    <span class="text-gray-600">&bull;</span>
+                    <span class="flex items-center gap-1">
+                        <span class="material-symbols-outlined text-[14px] text-gray-500">timer</span>
+                        <span class="text-gray-300 font-medium">
+                            Retardo: {uiStore.autoDelayCompensation ? 'automático' : `${uiStore.compensationDelayMs.toFixed(1)} ms manual`}
+                        </span>
+                    </span>
+                </div>
+            {/if}
+
+            <!-- 🔧 AVANZADO: Automatización -->
+            {#if uiStore.showAdvanced}
+                <div class="flex flex-col gap-2 border rounded-xl p-3" style="background: var(--bg-tertiary); opacity: 0.8; border-color: var(--border-primary)">
+                    <div class="flex items-center gap-2 border-b pb-1.5" style="border-color: var(--border-primary)">
+                        <span class="material-symbols-outlined text-[12px] text-gray-600">tune</span>
+                        <span class="material-symbols-outlined text-[#a855f7] text-sm">bolt</span>
+                        <h3 class="text-[10px] font-bold uppercase tracking-wider" style="color: var(--text-muted)">Automatización</h3>
+                    </div>
+
+                    <label class="flex items-center gap-2.5 cursor-pointer group py-1">
+                        <input
+                            type="checkbox"
+                            bind:checked={uiStore.autoSaveSnapshotOnStop}
+                            class="w-4 h-4 rounded accent-[#3b82f6] cursor-pointer"
+                        />
+                        <div class="flex flex-col">
+                            <span class="text-xs text-gray-200 font-semibold group-hover:text-white transition-colors select-none">
+                                Auto-guardar al detener
+                            </span>
+                            <span class="text-[9px] text-gray-500">
+                                Guarda instantánea automática al pulsar Detener
+                            </span>
+                        </div>
+                    </label>
+
+                    <label class="flex items-center gap-2.5 cursor-pointer group py-1">
+                        <input
+                            type="checkbox"
+                            bind:checked={uiStore.linkGeneratorToMeasurement}
+                            class="w-4 h-4 rounded accent-[#3b82f6] cursor-pointer"
+                        />
+                        <div class="flex flex-col">
+                            <span class="text-xs text-gray-200 font-semibold group-hover:text-white transition-colors select-none">
+                                Vincular generador al medir
+                            </span>
+                            <span class="text-[9px] text-gray-500">
+                                Enciende/apaga el generador junto con la medición
+                            </span>
+                        </div>
+                    </label>
+                </div>
+            {/if}
+
+            <!-- 🔧 AVANZADO: Generador -->
+            {#if uiStore.showAdvanced}
+                <div class="flex flex-col gap-1.5">
+                    <div class="flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-[12px] text-gray-600">tune</span>
+                        <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Generador</label>
+                    </div>
+                    <select
+                        bind:value={uiStore.generatorType}
+                        class="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-[#3b82f6]"
+                        style="background: var(--bg-tertiary); border-color: var(--border-primary); color: var(--text-primary)"
+                    >
+                        <option value="pink">Ruido rosa</option>
+                        <option value="white">Ruido blanco</option>
+                        <option value="brown">Ruido brown</option>
+                        <option value="music">Music-noise</option>
+                        <option value="sine">Seno continuo</option>
+                        <option value="sweep">Sweep logarítmico</option>
+                        <option value="burst">Burst</option>
+                        <option value="sinburst">SinBurst</option>
+                        <option value="mls">MLS+</option>
+                    </select>
                 </div>
 
-                <label class="flex items-center gap-2.5 cursor-pointer group py-1">
-                    <input
-                        type="checkbox"
-                        bind:checked={uiStore.autoSaveSnapshotOnStop}
-                        class="w-4 h-4 rounded accent-[#a855f7] cursor-pointer"
-                    />
-                    <div class="flex flex-col">
-                        <span class="text-xs text-gray-200 font-semibold group-hover:text-white transition-colors select-none">
-                            Auto-guardar al detener
-                        </span>
-                        <span class="text-[9px] text-gray-500">
-                            Guarda instantánea automática al pulsar Detener
-                        </span>
-                    </div>
-                </label>
-
-                <label class="flex items-center gap-2.5 cursor-pointer group py-1">
-                    <input
-                        type="checkbox"
-                        bind:checked={uiStore.linkGeneratorToMeasurement}
-                        class="w-4 h-4 rounded accent-[#a855f7] cursor-pointer"
-                    />
-                    <div class="flex flex-col">
-                        <span class="text-xs text-gray-200 font-semibold group-hover:text-white transition-colors select-none">
-                            Vincular Generador al medir
-                        </span>
-                        <span class="text-[9px] text-gray-500">
-                            Enciende/apaga el generador junto con la medición
-                        </span>
-                    </div>
-                </label>
-            </div>
-
-            <!-- Dropdown Generador -->
-            <div class="flex flex-col gap-1.5">
-                <label
-                    class="text-[10px] font-bold text-gray-500 uppercase tracking-wider"
-                    >Generador</label
+                <!-- Opciones dinámicas -->
+                <div
+                    class="border rounded-lg p-3 flex flex-col gap-3"
+                    style="background: var(--bg-tertiary); border-color: var(--border-primary)"
                 >
-                <select
-                    bind:value={uiStore.generatorType}
-                    class="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-[#3b82f6]"
-                    style="background: var(--bg-tertiary); border-color: var(--border-primary); color: var(--text-primary)"
-                >
-                    <option value="pink">Ruido Rosa</option>
-                    <option value="white">Ruido Blanco</option>
-                    <option value="brown">Ruido Brown</option>
-                    <option value="music">Music-noise</option>
-                    <option value="sine">Seno continuo</option>
-                    <option value="sweep">Sweep logarítmico</option>
-                    <option value="burst">Burst</option>
-                    <option value="sinburst">SinBurst</option>
-                    <option value="mls">MLS+</option>
-                </select>
-            </div>
-
-            <!-- Opciones Dinámicas Reactivas -->
-            <div
-                class="border rounded-lg p-3 flex flex-col gap-3"
-                style="background: var(--bg-tertiary); border-color: var(--border-primary)"
-            >
-                {#if uiStore.generatorType === "sine"}
-                    <div class="flex flex-col gap-1">
-                        <label
-                            class="text-[10px] font-bold text-gray-500 uppercase"
-                            >Frecuencia (Hz)</label
-                        >
-                        <input
-                            type="number"
-                            bind:value={uiStore.genFreq}
-                            min="10"
-                            max="22000"
-                            class="w-full border rounded-md px-3 py-1.5 text-sm focus:outline-none focus:border-[#3b82f6]"
-                            style="background: var(--bg-tertiary); border-color: var(--border-primary); color: var(--text-primary)"
-                        />
-                    </div>
-                {:else if uiStore.generatorType === "sweep"}
-                    <div class="grid grid-cols-2 gap-2">
+                    {#if uiStore.generatorType === "sine"}
                         <div class="flex flex-col gap-1">
-                            <label
-                                class="text-[10px] font-bold text-gray-500 uppercase"
-                                >Inicio (Hz)</label
-                            >
+                            <label class="text-[10px] font-bold text-gray-500 uppercase">Frecuencia (Hz)</label>
                             <input
                                 type="number"
-                                bind:value={sweepF1}
-                                class="w-full border rounded-md px-2 py-1 text-sm"
+                                bind:value={uiStore.genFreq}
+                                min="10" max="22000"
+                                class="w-full border rounded-md px-3 py-1.5 text-sm focus:outline-none focus:border-[#3b82f6]"
                                 style="background: var(--bg-tertiary); border-color: var(--border-primary); color: var(--text-primary)"
                             />
                         </div>
+                    {:else if uiStore.generatorType === "sweep"}
+                        <div class="grid grid-cols-2 gap-2">
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[10px] font-bold text-gray-500 uppercase">Inicio (Hz)</label>
+                                <input type="number" bind:value={sweepF1}
+                                    class="w-full border rounded-md px-2 py-1 text-sm"
+                                    style="background: var(--bg-tertiary); border-color: var(--border-primary); color: var(--text-primary)"
+                                />
+                            </div>
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[10px] font-bold text-gray-500 uppercase">Fin (Hz)</label>
+                                <input type="number" bind:value={sweepF2}
+                                    class="w-full bg-[#121216] border border-[#1a1a24] rounded-md px-2 py-1 text-sm text-gray-200"
+                                />
+                            </div>
+                        </div>
                         <div class="flex flex-col gap-1">
-                            <label
-                                class="text-[10px] font-bold text-gray-500 uppercase"
-                                >Fin (Hz)</label
-                            >
-                            <input
-                                type="number"
-                                bind:value={sweepF2}
+                            <label class="text-[10px] font-bold text-gray-500 uppercase">Duración (seg)</label>
+                            <input type="number" bind:value={sweepDuration}
                                 class="w-full bg-[#121216] border border-[#1a1a24] rounded-md px-2 py-1 text-sm text-gray-200"
                             />
                         </div>
-                    </div>
+                    {:else if uiStore.generatorType === "burst" || uiStore.generatorType === "sinburst"}
+                        <div class="grid grid-cols-2 gap-2">
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[10px] font-bold text-gray-500 uppercase">Duración (ms)</label>
+                                <input type="number" bind:value={burstDuration}
+                                    class="w-full bg-[#121216] border border-[#1a1a24] rounded-md px-2 py-1 text-sm text-gray-200"
+                                />
+                            </div>
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[10px] font-bold text-gray-500 uppercase">Período (ms)</label>
+                                <input type="number" bind:value={burstPeriod}
+                                    class="w-full bg-[#121216] border border-[#1a1a24] rounded-md px-2 py-1 text-sm text-gray-200"
+                                />
+                            </div>
+                        </div>
+                    {:else if uiStore.generatorType === "mls"}
+                        <div class="flex flex-col gap-1">
+                            <label class="text-[10px] font-bold text-gray-500 uppercase">Orden MLS</label>
+                            <select bind:value={mlsOrder}
+                                class="w-full bg-[#121216] border border-[#1a1a24] rounded-md px-2 py-1 text-sm text-gray-200"
+                            >
+                                {#each Array.from({ length: 7 }, (_, i) => i + 10) as order}
+                                    <option value={order}>Nivel {order} ({Math.pow(2, order) - 1} pts)</option>
+                                {/each}
+                            </select>
+                        </div>
+                    {:else}
+                        <span class="text-xs text-gray-500 italic">No se requieren parámetros dinámicos para esta señal.</span>
+                    {/if}
+
+                    <!-- Canal de salida (toggle buttons) -->
                     <div class="flex flex-col gap-1">
-                        <label
-                            class="text-[10px] font-bold text-gray-500 uppercase"
-                            >Duración (seg)</label
-                        >
+                        <label class="text-[10px] font-bold text-gray-500 uppercase">Canal de salida</label>
+                        <div class="flex bg-[#121216] p-0.5 rounded-md border border-[#1a1a24]/40">
+                            {#each [['Stereo', 'Estéreo'], ['L', 'Solo L'], ['R', 'Solo R']] as [val, label]}
+                                <button
+                                    class="flex-1 py-1.5 text-[10px] font-bold rounded transition-all cursor-pointer min-h-[28px]
+                                           {uiStore.genRouting === val
+                                        ? 'bg-[#3b82f6]/15 text-[#3b82f6] shadow'
+                                        : 'text-gray-500 hover:text-gray-300'}"
+                                    onclick={() => uiStore.genRouting = val as 'L' | 'R' | 'Stereo'}
+                                >
+                                    {label}
+                                </button>
+                            {/each}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Slider nivel -->
+                <div class="flex flex-col gap-1.5">
+                    <div class="flex justify-between items-center">
+                        <label class="text-[10px] font-bold text-gray-500 uppercase">Nivel de señal</label>
+                        <span class="text-xs font-mono font-bold text-[#3b82f6]">{uiStore.genLevel} dBFS</span>
+                    </div>
+                    <input
+                        type="range" min="-60" max="10"
+                        bind:value={uiStore.genLevel}
+                        class="w-full h-1.5 bg-[#121216] rounded-lg appearance-none cursor-pointer accent-[#3b82f6]"
+                    />
+                </div>
+
+                <!-- Botones generar/detener -->
+                <div class="flex gap-2">
+                    <button
+                        class="flex-1 min-h-[44px] bg-[#10b981]/15 text-[#10b981] hover:bg-[#10b981]/25 border border-[#10b981]/30 rounded-lg flex items-center justify-center gap-2 text-xs font-bold transition-all cursor-pointer"
+                        onclick={() => (uiStore.genActive = true)}
+                    >
+                        <span class="material-symbols-outlined text-sm">volume_up</span>
+                        Generar
+                    </button>
+                    <button
+                        class="flex-1 min-h-[44px] bg-[#ef4444]/15 text-[#ef4444] hover:bg-[#ef4444]/25 border border-[#ef4444]/30 rounded-lg flex items-center justify-center gap-2 text-xs font-bold transition-all cursor-pointer"
+                        onclick={() => (uiStore.genActive = false)}
+                    >
+                        <span class="material-symbols-outlined text-sm">volume_mute</span>
+                        Detener
+                    </button>
+                </div>
+
+                <div class="border-t border-[#1a1a24]/30 my-2"></div>
+
+                <!-- Sección retardo manual -->
+                <div class="flex flex-col gap-2">
+                    <div class="flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-[12px] text-gray-600">tune</span>
+                        <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Alineación de retardo</label>
+                    </div>
+                    <div class="flex gap-2 items-center">
                         <input
                             type="number"
-                            bind:value={sweepDuration}
-                            class="w-full bg-[#121216] border border-[#1a1a24] rounded-md px-2 py-1 text-sm text-gray-200"
+                            bind:value={manualDelay}
+                            min="0"
+                            class="w-24 bg-[#121216] border border-[#1a1a24] rounded-md px-2 py-1.5 text-sm font-mono text-center"
+                            placeholder="ms"
                         />
-                    </div>
-                {:else if uiStore.generatorType === "burst" || uiStore.generatorType === "sinburst"}
-                    <div class="grid grid-cols-2 gap-2">
-                        <div class="flex flex-col gap-1">
-                            <label
-                                class="text-[10px] font-bold text-gray-500 uppercase"
-                                >Duración (ms)</label
-                            >
-                            <input
-                                type="number"
-                                bind:value={burstDuration}
-                                class="w-full bg-[#121216] border border-[#1a1a24] rounded-md px-2 py-1 text-sm text-gray-200"
-                            />
-                        </div>
-                        <div class="flex flex-col gap-1">
-                            <label
-                                class="text-[10px] font-bold text-gray-500 uppercase"
-                                >Período (ms)</label
-                            >
-                            <input
-                                type="number"
-                                bind:value={burstPeriod}
-                                class="w-full bg-[#121216] border border-[#1a1a24] rounded-md px-2 py-1 text-sm text-gray-200"
-                            />
-                        </div>
-                    </div>
-                {:else if uiStore.generatorType === "mls"}
-                    <div class="flex flex-col gap-1">
-                        <label
-                            class="text-[10px] font-bold text-gray-500 uppercase"
-                            >Orden MLS</label
+                        <span class="text-xs text-gray-500">ms</span>
+                        <button
+                            class="flex-1 min-h-[36px] bg-[#3b82f6]/10 text-[#3b82f6] hover:bg-[#3b82f6]/20 border border-[#3b82f6]/20 rounded-md text-xs font-semibold cursor-pointer"
+                            onclick={calculateDelay}
                         >
-                        <select
-                            bind:value={mlsOrder}
-                            class="w-full bg-[#121216] border border-[#1a1a24] rounded-md px-2 py-1 text-sm text-gray-200"
+                            Calcular
+                        </button>
+                        <button
+                            class="flex-1 min-h-[36px] bg-[#1a1a24] hover:bg-[#252530] rounded-md text-xs font-semibold text-gray-300 border border-white/5 cursor-pointer"
+                            onclick={useCalculatedDelay}
                         >
-                            {#each Array.from({ length: 7 }, (_, i) => i + 10) as order}
-                                <option value={order}
-                                    >Nivel {order} ({Math.pow(
-                                        2,
-                                        order,
-                                    ) - 1} pts)</option
-                                >
-                            {/each}
-                        </select>
+                            Usar
+                        </button>
                     </div>
-                {:else}
-                    <span class="text-xs text-gray-500 italic"
-                        >No se requieren parámetros dinámicos para esta señal.</span
-                    >
-                {/if}
-
-                <!-- Ruteo de Salida -->
-                <div class="flex flex-col gap-1">
-                    <label
-                        class="text-[10px] font-bold text-gray-500 uppercase"
-                        >Canal de Salida</label
-                    >
-                    <select
-                        bind:value={uiStore.genRouting}
-                        class="w-full bg-[#121216] border border-[#1a1a24] rounded-md px-2 py-1.5 text-xs text-gray-200"
-                    >
-                        <option value="Stereo">Estéreo</option>
-                        <option value="L">Solo Izquierdo (L)</option>
-                        <option value="R">Solo Derecho (R)</option>
-                    </select>
                 </div>
-            </div>
-
-            <!-- Slider Nivel -->
-            <div class="flex flex-col gap-1.5">
-                <div class="flex justify-between items-center">
-                    <label
-                        class="text-[10px] font-bold text-gray-500 uppercase"
-                        >Nivel de Señal</label
-                    >
-                    <span
-                        class="text-xs font-mono font-bold text-[#3b82f6]"
-                        >{uiStore.genLevel} dBFS</span
-                    >
-                </div>
-                <input
-                    type="range"
-                    min="-60"
-                    max="10"
-                    bind:value={uiStore.genLevel}
-                    class="w-full h-1.5 bg-[#121216] rounded-lg appearance-none cursor-pointer accent-[#3b82f6]"
-                />
-            </div>
-
-            <!-- Botones de Generar / Detener -->
-            <div class="flex gap-2">
-                <button
-                    class="flex-1 min-h-[44px] bg-[#10b981]/15 text-[#10b981] hover:bg-[#10b981]/25 border border-[#10b981]/30 rounded-lg flex items-center justify-center gap-2 text-xs font-bold transition-all cursor-pointer"
-                    onclick={() => (uiStore.genActive = true)}
-                >
-                    <span class="material-symbols-outlined text-sm"
-                        >volume_up</span
-                    >
-                    Generar
-                </button>
-                <button
-                    class="flex-1 min-h-[44px] bg-[#ef4444]/15 text-[#ef4444] hover:bg-[#ef4444]/25 border border-[#ef4444]/30 rounded-lg flex items-center justify-center gap-2 text-xs font-bold transition-all cursor-pointer"
-                    onclick={() => (uiStore.genActive = false)}
-                >
-                    <span class="material-symbols-outlined text-sm"
-                        >volume_mute</span
-                    >
-                    Detener
-                </button>
-            </div>
-
-            <div class="border-t border-[#1a1a24]/30 my-2"></div>
-
-            <!-- Sección Retardo -->
-            <div class="flex flex-col gap-2">
-                <label
-                    class="text-[10px] font-bold text-gray-500 uppercase tracking-wider"
-                    >Alineación de Retardo</label
-                >
-                <div class="flex gap-2 items-center">
-                    <input
-                        type="number"
-                        bind:value={manualDelay}
-                        min="0"
-                        class="w-24 bg-[#121216] border border-[#1a1a24] rounded-md px-2 py-1.5 text-sm font-mono text-center"
-                        placeholder="ms"
-                    />
-                    <span class="text-xs text-gray-500">ms</span>
-                    <button
-                        class="flex-1 min-h-[36px] bg-[#3b82f6]/10 text-[#3b82f6] hover:bg-[#3b82f6]/20 border border-[#3b82f6]/20 rounded-md text-xs font-semibold cursor-pointer"
-                        onclick={calculateDelay}
-                    >
-                        Calcular
-                    </button>
-                    <button
-                        class="flex-1 min-h-[36px] bg-[#1a1a24] hover:bg-[#252530] rounded-md text-xs font-semibold text-gray-300 border border-white/5 cursor-pointer"
-                        onclick={useCalculatedDelay}
-                    >
-                        Usar
-                    </button>
-                </div>
-            </div>
+            {/if}
         </div>
     {/if}
 
