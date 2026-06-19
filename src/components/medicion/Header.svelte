@@ -176,43 +176,32 @@
         <div class="header-sep"></div>
 
         <!-- Vúmetro compacto: REF + MEAS + OUT -->
-        <div
-            class="vu-outer-container cursor-pointer"
-            onclick={() => { uiStore.activeTab = "config"; }}
-            title="Hacer clic para ir a Configuración de Audio"
-        >
-            <div class="vu-container">
-                <!-- Canal REF -->
-                <div class="vu-group">
-                    <span class="vu-label">REF</span>
-                    <div class="vu-track">
-                        <div class="vu-fill {uiStore.isMeasuring ? 'in' : 'inactive'}" style="width: {getVuWidth(meterStore.refLevel)}%"></div>
-                    </div>
-                </div>
-                <!-- Canal MEAS -->
-                <div class="vu-group">
-                    <span class="vu-label">MEAS</span>
-                    <div class="vu-track">
-                        <div class="vu-fill {uiStore.isMeasuring ? 'in' : 'inactive'}" style="width: {getVuWidth(meterStore.measLevel)}%"></div>
-                    </div>
-                </div>
-                <!-- Canal OUT -->
-                <div class="vu-group">
-                    <span class="vu-label">OUT</span>
-                    <div class="vu-track">
-                        <div class="vu-fill {uiStore.genActive ? 'out' : 'inactive'}" style="width: {getVuWidth(meterStore.outLevel)}%"></div>
-                    </div>
+        <div class="vu-container">
+            <div class="vu-group">
+                <span class="vu-label">REF</span>
+                <div class="vu-track">
+                    <div class="vu-fill {uiStore.isMeasuring ? 'in' : 'inactive'}" style="width: {getVuWidth(meterStore.refLevel)}%"></div>
                 </div>
             </div>
-            <div class="led-container">
-                <div
-                    class="led-indicator {isCalibrated ? 'active' : ''}"
-                    title={isCalibrated
-                        ? "Sistema Calibrado (Nivel IN/OUT empatado)"
-                        : "Sistema no calibrado o señal inactiva"}
-                ></div>
+            <div class="vu-group">
+                <span class="vu-label">MED</span>
+                <div class="vu-track">
+                    <div class="vu-fill {uiStore.isMeasuring ? 'in' : 'inactive'}" style="width: {getVuWidth(meterStore.measLevel)}%"></div>
+                </div>
+            </div>
+            <div class="vu-group">
+                <span class="vu-label">SAL</span>
+                <div class="vu-track">
+                    <div class="vu-fill {uiStore.genActive ? 'out' : 'inactive'}" style="width: {getVuWidth(meterStore.outLevel)}%"></div>
+                </div>
             </div>
         </div>
+        <div
+            class="led-indicator {isCalibrated ? 'active' : ''}"
+            title={isCalibrated
+                ? "Sistema calibrado (nivel IN/OUT empatado)"
+                : "Sistema no calibrado o señal inactiva"}
+        ></div>
     </div>
 </header>
 
@@ -252,59 +241,40 @@
     }
 
     /* Vúmetros y Controles */
-    .vu-outer-container {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        background: var(--bg-tertiary);
-        border: 1px solid var(--border-primary);
-        padding: 4px 8px;
-        border-radius: 12px;
-        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-        min-height: 30px;
-    }
-
-    .vu-outer-container:hover {
-        background: var(--bg-surface);
-        border-color: var(--border-secondary);
-        box-shadow: 0 0 15px #000000;
-    }
-
     .vu-container {
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: 1px;
     }
 
     .vu-group {
         display: flex;
         align-items: center;
-        gap: 6px;
+        gap: 2px;
     }
 
     .vu-label {
         font-family: "Outfit", "Inter", sans-serif;
-        font-size: 0.55rem;
+        font-size: 7px;
         font-weight: 900;
         color: #4b5563;
-        width: 22px;
+        width: 16px;
         text-align: right;
-        letter-spacing: 0.05em;
+        line-height: 1;
     }
 
-
     .vu-track {
-        width: 110px;
+        width: 80px;
         height: 3px;
         background: #09090b;
-        border-radius: 1.5px;
+        border-radius: 1px;
         overflow: hidden;
     }
 
     .vu-fill {
         height: 100%;
         transition: width 0.05s linear;
-        border-radius: 1.5px;
+        border-radius: 1px;
     }
 
     .vu-fill.in {
@@ -314,7 +284,7 @@
             #facc15 87%, 
             #ef4444 100%
         );
-        background-size: 110px 100%;
+        background-size: 80px 100%;
     }
 
     .vu-fill.out {
@@ -324,30 +294,21 @@
             #facc15 87%, 
             #ef4444 100%
         );
-        background-size: 110px 100%;
+        background-size: 80px 100%;
     }
 
     .vu-fill.inactive {
         background: #1f1f26;
     }
 
-    /* Contenedor del LED de Calibración */
-    .led-container {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-left: 1px solid var(--border-secondary);
-        padding-left: 10px;
-        height: 24px;
-    }
-
     .led-indicator {
-        width: 8px;
-        height: 8px;
+        width: 6px;
+        height: 6px;
         border-radius: 50%;
         background: #1f1f26;
         border: 1px solid #2e2e38;
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        flex-shrink: 0;
     }
 
     .led-indicator.active {

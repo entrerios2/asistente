@@ -72,6 +72,7 @@
     >(JSON.parse(JSON.stringify(defaultMetricStyles)));
 
     let activeConfigMetric = $state<string | null>(null);
+    let popoverAnchorRect = $state<{ top: number; left: number } | null>(null);
     let metricConfigs = $state<Record<string, MetricConfig>>(
         JSON.parse(JSON.stringify(defaultMetricConfigs)),
     );
@@ -732,7 +733,7 @@
                     }}
                     {@const hasDash = mStyle.lineDash.length > 0}
                     <button
-                        class="px-2 py-0.5 rounded text-[10px] font-semibold transition-all cursor-pointer select-none
+                        class="relative px-2 py-0.5 rounded text-[10px] font-semibold transition-all cursor-pointer select-none
                                {isHidden ? 'opacity-30 line-through' : ''}"
                         style="color: {soloMetric === m ? '#000' : 'white'};
                                background: {soloMetric === m
@@ -743,9 +744,11 @@
                             : 'solid'} {mStyle.color}{isHidden ? '40' : '80'};"
                         onmouseenter={() => (hoverMetric = m)}
                         onmouseleave={() => (hoverMetric = null)}
-                        onclick={() =>
-                            (activeConfigMetric =
-                                activeConfigMetric === m ? null : m)}
+                        onclick={(e) => {
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            popoverAnchorRect = { top: rect.bottom + 4, left: rect.left };
+                            activeConfigMetric = activeConfigMetric === m ? null : m;
+                        }}
                         ondblclick={() =>
                             (soloMetric = soloMetric === m ? null : m)}
                         title="{isHidden
@@ -753,6 +756,9 @@
                             : ''}Clic: configurar · Doble clic: modo solo"
                     >
                         {m}
+                        {#if metricConfigs[m]?.smoothingPPO || metricConfigs[m]?.modeY || metricConfigs[m]?.invertY || metricConfigs[m]?.enableCoherence || metricConfigs[m]?.yShift}
+                            <span class="absolute -top-0.5 -right-0.5 w-[5px] h-[5px] rounded-full bg-[#3b82f6]" title="Tiene configuración personalizada"></span>
+                        {/if}
                     </button>
                 {/each}
             </div>
@@ -790,6 +796,7 @@
         bind:activeConfigMetric
         bind:metricConfigs
         bind:metricStyles
+        bind:anchorRect={popoverAnchorRect}
         onClose={() => (activeConfigMetric = null)}
         onRemoveMetric={removeMetric}
     />
