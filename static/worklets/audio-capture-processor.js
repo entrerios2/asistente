@@ -38,6 +38,7 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
         this.fftSize = 8192;
         this.samplesAccumulated = 0;
         this.overlapFraction = 0; // Overlap controlado por dspWorker (UI)
+        this.refChannel = -1; // -1=loop (input[1]), 0=L, 1=R de input[0]
 
         // Parámetros FSK
         this.sampleRate = 48000;
@@ -94,6 +95,9 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
             if (event.data && event.data.type === 'setFskEnabled') {
                 this.fskEnabled = !!event.data.enabled;
             }
+            if (event.data && event.data.type === 'setRefChannel') {
+                this.refChannel = event.data.channel; // -1=loop, 0=L, 1=R
+            }
         };
     }
 
@@ -102,14 +106,23 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
         if (!input || !input[0]) return true;
         if (!this.refBuffer || !this.measBuffer) return true;
 
-        const ch0 = input[0];                  // Canal 0
-        const ch1 = input[1] || input[0];      // Canal 1 (fallback mono)
-        const len = ch0.length;
+        // Selección de canales según refChannel
+        const measCh = input[1] || input[0]; // Canal de medición (siempre ch1, fallback mono)
+        let refCh;
+        if (this.refChannel === -1 && inputs[1] && inputs[1][0]) {
+            // Loopback: referencia = generador (input 1)
+            refCh = inputs[1][0];
+        } else {
+            // Canal físico: 0=L, 1=R
+            const chIdx = Math.max(0, this.refChannel);
+            refCh = input[chIdx] || input[0];
+        }
+        const len = input[0].length;
 
         // Escribir en ring buffers duales
         for (let i = 0; i < len; i++) {
-            this.refBuffer[this.refWriteIdx] = ch0[i];
-            this.measBuffer[this.measWriteIdx] = ch1[i];
+            this.refBuffer[this.refWriteIdx] = refCh[i];
+            this.measBuffer[this.measWriteIdx] = measCh[i];
             this.refWriteIdx = (this.refWriteIdx + 1) % this.bufferSize;
             this.measWriteIdx = (this.measWriteIdx + 1) % this.bufferSize;
         }
@@ -146,7 +159,7 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
 
         // FSK/Goertzel solo en modo secuencial
         if (this.fskEnabled) {
-            const channelData = ch0;
+            const channelData = input[0];
             for (let i = 0; i < len; i++) {
                 this.samplesCount++;
                 if (this.samplesCount % this.blockSize === 0) {

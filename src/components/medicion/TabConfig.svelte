@@ -601,51 +601,39 @@
                 Routing Dual-Channel
             </span>
 
-            <div class="grid grid-cols-2 gap-3">
-                <!-- Canal de Referencia -->
-                <div class="flex flex-col gap-1.5">
-                    <label
-                        class="text-[10px] font-bold text-gray-500 uppercase tracking-wider"
-                        >Canal Ref (X)</label
-                    >
-                    <select
-                        bind:value={uiStore.refChannel}
-                        class="w-full bg-[#121216] border border-[#1a1a24] rounded-md px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-[#3b82f6]"
-                    >
-                        <option value={0}>Canal 1 (L)</option>
-                        <option value={1}>Canal 2 (R)</option>
-                    </select>
-                </div>
-
-                <!-- Canal de Medición -->
-                <div class="flex flex-col gap-1.5">
-                    <label
-                        class="text-[10px] font-bold text-gray-500 uppercase tracking-wider"
-                        >Canal Meas (Y)</label
-                    >
-                    <select
-                        bind:value={uiStore.measChannel}
-                        class="w-full bg-[#121216] border border-[#1a1a24] rounded-md px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-[#3b82f6]"
-                    >
-                        <option value={0}>Canal 1 (L)</option>
-                        <option value={1}>Canal 2 (R)</option>
-                    </select>
+            <!-- Canal de Referencia -->
+            <div class="flex flex-col gap-1.5">
+                <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                    Canal de Referencia
+                </label>
+                <div class="flex bg-[#121216] p-0.5 rounded-md border border-[#1a1a24]/40">
+                    {#each [[-1, 'Loop'], [0, 'Canal 1 (L)'], [1, 'Canal 2 (R)']] as [val, label]}
+                        <button
+                            class="flex-1 py-1.5 text-[10px] font-bold rounded transition-all cursor-pointer min-h-[28px]
+                                   {uiStore.refChannel === val
+                                ? 'bg-[#3b82f6]/15 text-[#3b82f6] shadow'
+                                : 'text-gray-500 hover:text-gray-300'}"
+                            onclick={() => uiStore.refChannel = val as number}
+                        >
+                            {label}
+                        </button>
+                    {/each}
                 </div>
             </div>
 
-            <!-- Modo de referencia -->
+            <!-- Canal de Medición -->
             <div class="flex flex-col gap-1.5">
                 <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-                    Fuente de Referencia
+                    Canal de Medición
                 </label>
                 <div class="flex bg-[#121216] p-0.5 rounded-md border border-[#1a1a24]/40">
-                    {#each [['channel', 'Canal'], ['loopback', 'Loopback']] as [val, label]}
+                    {#each [[0, 'Canal 1 (L)'], [1, 'Canal 2 (R)']] as [val, label]}
                         <button
                             class="flex-1 py-1.5 text-[10px] font-bold rounded transition-all cursor-pointer min-h-[28px]
-                                   {uiStore.refSourceMode === val
+                                   {uiStore.measChannel === val
                                 ? 'bg-[#3b82f6]/15 text-[#3b82f6] shadow'
                                 : 'text-gray-500 hover:text-gray-300'}"
-                            onclick={() => uiStore.refSourceMode = val as any}
+                            onclick={() => uiStore.measChannel = val as number}
                         >
                             {label}
                         </button>

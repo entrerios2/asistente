@@ -55,13 +55,9 @@ class UIStore {
     enableSourceWindow = $state(false);
     sourceWindowWidthMs = $state(10.0);
     sourceWindowOffsetMs = $state(0.0);
-
     // Routing de canales dual-channel
-    refChannel = $state(0);           // Canal físico para referencia (0=L, 1=R)
-    measChannel = $state(1);          // Canal físico para medición
-
-    // Modo de referencia
-    refSourceMode = $state<'channel' | 'generator-tap' | 'analytical' | 'loopback'>('channel');
+    refChannel = $state(-1);          // -1=Loop (generador), 0=L, 1=R
+    measChannel = $state(1);          // Canal físico para medición (0=L, 1=R)
 
     // Input filter pre-FFT (como OSM)
     inputFilter = $state<'None' | 'Notch1k' | 'BP100' | 'LP200'>('None');

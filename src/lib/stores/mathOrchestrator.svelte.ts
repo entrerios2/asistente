@@ -91,6 +91,16 @@ class MathOrchestrator {
                     }
                 });
             });
+            // Enviar refChannel al worklet cuando cambia (-1=loop, 0=L, 1=R)
+            $effect(() => {
+                const ch = uiStore.refChannel;
+                untrack(() => {
+                    const provider = getAudioProvider();
+                    if (provider.sendWorkletMessage) {
+                        provider.sendWorkletMessage({ type: 'setRefChannel', channel: ch });
+                    }
+                });
+            });
         });
     }
 
