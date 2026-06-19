@@ -103,7 +103,7 @@ export function drawQuadrant(p: DrawParams): void {
     }
 
     // 2. Dibujar Grilla de Fondo (encima)
-    drawGrid(p.ctx, p.width, p.height, p.hasTimeDomainActive, p.activeMetrics, p.metricConfigs, p.interactionState, p.isDarkMode);
+    drawGrid(p.ctx, p.width, p.height, p.hasTimeDomainActive, p.activeMetrics, p.metricConfigs, p.interactionState, p.isDarkMode, uiStore.showMinorGrid);
 
     // Alimentar buffer de Espectrograma en vivo optimizado con offscreen canvas
     if (

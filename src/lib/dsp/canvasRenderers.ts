@@ -23,17 +23,20 @@ export function drawGrid(
     activeMetrics: string[],
     metricConfigs: Record<string, MetricConfig>,
     state: InteractionState,
-    isDarkMode: boolean
+    isDarkMode: boolean,
+    showMinorGrid: boolean = true
 ) {
     const theme = isDarkMode ? {
         gridLine: 'rgba(255, 255, 255, 0.04)',
         gridLineMajor: 'rgba(255, 255, 255, 0.08)',
+        gridLineMinor: 'rgba(255, 255, 255, 0.025)',
         axisLabel: 'rgba(255, 255, 255, 0.35)',
         axisLine: '#333',
         background: '#060608',
     } : {
         gridLine: 'rgba(0, 0, 0, 0.06)',
         gridLineMajor: 'rgba(0, 0, 0, 0.12)',
+        gridLineMinor: 'rgba(0, 0, 0, 0.04)',
         axisLabel: 'rgba(0, 0, 0, 0.55)',
         axisLine: '#999',
         background: '#f8f8fa',
@@ -56,23 +59,59 @@ export function drawGrid(
             }
         }
     } else {
-        const freqs = [
-            20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000,
-        ];
-        freqs.forEach((f) => {
+        // Major decades: 100, 1k, 10k — prominent lines
+        const majorFreqs = [100, 1000, 10000];
+        ctx.strokeStyle = theme.gridLineMajor;
+        majorFreqs.forEach((f) => {
             const x = valToX(f, width, hasTimeDomainActive, state);
             if (x >= 0 && x <= width) {
                 ctx.beginPath();
                 ctx.moveTo(x, 0);
                 ctx.lineTo(x, height);
                 ctx.stroke();
-                ctx.fillText(
-                    f >= 1000 ? `${f / 1000}kHz` : `${f}Hz`,
-                    x + 3,
-                    height - 6,
-                );
             }
         });
+
+        // Labels at standard positions
+        const labelFreqs = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+        const majorSet = new Set([100, 1000, 10000]);
+        ctx.fillStyle = theme.axisLabel;
+        labelFreqs.forEach((f) => {
+            const x = valToX(f, width, hasTimeDomainActive, state);
+            if (x >= 0 && x <= width) {
+                const isMajor = majorSet.has(f);
+                let label: string;
+                if (f >= 1000) {
+                    label = isMajor ? `${f / 1000}kHz` : `${f / 1000}k`;
+                } else {
+                    label = isMajor ? `${f}Hz` : `${f}`;
+                }
+                ctx.fillText(label, x + 3, height - 6);
+            }
+        });
+
+        // Minor grid lines: all other frequencies — solid 1px
+        if (showMinorGrid) {
+            ctx.save();
+            ctx.strokeStyle = theme.gridLineMinor;
+            ctx.lineWidth = 1;
+            const minorFreqs = [
+                20, 30, 40, 50, 60, 70, 80, 90,
+                200, 300, 400, 500, 600, 700, 800, 900,
+                2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000,
+                15000, 20000,
+            ];
+            minorFreqs.forEach((f) => {
+                const x = valToX(f, width, hasTimeDomainActive, state);
+                if (x >= 0 && x <= width) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, height);
+                    ctx.stroke();
+                }
+            });
+            ctx.restore();
+        }
     }
 
     // Horizontal ticks (Left Y axis)
