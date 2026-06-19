@@ -10,6 +10,7 @@ import { uiStore } from './ui.svelte';
 import { meterStore } from './meterStore.svelte';
 import { calibrationStore } from './calibrationStore.svelte';
 import { getCoeffsForType, biquadResponse } from '../dsp/biquad';
+import { getAudioProvider } from '../hal';
 
 class MathOrchestrator {
     // Reactive version to notify subscribers of new calculations
@@ -79,6 +80,16 @@ class MathOrchestrator {
             });
             $effect(() => {
                 this.startTimer(uiStore.dspUpdateRate);
+            });
+            // Enviar FSK enable/disable al worklet cuando cambia measurementMode
+            $effect(() => {
+                const mode = uiStore.measurementMode;
+                untrack(() => {
+                    const provider = getAudioProvider();
+                    if (provider.sendWorkletMessage) {
+                        provider.sendWorkletMessage({ type: 'setFskEnabled', enabled: mode === 'secuencial' });
+                    }
+                });
             });
         });
     }

@@ -36,6 +36,7 @@ export class WebAudioProvider implements AudioProvider {
 	private generatorNode: AudioNode | null = null;
 	private generatorGainNode: GainNode | null = null;
 	private pannerNode: StereoPannerNode | null = null;
+	private loopbackAnalyser: AnalyserNode | null = null; // Analyser para referencia loopback
 
 	// Generator state tracking (prevent unnecessary recreation)
 	private lastGenType: string | null = null;
@@ -138,7 +139,9 @@ export class WebAudioProvider implements AudioProvider {
 
 			// Dual-channel time-domain para el worker DSP
 			if (listener.onTimeDomainData && this.analyserRef && this.analyserNode) {
-				if (hasSAB && this.refSab && this.measSab && this.flagArray) {
+				const isLoopback = uiStore.refSourceMode === 'loopback' && this.loopbackAnalyser;
+
+				if (hasSAB && this.refSab && this.measSab && this.flagArray && !isLoopback) {
 					// Solo leer si el worklet señalizó bloque listo (Atomics sync)
 					if (Atomics.load(this.flagArray, 0) === 1) {
 						const refData = Float32Array.from(new Float32Array(this.refSab));
@@ -146,6 +149,14 @@ export class WebAudioProvider implements AudioProvider {
 						Atomics.store(this.flagArray, 0, 0); // Reset flag
 						listener.onTimeDomainData(measData, refData);
 					}
+				} else if (isLoopback && this.loopbackAnalyser) {
+					// Loopback: referencia = generador, medición = canal físico
+					const fftSize = uiStore.fftSize;
+					const refData = new Float32Array(fftSize);
+					const measData = new Float32Array(fftSize);
+					this.loopbackAnalyser.getFloatTimeDomainData(refData);
+					this.analyserNode.getFloatTimeDomainData(measData);
+					listener.onTimeDomainData(measData, refData);
 				} else if (this.refTimeDomain && this.measTimeDomain) {
 					// Fallback: datos ya recibidos via postMessage
 					listener.onTimeDomainData(this.measTimeDomain, this.refTimeDomain);
@@ -188,6 +199,12 @@ export class WebAudioProvider implements AudioProvider {
 		this.freqDataArray = null;
 		this.refTimeDomain = null;
 		this.measTimeDomain = null;
+	}
+
+	sendWorkletMessage(msg: any): void {
+		if (this.workletNode) {
+			this.workletNode.port.postMessage(msg);
+		}
 	}
 
 	async playWavFile(file: File, level: number): Promise<void> {
@@ -336,6 +353,18 @@ export class WebAudioProvider implements AudioProvider {
 			this.generatorNode.connect(this.generatorGainNode);
 			this.generatorGainNode.connect(this.pannerNode);
 			this.pannerNode.connect(this.audioContext.destination);
+
+			// Loopback: crear analyser dedicado para capturar la señal del generador como referencia
+			if (uiStore.refSourceMode === 'loopback') {
+				if (this.loopbackAnalyser) this.loopbackAnalyser.disconnect();
+				this.loopbackAnalyser = this.audioContext.createAnalyser();
+				this.loopbackAnalyser.fftSize = uiStore.fftSize;
+				this.loopbackAnalyser.smoothingTimeConstant = 0;
+				this.generatorGainNode.connect(this.loopbackAnalyser);
+			} else if (this.loopbackAnalyser) {
+				this.loopbackAnalyser.disconnect();
+				this.loopbackAnalyser = null;
+			}
 		}
 	}
 

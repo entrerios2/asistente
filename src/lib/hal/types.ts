@@ -25,4 +25,5 @@ export interface AudioProvider {
     listDevices?(): Promise<AudioDevice[]>;
     selectDevice?(id: string, direction: 'input' | 'output'): Promise<void>;
 	getSharedBuffer?(): SharedArrayBuffer | null;
+	sendWorkletMessage?(msg: any): void;
 }
