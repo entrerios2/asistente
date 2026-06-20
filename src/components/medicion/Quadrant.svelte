@@ -320,11 +320,15 @@
         if (!canvas) return;
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
+        if (canvas.width === 0 || canvas.height === 0) return;
 
         const dpr = window.devicePixelRatio || 1;
-        const width = canvas.width / dpr;
-        const height = canvas.height / dpr;
+        const width = containerWidth;
+        const height = containerHeight;
 
+        // Aplicar transformación en cada frame (defensivo contra resets por resize)
+        ctx.resetTransform();
+        ctx.scale(dpr, dpr);
         ctx.clearRect(0, 0, width, height);
 
         // Actualizar capas calculadas antes de dibujar

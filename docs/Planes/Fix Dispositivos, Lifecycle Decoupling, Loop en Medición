@@ -1,0 +1,224 @@
+# Fix: Dispositivos, Lifecycle Decoupling, Loop en Medición
+
+## Bug 1: Lógica de negocio acoplada al ciclo de vida de TabMedicion
+
+### Diagnóstico
+3 piezas de lógica de negocio viven en TabMedicion.svelte (componente que se destruye al cambiar tab):
+
+| # | Qué | Líneas | Impacto |
+|---|-----|--------|---------|
+| 1 | `$effect` isMeasuring → startCapture/stopCapture | 130-140 | Header atajos no funcionan si tab no visible |
+| 2 | `onDestroy` → isMeasuring = false | 252-256 | Cambiar tab para la medición |
+| 3 | `$effect` generador → playGenerator | 117-128 | Generador no responde si tab no visible |
+
+### Cambios propuestos
+
+#### [MODIFY] [mathOrchestrator.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/mathOrchestrator.svelte.ts)
+
+Agregar en `init()` dos nuevos effects y métodos:
+
+**A. Effect de medición** (reemplaza TabMedicion L130-140):
+```ts
+$effect(() => {
+    const shouldMeasure = uiStore.isMeasuring;
+    untrack(() => {
+        if (shouldMeasure) {
+            this.startMeasurementCapture();
+        } else {
+            this.stopMeasurementCapture();
+        }
+    });
+});
+```
+
+**B. Effect del generador** (reemplaza TabMedicion L117-128):
+```ts
+$effect(() => {
+    if (uiStore.measurementMode === "manual") {
+        const provider = getAudioProvider();
+        provider.playGenerator(
+            uiStore.generatorType as any,
+            uiStore.genActive,
+            uiStore.genFreq,
+            uiStore.genLevel,
+            uiStore.genRouting
+        );
+    }
+});
+```
+
+**C. Nuevos métodos privados:**
+```ts
+private async startMeasurementCapture() {
+    const provider = getAudioProvider();
+    try {
+        if (uiStore.measurementMode === "manual") {
+            await provider.startCapture({
+                onAudioData: () => {},
+                onTimeDomainData: (meas, ref) => this.feedTimeDomain(meas, ref),
+            });
+            if (uiStore.linkGeneratorToMeasurement && !uiStore.genActive) {
+                uiStore.genActive = true;
+            }
+        }
+    } catch (e) {
+        console.error('startMeasurementCapture error:', e);
+        uiStore.isMeasuring = false;
+    }
+}
+
+private stopMeasurementCapture() {
+    const provider = getAudioProvider();
+    if (uiStore.measurementMode === "manual") {
+        provider.stopCapture();
+    }
+    if (uiStore.linkGeneratorToMeasurement) {
+        uiStore.genActive = false;
+    }
+    if (uiStore.autoSaveSnapshotOnStop) {
+        traceManager.captureInstantaneaFromLive('Auto-snapshot', 'auto');
+    }
+}
+```
+
+#### [MODIFY] [TabMedicion.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/components/medicion/TabMedicion.svelte)
+
+1. **Eliminar** `$effect` puente isMeasuring (L130-140) — movió al orchestrator
+2. **Eliminar** `$effect` generador (L117-128) — movió al orchestrator
+3. **Eliminar** `onDestroy` (L252-256) — ya no necesario
+4. **Eliminar** `startMeasurement()` y `stopMeasurement()` — movieron al orchestrator
+5. **Eliminar** `import { getAudioProvider }` y `const provider = getAudioProvider()` — ya no se usa directamente
+6. **Mantener** `toggleMeasurement()` como simple toggle: `uiStore.isMeasuring = !uiStore.isMeasuring`
+7. **Mantener** `runSequentialSequence()` — usa provider directamente para modo secuencial (requiere UI local de progress/segments)
+8. **Mantener** UI local: `statusText`, `progress`, `segments`, presets
+
+> [!IMPORTANT]
+> `runSequentialSequence()` todavía necesita `getAudioProvider()` para el modo secuencial. Esto puede refactorizarse después; por ahora el modo secuencial sigue viviendo en TabMedicion porque requiere estado local de UI (segments, progress, etc).
+
+---
+
+## Bug 2: Selección de dispositivo de audio no funciona
+
+### Diagnóstico
+- `getUserMedia()` no recibe `deviceId` → siempre usa default
+- No existe `setSinkId()` para la salida
+
+### Cambios propuestos
+
+#### [MODIFY] [WebAudioProvider.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/hal/web/WebAudioProvider.ts)
+
+1. **Input device**: Pasar `uiStore.audioInDevice` al constraint:
+   ```ts
+   audio: {
+       deviceId: uiStore.audioInDevice ? { exact: uiStore.audioInDevice } : undefined,
+       echoCancellation: false, noiseSuppression: false, autoGainControl: false,
+       channelCount: 2
+   }
+   ```
+
+2. **Output device**: Usar `AudioContext.setSinkId()` (Chrome 110+):
+   ```ts
+   if (uiStore.audioOutDevice && 'setSinkId' in this.audioContext) {
+       await (this.audioContext as any).setSinkId(uiStore.audioOutDevice);
+   }
+   ```
+
+> [!NOTE]
+> `setSinkId` es relativamente nuevo. En browsers que no lo soportan, se usa el dispositivo default silenciosamente.
+
+---
+
+## Bug 3: Agregar opción Loop en canal de medición
+
+### Concepto
+`measChannel = -1` (loop) → medición = generador digital. Con ambos canales en loop la coherencia debe ser ~1.0 (validación del pipeline).
+
+### Cambios propuestos
+
+#### [MODIFY] [audio-capture-processor.js](file:///c:/Users/Abel/Documents/Asistente/asistente/static/worklets/audio-capture-processor.js)
+
+```js
+let measCh;
+if (this.measChannel === -1 && inputs[1] && inputs[1][0]) {
+    measCh = inputs[1][0]; // Loop: medición = generador
+} else {
+    measCh = input[this.measChannel] || input[0];
+}
+```
+
+#### [MODIFY] [TabConfig.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/components/medicion/TabConfig.svelte)
+
+Agregar `Loop` al selector de canal de medición:
+```svelte
+{#each [[-1, 'Loop'], [0, 'Canal 1 (L)'], [1, 'Canal 2 (R)']] as [val, label]}
+```
+
+---
+
+## Bug 4: Canvas en blanco en Chrome Android al iniciar medición
+
+### Diagnóstico
+
+El cuadrante queda vacío (sin gráficos ni grilla) al iniciar medición en Chrome Android. **El permiso de mic ya está concedido**, no es el diálogo.
+
+**Causa raíz: race condition `$effect` vs `requestAnimationFrame`**
+
+1. `draw()` corre en `requestAnimationFrame` (síncrono, cada frame)
+2. La transformación `ctx.scale(dpr, dpr)` se aplica en un `$effect` reactivo (asincrónico, microtask)
+3. `draw()` calcula `width = canvas.width / dpr` asumiendo que la transformación scale está activa
+4. Si algo resetea el canvas (e.g., `canvas.width = ...` desde un resize), el scale se pierde
+5. En el frame siguiente, `draw()` corre SIN la transformación → dibuja todo con coordenadas escaladas por dpr → en un dispositivo con dpr=3, todo se renderiza al 33% del tamaño, en la esquina superior izquierda, invisiblemente pequeño
+
+En Android, `getUserMedia()` y `AudioContext.resume()` pueden causar un micro re-layout que dispara ResizeObserver → el `$effect` resetea canvas.width → pierde el scale.
+
+### Cambios propuestos
+
+#### [MODIFY] [Quadrant.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/components/medicion/Quadrant.svelte)
+
+Hacer que `draw()` aplique la transformación POR SÍ MISMO en cada frame, sin depender del `$effect`:
+
+```ts
+function draw() {
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    if (canvas.width === 0 || canvas.height === 0) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const width = containerWidth;
+    const height = containerHeight;
+
+    // Aplicar transformación en cada frame (defensivo contra resets)
+    ctx.resetTransform();
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, width, height);
+    // ... resto del draw
+}
+```
+
+Estos 3 cambios hacen el rendering robusto:
+1. Usar `containerWidth/Height` directamente (no calcular desde `canvas.width/dpr`)
+2. Aplicar `resetTransform() + scale(dpr)` en cada frame
+3. Guard contra canvas con dimensiones 0
+
+> [!NOTE]
+> Cap de DPR a 2 para mobile es opcional (performance). Agregar `contextlost`/`contextrestored` handlers como seguridad adicional.
+
+---
+
+## Limpieza post-fix
+
+Remover diagnósticos temporales:
+- `[DSP-DIAG]` en dspWorker.ts
+- `[WORKLET-DIAG]`, `[WORKLET]` en audio-capture-processor.js
+- `[ORCH]` en mathOrchestrator.svelte.ts
+- Handler `WORKLET_DIAG` en WebAudioProvider.ts
+- Cache-busting `?v=${Date.now()}` del worklet URL
+
+---
+
+## Verificación
+
+1. **Bug 1**: Iniciar medición → cambiar a Config → volver → medición sigue activa. Atajo Header funciona desde cualquier tab. Toggle generador funciona desde Header sin tab Medir visible.
+2. **Bug 2**: Cambiar dispositivo de entrada → verificar en getUserMedia. Cambiar salida → verificar con setSinkId.
+3. **Bug 3**: Ambos canales en Loop → coherencia ~1.0.

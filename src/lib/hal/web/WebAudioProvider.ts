@@ -49,12 +49,22 @@ export class WebAudioProvider implements AudioProvider {
 			this.audioContext = new AudioContext({ sampleRate: uiStore.sampleRate });
 		}
 
+		// Enrutar salida al dispositivo seleccionado (Chrome 110+)
+		if (uiStore.audioOutDevice && 'setSinkId' in this.audioContext) {
+			try {
+				await (this.audioContext as any).setSinkId(uiStore.audioOutDevice);
+			} catch (e) {
+				console.warn('[WebAudioProvider] setSinkId failed:', e);
+			}
+		}
+
 		if (this.audioContext.state === 'suspended') {
 			await this.audioContext.resume();
 		}
 
 		this.stream = await navigator.mediaDevices.getUserMedia({
 			audio: {
+				deviceId: uiStore.audioInDevice ? { exact: uiStore.audioInDevice } : undefined,
 				echoCancellation: false,
 				noiseSuppression: false,
 				autoGainControl: false,
@@ -62,7 +72,7 @@ export class WebAudioProvider implements AudioProvider {
 			}
 		});
 
-		await this.audioContext.audioWorklet.addModule(`${base}/worklets/audio-capture-processor.js?v=${Date.now()}`);
+		await this.audioContext.audioWorklet.addModule(`${base}/worklets/audio-capture-processor.js`);
 
 		const source = this.audioContext.createMediaStreamSource(this.stream);
 
@@ -87,7 +97,9 @@ export class WebAudioProvider implements AudioProvider {
 		if (refCh >= 0) {
 			this.splitterNode.connect(this.analyserRef, refCh);
 		}
-		this.splitterNode.connect(this.analyserNode, measCh);
+		if (measCh >= 0) {
+			this.splitterNode.connect(this.analyserNode, measCh);
+		}
 
 		// Buffers time-domain para dual-channel
 		this.refTimeDomain = new Float32Array(uiStore.fftSize);
@@ -112,9 +124,6 @@ export class WebAudioProvider implements AudioProvider {
 				this.refTimeDomain = new Float32Array(event.data.ref);
 				this.measTimeDomain = new Float32Array(event.data.meas);
 				hasNewData = true;
-			}
-			if (event.data && event.data.type === 'WORKLET_DIAG') {
-				console.log('[WORKLET-DIAG]', JSON.stringify(event.data));
 			}
 		});
 		this.workletNode.port.start();

@@ -1,11 +1,6 @@
 <script lang="ts">
-    import { untrack, onDestroy } from "svelte";
     import { uiStore } from "$lib/stores/ui.svelte";
     import { traceManager } from "$lib/stores/traceManager.svelte";
-    import { getAudioProvider } from "$lib/hal";
-    import { mathOrchestrator } from "$lib/stores/mathOrchestrator.svelte";
-
-    const provider = getAudioProvider();
 
     let { statusText = $bindable("Listo para medir") } = $props();
     let progress = $state(0);
@@ -114,79 +109,6 @@
         }
     });
 
-    // Control reactivo del generador en modo manual
-    $effect(() => {
-        if (uiStore.measurementMode === "manual") {
-            provider.playGenerator(
-                uiStore.generatorType as any,
-                uiStore.genActive,
-                uiStore.genFreq,
-                uiStore.genLevel,
-                uiStore.genRouting
-            );
-        }
-    });
-
-    // Puente reactivo: reaccionar a cambios en uiStore.isMeasuring sin escribirlo
-    $effect(() => {
-        const shouldMeasure = uiStore.isMeasuring;
-        untrack(() => {
-            if (shouldMeasure) {
-                startMeasurement();
-            } else {
-                stopMeasurement();
-            }
-        });
-    });
-
-    function stopMeasurement() {
-        statusText = "Medición cancelada";
-        progress = 0;
-        if (uiStore.measurementMode === "manual") {
-            provider.stopCapture();
-        }
-
-        // Auto-guardar instantánea al detener (F27)
-        if (uiStore.autoSaveSnapshotOnStop) {
-            captureActiveLive();
-        }
-
-        // Apagar generador si está vinculado (F27)
-        if (uiStore.linkGeneratorToMeasurement) {
-            uiStore.genActive = false;
-        }
-    }
-
-    async function startMeasurement() {
-        progress = 0;
-        statusText = "Iniciando captura...";
-        try {
-            if (uiStore.measurementMode === "manual") {
-                await provider.startCapture({
-                    onAudioData: () => {},
-                    // Spectrum ahora se calcula en el dspWorker (C1)
-                    // y se escribe a liveFrequencyData vía mathOrchestrator (C2)
-                    onTimeDomainData: (measSamples, refSamples) => {
-                        mathOrchestrator.feedTimeDomain(measSamples, refSamples);
-                    },
-                });
-                // Encender generador DESPUÉS de que la captura esté lista
-                // para evitar glitch por recreación del AudioContext
-                if (uiStore.linkGeneratorToMeasurement && !uiStore.genActive) {
-                    uiStore.genActive = true;
-                }
-                statusText = "Medición en vivo activa";
-            } else {
-                statusText = "Ejecutando secuencia...";
-                runSequentialSequence();
-            }
-        } catch (e) {
-            console.error(e);
-            uiStore.isMeasuring = false;
-            statusText = "Error de captura";
-        }
-    }
-
     // Wrapper para uso desde botones del Sidebar (toggle seguro)
     async function toggleMeasurement() {
         uiStore.isMeasuring = !uiStore.isMeasuring;
@@ -249,11 +171,7 @@
         statusText = "Instantánea capturada con éxito";
     }
 
-    onDestroy(() => {
-        if (uiStore.isMeasuring) {
-            uiStore.isMeasuring = false;
-        }
-    });
+
 </script>
 
 <div

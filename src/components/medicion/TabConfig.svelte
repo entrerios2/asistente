@@ -161,7 +161,7 @@
             <div class="flex flex-col gap-1.5">
                 <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Canal de medición</label>
                 <div class="flex bg-[#121216] p-0.5 rounded-md border border-[#1a1a24]/40">
-                    {#each [[0, 'Canal 1 (L)'], [1, 'Canal 2 (R)']] as [val, label]}
+                    {#each [[-1, 'Loop'], [0, 'Canal 1 (L)'], [1, 'Canal 2 (R)']] as [val, label]}
                         <button
                             class="flex-1 py-1.5 text-[10px] font-bold rounded transition-all cursor-pointer min-h-[28px]
                                    {uiStore.measChannel === val ? accentBg : inactiveBtn}"

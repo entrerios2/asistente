@@ -96,7 +96,6 @@ class MathOrchestrator {
                 const ch = uiStore.refChannel;
                 untrack(() => {
                     const provider = getAudioProvider();
-                    console.log('[ORCH] setRefChannel effect fired, ch=', ch, 'hasMethod=', !!provider.sendWorkletMessage);
                     if (provider.sendWorkletMessage) {
                         provider.sendWorkletMessage({ type: 'setRefChannel', channel: ch });
                     }
@@ -113,6 +112,32 @@ class MathOrchestrator {
                     }
                 });
             });
+
+            // Control de ciclo de vida de medición (desacoplado de TabMedicion)
+            $effect(() => {
+                const shouldMeasure = uiStore.isMeasuring;
+                untrack(() => {
+                    if (shouldMeasure) {
+                        this.startMeasurementCapture();
+                    } else {
+                        this.stopMeasurementCapture();
+                    }
+                });
+            });
+
+            // Control reactivo del generador (desacoplado de TabMedicion)
+            $effect(() => {
+                if (uiStore.measurementMode === "manual") {
+                    const provider = getAudioProvider();
+                    provider.playGenerator(
+                        uiStore.generatorType as any,
+                        uiStore.genActive,
+                        uiStore.genFreq,
+                        uiStore.genLevel,
+                        uiStore.genRouting
+                    );
+                }
+            });
         });
     }
 
@@ -124,6 +149,40 @@ class MathOrchestrator {
         this.timerId = setInterval(() => {
             this.run();
         }, intervalMs);
+    }
+
+    private async startMeasurementCapture() {
+        const provider = getAudioProvider();
+        try {
+            if (uiStore.measurementMode === "manual") {
+                await provider.startCapture({
+                    onAudioData: () => {},
+                    onTimeDomainData: (meas: Float32Array, ref: Float32Array) => {
+                        this.feedTimeDomain(meas, ref);
+                    },
+                });
+                // Encender generador DESPUÉS de que la captura esté lista
+                if (uiStore.linkGeneratorToMeasurement && !uiStore.genActive) {
+                    uiStore.genActive = true;
+                }
+            }
+        } catch (e) {
+            console.error('[MathOrchestrator] startMeasurementCapture error:', e);
+            uiStore.isMeasuring = false;
+        }
+    }
+
+    private stopMeasurementCapture() {
+        const provider = getAudioProvider();
+        if (uiStore.measurementMode === "manual") {
+            provider.stopCapture();
+        }
+        if (uiStore.autoSaveSnapshotOnStop) {
+            traceManager.captureInstantaneaFromLive('Auto-snapshot', 'manual');
+        }
+        if (uiStore.linkGeneratorToMeasurement) {
+            uiStore.genActive = false;
+        }
     }
 
     private handleWorkerMessage(data: any) {

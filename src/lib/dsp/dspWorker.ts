@@ -268,7 +268,7 @@ self.onmessage = (event) => {
 
             // Copy tail of history (keepSamples from the end)
             overlappedMeas.set(overlapMeasHistory.subarray(newSamples), 0);
-            overlappedRef.set(overlapRefHistory.subarray(newSamples), 0);
+            overlappedRef.set(overlapRefHistory!.subarray(newSamples), 0);
 
             // Copy head of new block
             overlappedMeas.set(meas.subarray(0, newSamples), keepSamples);
@@ -276,7 +276,7 @@ self.onmessage = (event) => {
 
             // Save current full block as history for next iteration
             overlapMeasHistory.set(meas);
-            overlapRefHistory.set(ref);
+            overlapRefHistory!.set(ref);
 
             // Use the overlapped frame
             meas = overlappedMeas;
@@ -453,18 +453,7 @@ self.onmessage = (event) => {
         feedCoherenceFIFO(fftRefReal, fftRefImag, fftInputReal, fftInputImag, BINS);
         computeCoherenceFIFO(outputCoherence, BINS);
 
-        // DEBUG: diagnóstico temporal para verificar señales y coherencia
-        if (Math.random() < 0.05) { // Log cada ~20 frames
-            let refRms = 0, measRms = 0, cohMean = 0;
-            for (let k = 0; k < BINS; k++) {
-                refRms += fftRefReal[k] * fftRefReal[k] + fftRefImag[k] * fftRefImag[k];
-                measRms += fftInputReal[k] * fftInputReal[k] + fftInputImag[k] * fftInputImag[k];
-                cohMean += outputCoherence[k];
-            }
-            const refCorr = ref[0] !== undefined ? ref.slice(0, 5).join(',') : 'N/A';
-            const measCorr = meas[0] !== undefined ? meas.slice(0, 5).join(',') : 'N/A';
-            console.log(`[DSP-DIAG] refFFTrms=${Math.sqrt(refRms/BINS).toFixed(2)} measFFTrms=${Math.sqrt(measRms/BINS).toFixed(2)} cohMean=${(cohMean/BINS).toFixed(3)} ref[0:5]=${refCorr} meas[0:5]=${measCorr} sameData=${ref[0]===meas[0] && ref[100]===meas[100]}`);
-        }
+
 
         // 9. Impulse Response = IFFT(H(f))
         if (needImpulse) {

@@ -97,12 +97,10 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
                 this.fskEnabled = !!event.data.enabled;
             }
             if (event.data && event.data.type === 'setRefChannel') {
-                console.log('[WORKLET] setRefChannel received:', event.data.channel, 'old:', this.refChannel);
                 this.refChannel = event.data.channel; // -1=loop, 0=L, 1=R
             }
             if (event.data && event.data.type === 'setMeasChannel') {
-                console.log('[WORKLET] setMeasChannel received:', event.data.channel, 'old:', this.measChannel);
-                this.measChannel = event.data.channel; // 0=L, 1=R
+                this.measChannel = event.data.channel; // -1=loop, 0=L, 1=R
             }
         };
     }
@@ -113,7 +111,13 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
         if (!this.refBuffer || !this.measBuffer) return true;
 
         // Selección de canales según refChannel y measChannel
-        const measCh = input[this.measChannel] || input[0]; // Canal de medición configurable
+        let measCh;
+        if (this.measChannel === -1 && inputs[1] && inputs[1][0]) {
+            // Loop: medición = generador (input 1)
+            measCh = inputs[1][0];
+        } else {
+            measCh = input[Math.max(0, this.measChannel)] || input[0];
+        }
         let refCh;
         if (this.refChannel === -1 && inputs[1] && inputs[1][0]) {
             // Loopback: referencia = generador (input 1)
