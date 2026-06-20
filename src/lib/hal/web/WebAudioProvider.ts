@@ -113,10 +113,36 @@ export class WebAudioProvider implements AudioProvider {
 			numberOfInputs: 2,
 		});
 
-		// Init worklet sin SABs — usa postMessage (path robusto sin race conditions)
-		this.workletNode.port.postMessage({ type: 'init', fftSize });
+		// Intentar crear SABs double-buffer para transferencia sin copia
+		let hasSAB = false;
+		try {
+			if (typeof SharedArrayBuffer !== 'undefined') {
+				this.refSab = new SharedArrayBuffer(fftSize * 2 * Float32Array.BYTES_PER_ELEMENT);
+				this.measSab = new SharedArrayBuffer(fftSize * 2 * Float32Array.BYTES_PER_ELEMENT);
+				this.flagSab = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 2);
+				this.flagArray = new Int32Array(this.flagSab);
+				Atomics.store(this.flagArray, 0, -1); // -1 = ningún banco listo
+				hasSAB = true;
+			}
+		} catch {
+			// SAB no disponible (sin COOP/COEP headers)
+			hasSAB = false;
+		}
 
-		// Flag para evitar re-procesar el mismo bloque en cada rAF tick
+		// Init worklet con SABs si están disponibles, sino usa postMessage
+		if (hasSAB) {
+			this.workletNode.port.postMessage({
+				type: 'init',
+				fftSize,
+				refSab: this.refSab,
+				measSab: this.measSab,
+				flagSab: this.flagSab
+			});
+		} else {
+			this.workletNode.port.postMessage({ type: 'init', fftSize });
+		}
+
+		// Flag para evitar re-procesar el mismo bloque en cada rAF tick (fallback postMessage)
 		let hasNewData = false;
 
 		this.workletNode.port.addEventListener('message', (event) => {
@@ -149,7 +175,20 @@ export class WebAudioProvider implements AudioProvider {
 			}
 
 			// Dual-channel time-domain para el worker DSP
-			if (listener.onTimeDomainData && hasNewData && this.refTimeDomain && this.measTimeDomain) {
+			// Path 1: SAB double-buffer (preferido — zero-copy)
+			if (hasSAB && this.flagArray && listener.onTimeDomainData) {
+				const bank = Atomics.load(this.flagArray, 0);
+				if (bank >= 0) {
+					const offset = bank * fftSize;
+					const refData = new Float32Array(fftSize);
+					const measData = new Float32Array(fftSize);
+					refData.set(new Float32Array(this.refSab!, offset * Float32Array.BYTES_PER_ELEMENT, fftSize));
+					measData.set(new Float32Array(this.measSab!, offset * Float32Array.BYTES_PER_ELEMENT, fftSize));
+					Atomics.store(this.flagArray, 0, -1); // marcar como leído
+					listener.onTimeDomainData(measData, refData);
+				}
+			// Path 2: postMessage fallback
+			} else if (listener.onTimeDomainData && hasNewData && this.refTimeDomain && this.measTimeDomain) {
 				hasNewData = false;
 				listener.onTimeDomainData(this.measTimeDomain, this.refTimeDomain);
 			}
