@@ -25,14 +25,17 @@ class Goertzel {
 class AudioCaptureProcessor extends AudioWorkletProcessor {
     constructor() {
         super();
-        // Dual-channel ring buffers
-        this.refBuffer = null;
-        this.measBuffer = null;
+        // Dual-channel ring buffers (always local, never SAB)
+        this.ringRef = null;  // Local ring buffer for ref
+        this.ringMeas = null; // Local ring buffer for meas
+        this.refBuffer = null;  // SAB view for double-buffer (banco A + B)
+        this.measBuffer = null; // SAB view for double-buffer (banco A + B)
         this.refWriteIdx = 0;
         this.measWriteIdx = 0;
         this.bufferSize = 0;
         this.hasSAB = false;
         this.flagArray = null; // Int32Array para Atomics sync
+        this.currentBank = 0; // Double-buffer: 0=banco A, 1=banco B
 
         // Acumulación de bloques FFT
         this.fftSize = 8192;
@@ -63,17 +66,21 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
             if (event.data && event.data.type === 'init') {
                 this.fftSize = event.data.fftSize || 8192;
                 this.bufferSize = this.fftSize;
+                // Ring buffers locales (siempre locales, nunca SAB)
+                this.ringRef = new Float32Array(this.bufferSize);
+                this.ringMeas = new Float32Array(this.bufferSize);
                 if (event.data.refSab && event.data.measSab) {
+                    // SAB double-buffer: 2x fftSize para bancos A y B
                     this.refBuffer = new Float32Array(event.data.refSab);
                     this.measBuffer = new Float32Array(event.data.measSab);
                     this.hasSAB = true;
-                    // Flag SAB para Atomics sync
+                    this.currentBank = 0;
                     if (event.data.flagSab) {
                         this.flagArray = new Int32Array(event.data.flagSab);
                     }
                 } else {
-                    this.refBuffer = new Float32Array(this.bufferSize);
-                    this.measBuffer = new Float32Array(this.bufferSize);
+                    this.refBuffer = null;
+                    this.measBuffer = null;
                     this.hasSAB = false;
                 }
                 this.refWriteIdx = 0;
@@ -108,7 +115,7 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
     process(inputs) {
         const input = inputs[0];
         if (!input || !input[0]) return true;
-        if (!this.refBuffer || !this.measBuffer) return true;
+        if (!this.ringRef || !this.ringMeas) return true;
 
         // Selección de canales según refChannel y measChannel
         let measCh;
@@ -129,57 +136,43 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
         }
         const len = input[0].length;
 
-        // Escribir en ring buffers duales
+        // Escribir en ring buffers locales (nunca directamente al SAB)
         for (let i = 0; i < len; i++) {
-            this.refBuffer[this.refWriteIdx] = refCh[i];
-            this.measBuffer[this.measWriteIdx] = measCh[i];
+            this.ringRef[this.refWriteIdx] = refCh[i];
+            this.ringMeas[this.measWriteIdx] = measCh[i];
             this.refWriteIdx = (this.refWriteIdx + 1) % this.bufferSize;
             this.measWriteIdx = (this.measWriteIdx + 1) % this.bufferSize;
         }
 
         this.samplesAccumulated += len;
 
-        // Cuando tenemos fftSize muestras, notificar al main thread
+        // Cuando tenemos fftSize muestras, emitir frame completo
         if (this.samplesAccumulated >= this.fftSize) {
-            if (!this.hasSAB) {
-                // Extraer bloque ordenado del ring buffer circular
+            if (this.hasSAB && this.refBuffer && this.measBuffer && this.flagArray) {
+                // Double-buffer SAB: copiar ordenado del ring buffer al banco actual
+                const offset = this.currentBank * this.fftSize;
+                for (let i = 0; i < this.fftSize; i++) {
+                    const readIdx = (this.refWriteIdx - this.fftSize + i + this.bufferSize) % this.bufferSize;
+                    this.refBuffer[offset + i] = this.ringRef[readIdx];
+                    this.measBuffer[offset + i] = this.ringMeas[readIdx];
+                }
+                // Señalizar que el banco está listo y swap
+                Atomics.store(this.flagArray, 0, this.currentBank);
+                this.currentBank = 1 - this.currentBank;
+            } else {
+                // postMessage fallback
                 const refBlock = new Float32Array(this.fftSize);
                 const measBlock = new Float32Array(this.fftSize);
                 for (let i = 0; i < this.fftSize; i++) {
                     const readIdx = (this.refWriteIdx - this.fftSize + i + this.bufferSize) % this.bufferSize;
-                    refBlock[i] = this.refBuffer[readIdx];
-                    measBlock[i] = this.measBuffer[readIdx];
+                    refBlock[i] = this.ringRef[readIdx];
+                    measBlock[i] = this.ringMeas[readIdx];
                 }
                 this.port.postMessage({
                     type: 'DUAL_BLOCK',
                     ref: refBlock.buffer,
                     meas: measBlock.buffer
                 }, [refBlock.buffer, measBlock.buffer]);
-
-                // DEBUG: diagnóstico del worklet (cada ~20 bloques)
-                if (!this._diagCount) this._diagCount = 0;
-                if (++this._diagCount % 20 === 0) {
-                    const hasInput1 = !!(inputs[1] && inputs[1][0] && inputs[1][0].length > 0);
-                    const input1Energy = hasInput1 ? inputs[1][0].reduce((s,v) => s + v*v, 0) : 0;
-                    const input0ch0Energy = input[0] ? input[0].reduce((s,v) => s + v*v, 0) : 0;
-                    const input0ch1Energy = input[1] ? input[1].reduce((s,v) => s + v*v, 0) : 0;
-                    this.port.postMessage({
-                        type: 'WORKLET_DIAG',
-                        refChannel: this.refChannel,
-                        hasInput1,
-                        input1Energy: input1Energy.toFixed(6),
-                        input0ch0Energy: input0ch0Energy.toFixed(6),
-                        input0ch1Energy: input0ch1Energy.toFixed(6),
-                        numInputs: inputs.length,
-                        input0channels: input.length,
-                        input1channels: inputs[1] ? inputs[1].length : 0,
-                    });
-                }
-            } else {
-                // SAB: señalizar bloque listo via Atomics
-                if (this.flagArray) {
-                    Atomics.store(this.flagArray, 0, 1);
-                }
             }
 
             // Overlap: retroceder el contador
