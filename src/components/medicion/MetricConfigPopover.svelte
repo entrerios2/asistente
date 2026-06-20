@@ -90,10 +90,26 @@
             {/if}
             
             {#if metricConfigs[activeConfigMetric].enableCoherence}
-                <div class="flex flex-col gap-1">
-                    <span class="text-gray-400 font-medium">Umbral coherencia ({metricConfigs[activeConfigMetric].coherenceThreshold})</span>
-                    <input type="range" min="0" max="1" step="0.05" class="accent-[#3b82f6]"
-                           bind:value={metricConfigs[activeConfigMetric].coherenceThreshold} />
+                <div class="flex flex-col gap-2">
+                    <div class="flex flex-col gap-1">
+                        <span class="text-gray-400 font-medium">Modo coherencia</span>
+                        <select class="bg-[#121216] border border-[#222] rounded px-2 py-1 text-xs text-white focus:outline-none"
+                                bind:value={metricConfigs[activeConfigMetric].coherenceMode}>
+                            <option value="attenuate">Atenuar (transparente)</option>
+                            <option value="color">Cambiar color</option>
+                        </select>
+                    </div>
+                    {#if metricConfigs[activeConfigMetric].coherenceMode === 'color'}
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-400">Color bajo umbral</span>
+                            <input type="color" bind:value={metricConfigs[activeConfigMetric].coherenceColor} class="w-6 h-6 border-none cursor-pointer rounded bg-transparent" />
+                        </div>
+                    {/if}
+                    <div class="flex flex-col gap-1">
+                        <span class="text-gray-400 font-medium">Umbral coherencia ({metricConfigs[activeConfigMetric].coherenceThreshold})</span>
+                        <input type="range" min="0" max="1" step="0.05" class="accent-[#3b82f6]"
+                               bind:value={metricConfigs[activeConfigMetric].coherenceThreshold} />
+                    </div>
                 </div>
             {/if}
             
@@ -152,6 +168,32 @@
                     <option value="SNR">Estimación SNR</option>
                 </select>
             </div>
+            
+            <!-- Mostrar curva y fondo -->
+            <div class="flex flex-col gap-1.5 py-1">
+                <label class="flex items-center gap-2 cursor-pointer text-gray-300">
+                    <input type="checkbox" bind:checked={metricConfigs["Coherence"].showLine} />
+                    <span>Mostrar curva</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer text-gray-300">
+                    <input type="checkbox" bind:checked={metricConfigs["Coherence"].showBackground} />
+                    <span>Mostrar fondo</span>
+                </label>
+            </div>
+            
+            {#if metricConfigs["Coherence"].showBackground}
+                <div class="flex flex-col gap-1">
+                    <span class="text-gray-400 font-medium">Paleta de fondo</span>
+                    <select class="bg-[#121216] border border-[#222] rounded px-2 py-1 text-xs text-white focus:outline-none"
+                            bind:value={metricConfigs["Coherence"].bgPalette}>
+                        <option value="RedTransparent">Rojo → Transparente</option>
+                        <option value="Magma">Magma</option>
+                        <option value="Jet">Jet</option>
+                        <option value="Hot">Hot</option>
+                        <option value="Grayscale">Escala de grises</option>
+                    </select>
+                </div>
+            {/if}
             
             <!-- Línea de umbral -->
             <div class="flex flex-col gap-1.5 py-1">

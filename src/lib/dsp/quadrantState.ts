@@ -21,7 +21,8 @@ export interface GlobalMagnitudeDefaults {
     modeY: string;
     enableCoherence: boolean;
     coherenceThreshold: number;
-    coherenceMinAlpha: number;
+    coherenceMode: 'attenuate' | 'color';
+    coherenceColor: string;
 }
 
 export interface GlobalPhaseDefaults {
@@ -32,7 +33,9 @@ export interface GlobalPhaseDefaults {
 
 export interface GlobalCoherenceDefaults {
     cohType: string;
-    displayMode: 'line' | 'bg-fade' | 'bg-gradient';
+    showLine: boolean;
+    showBackground: boolean;
+    bgPalette: string;
     showThresholdLine: boolean;
     thresholdValue: number;
     thresholdColor: string;
@@ -67,7 +70,8 @@ export const defaultGlobalMetricDefaults: GlobalMetricDefaults = {
         modeY: 'dB',
         enableCoherence: true,
         coherenceThreshold: 0.2,
-        coherenceMinAlpha: 0.15,
+        coherenceMode: 'attenuate',
+        coherenceColor: '#666666',
     },
     phase: {
         unwrapMode: '±180',
@@ -76,7 +80,9 @@ export const defaultGlobalMetricDefaults: GlobalMetricDefaults = {
     },
     coherence: {
         cohType: 'normal',
-        displayMode: 'bg-fade',
+        showLine: true,
+        showBackground: true,
+        bgPalette: 'RedTransparent',
         showThresholdLine: true,
         thresholdValue: 0.2,
         thresholdColor: '#eab308',
@@ -211,16 +217,19 @@ export interface MetricConfig {
     invertY?: boolean;
     enableCoherence?: boolean;
     coherenceThreshold?: number;
-    coherenceMinAlpha?: number;
+    coherenceMode?: 'attenuate' | 'color';  // Atenuar transparencia o cambiar color
+    coherenceColor?: string;                 // Color para modo 'color'
     yShift?: number;
     hidden?: boolean;
     // Phase
     unwrapMode?: '±180' | '360' | 'Unwrap';
     rotate?: number;
     range?: number;
-    // Coherence
+    // Coherence — visualización propia
     cohType?: string;
-    displayMode?: 'line' | 'bg-fade' | 'bg-gradient';
+    showLine?: boolean;           // Mostrar curva de coherencia
+    showBackground?: boolean;     // Mostrar fondo mask de coherencia
+    bgPalette?: string;           // 'RedTransparent' | PaletteType
     showThresholdLine?: boolean;
     thresholdColor?: string;
     thresholdValue?: number;
@@ -246,10 +255,10 @@ export const defaultMetricStyles: Record<string, MetricStyle> = {
 };
 
 export const defaultMetricConfigs: Record<string, MetricConfig> = {
-    "Spectrum": { modeY: "dB", sensorResistance: 10, smoothingPPO: 48, invertY: false, enableCoherence: false, coherenceThreshold: 0.2, coherenceMinAlpha: 0.15, yShift: 0 },
-    "Magnitude": { modeY: "dB", sensorResistance: 10, smoothingPPO: 48, invertY: false, enableCoherence: true, coherenceThreshold: 0.2, coherenceMinAlpha: 0.15, yShift: 0 },
-    "Simulated Magnitude": { modeY: "dB", sensorResistance: 10, smoothingPPO: 48, invertY: false, enableCoherence: false, coherenceThreshold: 0.2, coherenceMinAlpha: 0.15, yShift: 0 },
+    "Spectrum": { modeY: "dB", sensorResistance: 10, smoothingPPO: 48, invertY: false, enableCoherence: false, coherenceThreshold: 0.2, coherenceMode: "attenuate", coherenceColor: "#666666", yShift: 0 },
+    "Magnitude": { modeY: "dB", sensorResistance: 10, smoothingPPO: 48, invertY: false, enableCoherence: true, coherenceThreshold: 0.2, coherenceMode: "attenuate", coherenceColor: "#666666", yShift: 0 },
+    "Simulated Magnitude": { modeY: "dB", sensorResistance: 10, smoothingPPO: 48, invertY: false, enableCoherence: false, coherenceThreshold: 0.2, coherenceMode: "attenuate", coherenceColor: "#666666", yShift: 0 },
     "Phase": { unwrapMode: "±180", rotate: 0, range: 360, yShift: 0 },
-    "Coherence": { cohType: "normal", displayMode: "bg-fade", showThresholdLine: true, thresholdColor: "#eab308", thresholdValue: 0.2, yShift: 0 },
+    "Coherence": { cohType: "normal", showLine: true, showBackground: true, bgPalette: "RedTransparent", showThresholdLine: true, thresholdColor: "#eab308", thresholdValue: 0.2, yShift: 0 },
     "Spectrogram": { palette: "Magma" as PaletteType },
 };

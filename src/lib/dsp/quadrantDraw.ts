@@ -1,4 +1,6 @@
 import {
+    drawCoherenceBackground,
+    applyCoherenceMask,
     drawGrid,
     drawSpectrogram,
     drawLevelOverlay,
@@ -104,6 +106,18 @@ export function drawQuadrant(p: DrawParams): void {
 
     // 2. Dibujar Grilla de Fondo (encima)
     drawGrid(p.ctx, p.width, p.height, p.hasTimeDomainActive, p.activeMetrics, p.metricConfigs, p.interactionState, p.isDarkMode, uiStore.showMinorGrid);
+
+    // 2.5. Coherence background overlay — solo si Coherence es métrica activa
+    const cohCfg = p.metricConfigs["Coherence"];
+    if (!p.hasTimeDomainActive && p.activeMetrics.includes("Coherence") && cohCfg?.showBackground) {
+        drawCoherenceBackground(
+            p.ctx, p.width, p.height,
+            p.interpEngine.interpCoherence,
+            p.metricConfigs,
+            p.interactionState,
+            p.sampleRate
+        );
+    }
 
     // Alimentar buffer de Espectrograma en vivo optimizado con offscreen canvas
     if (
@@ -221,24 +235,42 @@ export function drawQuadrant(p: DrawParams): void {
     }
 
     // 3. Renderizar las curvas de todas las capas de medición de este cuadrante (Prompt 6)
+    // Check if any metric needs coherence masking
+    const needsCoherenceMask = !p.hasTimeDomainActive && p.activeMetrics.some(m => {
+        const cfg = p.metricConfigs[m];
+        return cfg?.enableCoherence && m !== "Coherence";
+    });
+
+    // If coherence masking is needed, prepare an offscreen canvas for masked metrics
+    let maskCanvas: HTMLCanvasElement | null = null;
+    let maskCtx: CanvasRenderingContext2D | null = null;
+
+    if (needsCoherenceMask) {
+        maskCanvas = document.createElement('canvas');
+        maskCanvas.width = p.width;
+        maskCanvas.height = p.height;
+        maskCtx = maskCanvas.getContext('2d');
+    }
+
     p.quadrantLayers.forEach((layer, index) => {
         if (!layer.visible) return;
         if (!layer.isMeasuring) return; // La capa no-live ya se dibuja en el bloque anterior
 
         // Determinar estilos visuales basados en la posición de la capa
         const isActive = layer.id === uiStore.activeLayerId;
-        const lw = isActive ? 1.8 : 1;
+        const isLive = layer.isMeasuring;
         const op = isActive ? 1.0 : 0.75;
         
-        // Estilo de línea (lineDash) según el índice de capa secundaria
-        let lineDash: number[] = [];
+        // Estilo de línea según capa:
+        // - Capa live activa: usa metricStyles del usuario
+        // - Capas secundarias: dash por índice + lineWidth fijo
+        let layerLineDash: number[] = [];
+        let layerLineWidth = isActive ? 1.8 : 1;
         if (!isActive) {
-            if (index === 1) lineDash = [8, 4]; // Capa 2 discontinua
-            else if (index === 2) lineDash = [2, 3]; // Capa 3 punteada
-            else lineDash = [6, 3, 2, 3]; // Capa 4+ alternada
+            if (index === 1) layerLineDash = [8, 4];
+            else if (index === 2) layerLineDash = [2, 3];
+            else layerLineDash = [6, 3, 2, 3];
         }
-
-        p.ctx.globalAlpha = op;
 
         // Para cada métrica activa en este cuadrante, dibujamos los datos de la capa
         p.activeMetrics.forEach((metric) => {
@@ -246,23 +278,55 @@ export function drawQuadrant(p: DrawParams): void {
             if (p.hasTimeDomainActive && !["Impulse", "Step"].includes(metric)) return;
             if (!p.hasTimeDomainActive && ["Impulse", "Step"].includes(metric)) return;
 
+            // Skip Coherence line if showLine is false
+            if (metric === "Coherence" && p.metricConfigs["Coherence"]?.showLine === false) return;
+
+            // Per-metric context: metrics with enableCoherence → offscreen, others → main canvas
+            const metricCfg = p.metricConfigs[metric];
+            const metricNeedsMask = needsCoherenceMask && maskCtx && metricCfg?.enableCoherence && metric !== "Coherence";
+            const ctx = metricNeedsMask ? maskCtx! : p.ctx;
+
             // Aplicar Hover Focus y Solo Mode (Prompt 11)
-            p.ctx.globalAlpha = op * p.getMetricAlpha(metric);
+            ctx.globalAlpha = op * p.getMetricAlpha(metric);
 
-            // Color reservado para la métrica
-            const color = p.metricStyles[metric]?.color || METRIC_COLORS[metric] || '#ff4444';
+            // Color y estilos: metricStyles del usuario para capa activa, sistema de capas para secundarias
+            const mStyle = p.metricStyles[metric];
+            const color = mStyle?.color || METRIC_COLORS[metric] || '#ff4444';
+            const lw = (isActive && mStyle) ? mStyle.lineWidth : layerLineWidth;
+            const lineDash = (isActive && mStyle) ? mStyle.lineDash : layerLineDash;
 
-            const isLive = layer.isMeasuring;
-            
-            if (metric === "Magnitude" || metric === "Spectrum" || metric === "Coherence" || metric === "Group Delay") {
+            // Spectrum usa drawSpectrumPath (lógica especial: liveData, bins, offset +68)
+            if (metric === "Spectrum") {
+                drawSpectrumPath(
+                    ctx,
+                    isLive ? p.liveData : null,
+                    p.width,
+                    p.height,
+                    color,
+                    lw,
+                    lineDash,
+                    p.frequencyLUT,
+                    p.interpEngine.interpCoherence,
+                    isLive ? p.smoothedSpectrum : layer.data as unknown as Float32Array,
+                    p.metricConfigs,
+                    p.interactionState,
+                    p.getPPOSmoothedValue,
+                    p.BINS,
+                    p.sampleRate
+                );
+                return;
+            }
+
+            if (metric === "Magnitude" || metric === "Coherence" || metric === "Group Delay") {
                 let bufferToDraw = layer.data;
-                let customPPOSmooth = (idx: number, arr: Float32Array) => arr[idx];
+                // Magnitude is pre-smoothed in Quadrant.svelte → noop PPO to avoid double smoothing
+                // Coherence/GroupDelay are raw → use real PPO
+                let ppoFn = p.getPPOSmoothedValue;
 
                 if (isLive) {
                     if (metric === "Magnitude") {
                         bufferToDraw = p.smoothedMagnitude;
-                    } else if (metric === "Spectrum") {
-                        bufferToDraw = p.smoothedSpectrum;
+                        ppoFn = (idx: number, arr: Float32Array) => arr[idx];
                     } else if (metric === "Coherence") {
                         bufferToDraw = p.interpEngine.interpCoherence;
                     } else if (metric === "Group Delay") {
@@ -271,7 +335,7 @@ export function drawQuadrant(p: DrawParams): void {
                 }
 
                 drawMetricPath(
-                    p.ctx,
+                    ctx,
                     bufferToDraw,
                     p.width,
                     p.height,
@@ -283,15 +347,19 @@ export function drawQuadrant(p: DrawParams): void {
                     p.interpEngine.interpCoherence,
                     p.metricConfigs,
                     p.interactionState,
-                    customPPOSmooth,
+                    ppoFn,
                     p.sampleRate
                 );
             }
 
             if (metric === "Simulated Magnitude") {
                 const rawBuffer = isLive ? p.smoothedMagnitude : layer.data;
+                // smoothedMagnitude is pre-smoothed → noop PPO for live
+                const simPpoFn = isLive
+                    ? (idx: number, arr: Float32Array) => arr[idx]
+                    : p.getPPOSmoothedValue;
                 drawSimulatedMagnitudePath(
-                    p.ctx,
+                    ctx,
                     p.width,
                     p.height,
                     { color, lineWidth: lw, lineDash },
@@ -300,7 +368,7 @@ export function drawQuadrant(p: DrawParams): void {
                     rawBuffer,
                     p.metricConfigs,
                     p.interactionState,
-                    (idx: number, arr: Float32Array) => arr[idx],
+                    simPpoFn,
                     p.getEQResponseCached,
                     p.BINS,
                     p.sampleRate
@@ -310,7 +378,7 @@ export function drawQuadrant(p: DrawParams): void {
             if (metric === "Phase") {
                 const rawBuffer = isLive ? p.interpEngine.interpPhase : layer.data;
                 drawPhasePath(
-                    p.ctx,
+                    ctx,
                     p.width,
                     p.height,
                     { color, lineWidth: lw, lineDash },
@@ -325,6 +393,28 @@ export function drawQuadrant(p: DrawParams): void {
 
         p.ctx.globalAlpha = 1.0; // Restablecer opacidad
     });
+
+    // Apply coherence mask and composite back to main canvas
+    if (needsCoherenceMask && maskCtx && maskCanvas) {
+        // Find the first metric with enableCoherence to get its config
+        const cohMetric = p.activeMetrics.find(m => p.metricConfigs[m]?.enableCoherence && m !== "Coherence");
+        if (cohMetric) {
+            const cfg = p.metricConfigs[cohMetric]!;
+            applyCoherenceMask(
+                maskCtx,
+                p.width,
+                p.height,
+                p.interpEngine.interpCoherence,
+                cfg.coherenceThreshold ?? 0.2,
+                cfg.coherenceMode || 'attenuate',
+                cfg.coherenceColor || '#666666',
+                p.interactionState,
+                p.sampleRate
+            );
+        }
+        // Composite the masked result onto the main canvas
+        p.ctx.drawImage(maskCanvas, 0, 0);
+    }
 
     // 3.5. Renderizar curvas de las Instantáneas globales que estén visibles (Prompt 8)
     p.instantaneas.forEach((snap) => {
@@ -402,100 +492,8 @@ export function drawQuadrant(p: DrawParams): void {
         p.ctx.globalAlpha = 1.0;
     });
 
-    if (p.activeMetrics.includes("Simulated Magnitude") && !p.hasTimeDomainActive && p.frequencyLUT.length > 0) {
-        const style = p.metricStyles["Simulated Magnitude"] || { color: "#00ffff", lineWidth: 1.5, lineDash: [4, 4] };
-        drawSimulatedMagnitudePath(
-            p.ctx,
-            p.width,
-            p.height,
-            style,
-            p.frequencyLUT,
-            p.interpEngine.interpCoherence,
-            p.smoothedMagnitude,
-            p.metricConfigs,
-            p.interactionState,
-            (idx: number, arr: Float32Array) => arr[idx],
-            p.getEQResponseCached,
-            p.BINS,
-            p.sampleRate
-        );
-    }
 
-    if (p.activeMetrics.includes("Spectrum") && !p.hasTimeDomainActive) {
-        const style = p.metricStyles["Spectrum"];
-        drawSpectrumPath(
-            p.ctx,
-            p.liveData,
-            p.width,
-            p.height,
-            style.color,
-            style.lineWidth,
-            style.lineDash,
-            p.frequencyLUT,
-            p.interpEngine.interpCoherence,
-            p.smoothedSpectrum,
-            p.metricConfigs,
-            p.interactionState,
-            (idx: number, arr: Float32Array) => arr[idx],
-            p.BINS,
-            p.sampleRate
-        );
-    }
-
-    if (p.activeMetrics.includes("Phase") && !p.hasTimeDomainActive && p.frequencyLUT.length > 0) {
-        const style = p.metricStyles["Phase"];
-        drawPhasePath(
-            p.ctx,
-            p.width,
-            p.height,
-            style,
-            p.frequencyLUT,
-            p.interpEngine.interpPhase,
-            p.metricConfigs,
-            p.interactionState,
-            p.interpEngine.interpCoherence
-        );
-    }
-
-    if (p.activeMetrics.includes("Coherence") && !p.hasTimeDomainActive) {
-        const style = p.metricStyles["Coherence"];
-        drawMetricPath(
-            p.ctx,
-            p.interpEngine.interpCoherence,
-            p.width,
-            p.height,
-            style.color,
-            style.lineWidth,
-            style.lineDash,
-            "Coherence",
-            p.frequencyLUT,
-            p.interpEngine.interpCoherence,
-            p.metricConfigs,
-            p.interactionState,
-            p.getPPOSmoothedValue,
-            p.sampleRate
-        );
-    }
-
-    if (p.activeMetrics.includes("Group Delay") && !p.hasTimeDomainActive) {
-        const style = p.metricStyles["Group Delay"];
-        drawMetricPath(
-            p.ctx,
-            p.interpEngine.interpGroupDelay,
-            p.width,
-            p.height,
-            style.color,
-            style.lineWidth,
-            style.lineDash,
-            "Group Delay",
-            p.frequencyLUT,
-            p.interpEngine.interpCoherence,
-            p.metricConfigs,
-            p.interactionState,
-            p.getPPOSmoothedValue,
-            p.sampleRate
-        );
-    }
+    // Bloques standalone para métricas que NO están en el layer loop
 
     if (p.activeMetrics.includes("Impulse") && p.hasTimeDomainActive) {
         const style = p.metricStyles["Impulse"];

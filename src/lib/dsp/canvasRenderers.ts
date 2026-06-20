@@ -11,8 +11,140 @@ import {
     freqMax,
     type InteractionState
 } from './canvasInteraction';
-import { palettes, type PaletteType } from './colorPalettes';
+import { palettes, getColorFromPalette, type PaletteType } from './colorPalettes';
 import { type MetricConfig } from './quadrantState';
+
+
+/**
+ * Draws coherence as a background overlay on the quadrant.
+ * Uses the configured bgPalette to color by coherence value.
+ */
+export function drawCoherenceBackground(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    interpCoherence: Float32Array,
+    metricConfigs: Record<string, MetricConfig>,
+    state: InteractionState,
+    sampleRate: number = 48000
+) {
+    const cohCfg = metricConfigs["Coherence"];
+    if (!cohCfg?.showBackground) return;
+
+    const palette = cohCfg.bgPalette || "RedTransparent";
+    const threshold = cohCfg.thresholdValue ?? 0.2;
+    const bins = interpCoherence.length;
+    if (bins === 0) return;
+    const binWidth = (sampleRate / 2) / bins;
+
+    ctx.save();
+
+    let prevX = -1;
+    for (let bin = 1; bin < bins; bin++) {
+        const freq = bin * binWidth;
+        if (freq < freqMin || freq > freqMax) continue;
+        const x = valToX(freq, width, false, state);
+        if (x < -1 || x > width + 1) continue;
+
+        const coh = interpCoherence[bin] ?? 0;
+        const colWidth = Math.max(1, x - prevX);
+
+        // Only paint below threshold — transparent above
+        if (coh < threshold) {
+            // Intensity proportional to how far below threshold (0 → max, threshold → 0)
+            const intensity = 1 - coh / threshold;
+
+            if (palette === "RedTransparent") {
+                const alpha = intensity * 0.25;
+                ctx.fillStyle = `rgba(180, 20, 20, ${alpha})`;
+                ctx.fillRect(x - colWidth, 0, colWidth, height);
+            } else {
+                const [r, g, b] = getColorFromPalette(intensity, palette as PaletteType);
+                const alpha = intensity * 0.25;
+                ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+                ctx.fillRect(x - colWidth, 0, colWidth, height);
+            }
+        }
+
+        prevX = x;
+    }
+
+    ctx.restore();
+}
+
+/**
+ * Applies coherence mask to curves drawn on an offscreen canvas.
+ * - 'attenuate': uses destination-out to erase/fade curves where coh < threshold
+ * - 'color': uses source-atop to repaint curves with chosen color where coh < threshold
+ */
+export function applyCoherenceMask(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    interpCoherence: Float32Array,
+    threshold: number,
+    mode: 'attenuate' | 'color',
+    maskColor: string,
+    state: InteractionState,
+    sampleRate: number = 48000
+) {
+    const bins = interpCoherence.length;
+    if (bins === 0) return;
+    const binWidth = (sampleRate / 2) / bins;
+
+    ctx.save();
+    ctx.globalAlpha = 1.0; // Reset — may have inherited reduced alpha from layer loop
+
+    if (mode === 'attenuate') {
+        // destination-out: erases existing pixels proportionally
+        ctx.globalCompositeOperation = 'destination-out';
+
+        let prevX = -1;
+        for (let bin = 1; bin < bins; bin++) {
+            const freq = bin * binWidth;
+            if (freq < freqMin || freq > freqMax) continue;
+            const x = valToX(freq, width, false, state);
+            if (x < -1 || x > width + 1) continue;
+            const coh = interpCoherence[bin] ?? 0;
+            if (coh < threshold) {
+                const colWidth = Math.max(1, x - prevX);
+                const eraseAlpha = (1 - coh / threshold) * 0.85;
+                ctx.fillStyle = `rgba(0, 0, 0, ${eraseAlpha})`;
+                ctx.fillRect(x - colWidth, 0, colWidth, height);
+            }
+            prevX = x;
+        }
+    } else {
+        // Color mode: source-atop paints the chosen color ONLY on existing curve pixels
+        ctx.globalCompositeOperation = 'source-atop';
+
+        let prevX = -1;
+        for (let bin = 1; bin < bins; bin++) {
+            const freq = bin * binWidth;
+            if (freq < freqMin || freq > freqMax) continue;
+            const x = valToX(freq, width, false, state);
+            if (x < -1 || x > width + 1) continue;
+            const coh = interpCoherence[bin] ?? 0;
+            if (coh < threshold) {
+                const colWidth = Math.max(1, x - prevX);
+                // Full color replacement where coherence is low
+                ctx.fillStyle = maskColor;
+                ctx.fillRect(x - colWidth, 0, colWidth, height);
+            }
+            prevX = x;
+        }
+    }
+
+    ctx.restore(); // Restores globalCompositeOperation and globalAlpha
+}
+
+/** Helper: convert hex color to rgba string */
+function hexToRgba(hex: string, alpha: number): string {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 
 export function drawGrid(
@@ -590,26 +722,14 @@ export function drawMetricPath(
     const cfg = metricConfigs[metricType];
 
     // Construir array de puntos (un punto por bin FFT visible)
-    const points: {x: number, y: number, cohAlpha: number}[] = [];
+    const points: {x: number, y: number}[] = [];
     const binWidth = (sampleRate / 2) / dataArray.length;
-    const cohEnabled = cfg && cfg.enableCoherence;
-    const cohThreshold = cfg?.coherenceThreshold ?? 0.5;
 
     for (let bin = 0; bin < dataArray.length; bin++) {
         const freq = bin * binWidth;
         if (freq < freqMin || freq > freqMax) continue;
         const x = valToX(freq, width, false, state);
         if (x < -10 || x > width + 10) continue;
-
-        // Coherence alpha attenuation (min 0.15 instead of hard blanking)
-        let cohAlpha = 1.0;
-        if (cohEnabled && metricType !== "Coherence") {
-            const coh = interpCoherence[bin] ?? 0;
-            if (coh < cohThreshold) {
-                // Proportional fade: 0 coherence → 0.15, threshold → 1.0
-                cohAlpha = Math.max(0.15, coh / cohThreshold);
-            }
-        }
 
         let val = (cfg && cfg.smoothingPPO)
             ? getPPOSmoothedValue(bin, dataArray, cfg.smoothingPPO ?? 48)
@@ -635,45 +755,20 @@ export function drawMetricPath(
         }
 
         const y = valToY(val, height, metricType, metricConfigs, state) + (cfg?.yShift || 0);
-        points.push({ x, y, cohAlpha });
+        points.push({ x, y });
     }
 
-    // Draw with coherence-aware alpha segments
-    if (points.length > 0) {
-        const savedAlpha = ctx.globalAlpha;
-        let segStart = 0;
-
-        while (segStart < points.length) {
-            // Determine segment alpha (use first point's alpha)
-            const segAlpha = points[segStart].cohAlpha;
-            let segEnd = segStart + 1;
-
-            // Extend segment while alpha is similar (within 0.1 tolerance)
-            while (segEnd < points.length && Math.abs(points[segEnd].cohAlpha - segAlpha) < 0.1) {
-                segEnd++;
-            }
-
-            // Draw this segment
-            ctx.globalAlpha = savedAlpha * segAlpha;
-            const segPath = new Path2D();
-            // Start from 1 point before for continuity (if possible)
-            const drawStart = Math.max(0, segStart - 1);
-            segPath.moveTo(points[drawStart].x, points[drawStart].y);
-            for (let i = drawStart + 1; i < Math.min(segEnd + 1, points.length); i++) {
-                if (i + 1 < points.length) {
-                    const midX = (points[i].x + points[i + 1].x) / 2;
-                    const midY = (points[i].y + points[i + 1].y) / 2;
-                    segPath.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
-                } else {
-                    segPath.lineTo(points[i].x, points[i].y);
-                }
-            }
-            ctx.stroke(segPath);
-
-            segStart = segEnd;
+    // Single Path2D with quadratic spline — coherence masking handled externally
+    if (points.length > 1) {
+        const path = new Path2D();
+        path.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length - 1; i++) {
+            const midX = (points[i].x + points[i + 1].x) / 2;
+            const midY = (points[i].y + points[i + 1].y) / 2;
+            path.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
         }
-
-        ctx.globalAlpha = savedAlpha;
+        path.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+        ctx.stroke(path);
     }
 
     ctx.setLineDash([]);
@@ -722,8 +817,8 @@ export function drawSpectrumPath(
     const dataArray = hasLive ? liveData : interpMagnitude;
     const offset = hasLive ? 0 : 68;
 
-    // Construir array de puntos (un punto por bin FFT visible)
-    const points: {x: number, y: number, cohAlpha: number}[] = [];
+    // Construir array de puntos
+    const points: {x: number, y: number}[] = [];
     const binWidth = (sampleRate / 2) / dataArray.length;
 
     for (let bin = 0; bin < dataArray.length; bin++) {
@@ -732,26 +827,8 @@ export function drawSpectrumPath(
         const x = valToX(freq, width, false, state);
         if (x < -10 || x > width + 10) continue;
 
-        // Coherence alpha attenuation for Spectrum (min 0.15)
-        let cohAlpha = 1.0;
-        const cohThreshold = cfg.coherenceThreshold ?? 0.5;
-        if (cfg.enableCoherence) {
-            const coh = interpCoherence[bin] ?? 0;
-            if (coh < cohThreshold) {
-                cohAlpha = Math.max(0.15, coh / cohThreshold);
-            }
-        }
-
-        let val = 0;
-        if (hasLive) {
-            const mapIdx = Math.floor((bin * dataArray.length) / bins);
-            val = dataArray[mapIdx] || -120;
-        } else {
-            val = dataArray[bin] + offset;
-        }
-
         // Smooth using PPO
-        val = getPPOSmoothedValue(bin, hasLive ? dataArray : interpMagnitude, cfg.smoothingPPO ?? 48) + (hasLive ? 0 : offset);
+        let val = getPPOSmoothedValue(bin, hasLive ? dataArray : interpMagnitude, cfg.smoothingPPO ?? 48) + (hasLive ? 0 : offset);
 
         // Mode Y transformations
         if (cfg.modeY === "Linear") {
@@ -761,36 +838,20 @@ export function drawSpectrumPath(
         }
 
         const y = valToY(val, height, "Spectrum", metricConfigs, state) + (cfg.yShift || 0);
-        points.push({ x, y, cohAlpha });
+        points.push({ x, y });
     }
 
-    // Draw with coherence-aware alpha segments
-    if (points.length > 0) {
-        const savedAlpha = ctx.globalAlpha;
-        let segStart = 0;
-        while (segStart < points.length) {
-            const segAlpha = points[segStart].cohAlpha;
-            let segEnd = segStart + 1;
-            while (segEnd < points.length && Math.abs(points[segEnd].cohAlpha - segAlpha) < 0.1) {
-                segEnd++;
-            }
-            ctx.globalAlpha = savedAlpha * segAlpha;
-            const segPath = new Path2D();
-            const drawStart = Math.max(0, segStart - 1);
-            segPath.moveTo(points[drawStart].x, points[drawStart].y);
-            for (let i = drawStart + 1; i < Math.min(segEnd + 1, points.length); i++) {
-                if (i + 1 < points.length) {
-                    const midX = (points[i].x + points[i + 1].x) / 2;
-                    const midY = (points[i].y + points[i + 1].y) / 2;
-                    segPath.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
-                } else {
-                    segPath.lineTo(points[i].x, points[i].y);
-                }
-            }
-            ctx.stroke(segPath);
-            segStart = segEnd;
+    // Single Path2D with quadratic spline — coherence masking handled externally
+    if (points.length > 1) {
+        const path = new Path2D();
+        path.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length - 1; i++) {
+            const midX = (points[i].x + points[i + 1].x) / 2;
+            const midY = (points[i].y + points[i + 1].y) / 2;
+            path.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
         }
-        ctx.globalAlpha = savedAlpha;
+        path.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+        ctx.stroke(path);
     }
 
     ctx.setLineDash([]);
@@ -872,16 +933,14 @@ export function drawSimulatedMagnitudePath(
     ctx.strokeStyle = style.color;
     ctx.lineWidth = style.lineWidth;
     
-    const cfg = metricConfigs["Simulated Magnitude"] || { modeY: "dB", smoothingPPO: 48, enableCoherence: false, coherenceThreshold: 0.5 };
+    const cfg = metricConfigs["Simulated Magnitude"] || { modeY: "dB", smoothingPPO: 48 };
     
 
     const sr = sampleRate;
     const binWidth = sr / 2 / bins;
 
-    const cohThreshold = cfg.coherenceThreshold ?? 0.5;
-
     // Pixel-distance based decimation: adapts to log scale
-    const points: {x: number, y: number, cohAlpha: number}[] = [];
+    const points: {x: number, y: number}[] = [];
     let prevX = -100;
 
     for (let bin = 0; bin < bins; bin++) {
@@ -891,15 +950,6 @@ export function drawSimulatedMagnitudePath(
         if (x < -10 || x > width + 10) continue;
         if (x - prevX < 2 && prevX > -100) continue;
         prevX = x;
-
-        // Coherence alpha attenuation (min 0.15)
-        let cohAlpha = 1.0;
-        if (cfg.enableCoherence) {
-            const coh = interpCoherence[bin] ?? 0;
-            if (coh < cohThreshold) {
-                cohAlpha = Math.max(0.15, coh / cohThreshold);
-            }
-        }
 
         let val = getPPOSmoothedValue(bin, interpMagnitude, cfg.smoothingPPO ?? 48);
         const f = freq || 1e-6;
@@ -912,30 +962,17 @@ export function drawSimulatedMagnitudePath(
         }
 
         const y = valToY(val, height, "Simulated Magnitude", metricConfigs, state) + (cfg.yShift || 0);
-        points.push({ x, y, cohAlpha });
+        points.push({ x, y });
     }
 
-    // Draw with coherence-aware alpha segments
-    if (points.length > 0) {
-        const savedAlpha = ctx.globalAlpha;
-        let segStart = 0;
-        while (segStart < points.length) {
-            const segAlpha = points[segStart].cohAlpha;
-            let segEnd = segStart + 1;
-            while (segEnd < points.length && Math.abs(points[segEnd].cohAlpha - segAlpha) < 0.1) {
-                segEnd++;
-            }
-            ctx.globalAlpha = savedAlpha * segAlpha;
-            const segPath = new Path2D();
-            const drawStart = Math.max(0, segStart - 1);
-            segPath.moveTo(points[drawStart].x, points[drawStart].y);
-            for (let i = drawStart + 1; i < Math.min(segEnd + 1, points.length); i++) {
-                segPath.lineTo(points[i].x, points[i].y);
-            }
-            ctx.stroke(segPath);
-            segStart = segEnd;
+    // Single Path2D — coherence masking handled externally
+    if (points.length > 1) {
+        const path = new Path2D();
+        path.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+            path.lineTo(points[i].x, points[i].y);
         }
-        ctx.globalAlpha = savedAlpha;
+        ctx.stroke(path);
     }
 
     ctx.setLineDash([]);
