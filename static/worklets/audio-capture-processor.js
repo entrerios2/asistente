@@ -39,6 +39,7 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
         this.samplesAccumulated = 0;
         this.overlapFraction = 0; // Overlap controlado por dspWorker (UI)
         this.refChannel = -1; // -1=loop (input[1]), 0=L, 1=R de input[0]
+        this.measChannel = 1; // 0=L, 1=R de input[0]
 
         // Parámetros FSK
         this.sampleRate = 48000;
@@ -96,7 +97,12 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
                 this.fskEnabled = !!event.data.enabled;
             }
             if (event.data && event.data.type === 'setRefChannel') {
+                console.log('[WORKLET] setRefChannel received:', event.data.channel, 'old:', this.refChannel);
                 this.refChannel = event.data.channel; // -1=loop, 0=L, 1=R
+            }
+            if (event.data && event.data.type === 'setMeasChannel') {
+                console.log('[WORKLET] setMeasChannel received:', event.data.channel, 'old:', this.measChannel);
+                this.measChannel = event.data.channel; // 0=L, 1=R
             }
         };
     }
@@ -106,8 +112,8 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
         if (!input || !input[0]) return true;
         if (!this.refBuffer || !this.measBuffer) return true;
 
-        // Selección de canales según refChannel
-        const measCh = input[1] || input[0]; // Canal de medición (siempre ch1, fallback mono)
+        // Selección de canales según refChannel y measChannel
+        const measCh = input[this.measChannel] || input[0]; // Canal de medición configurable
         let refCh;
         if (this.refChannel === -1 && inputs[1] && inputs[1][0]) {
             // Loopback: referencia = generador (input 1)
@@ -145,6 +151,26 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
                     ref: refBlock.buffer,
                     meas: measBlock.buffer
                 }, [refBlock.buffer, measBlock.buffer]);
+
+                // DEBUG: diagnóstico del worklet (cada ~20 bloques)
+                if (!this._diagCount) this._diagCount = 0;
+                if (++this._diagCount % 20 === 0) {
+                    const hasInput1 = !!(inputs[1] && inputs[1][0] && inputs[1][0].length > 0);
+                    const input1Energy = hasInput1 ? inputs[1][0].reduce((s,v) => s + v*v, 0) : 0;
+                    const input0ch0Energy = input[0] ? input[0].reduce((s,v) => s + v*v, 0) : 0;
+                    const input0ch1Energy = input[1] ? input[1].reduce((s,v) => s + v*v, 0) : 0;
+                    this.port.postMessage({
+                        type: 'WORKLET_DIAG',
+                        refChannel: this.refChannel,
+                        hasInput1,
+                        input1Energy: input1Energy.toFixed(6),
+                        input0ch0Energy: input0ch0Energy.toFixed(6),
+                        input0ch1Energy: input0ch1Energy.toFixed(6),
+                        numInputs: inputs.length,
+                        input0channels: input.length,
+                        input1channels: inputs[1] ? inputs[1].length : 0,
+                    });
+                }
             } else {
                 // SAB: señalizar bloque listo via Atomics
                 if (this.flagArray) {

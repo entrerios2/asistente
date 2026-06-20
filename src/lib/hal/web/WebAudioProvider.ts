@@ -62,7 +62,7 @@ export class WebAudioProvider implements AudioProvider {
 			}
 		});
 
-		await this.audioContext.audioWorklet.addModule(`${base}/worklets/audio-capture-processor.js`);
+		await this.audioContext.audioWorklet.addModule(`${base}/worklets/audio-capture-processor.js?v=${Date.now()}`);
 
 		const source = this.audioContext.createMediaStreamSource(this.stream);
 
@@ -94,14 +94,6 @@ export class WebAudioProvider implements AudioProvider {
 		this.measTimeDomain = new Float32Array(uiStore.fftSize);
 
 		const fftSize = uiStore.fftSize;
-		const hasSAB = typeof SharedArrayBuffer !== 'undefined';
-
-		if (hasSAB) {
-			this.refSab = new SharedArrayBuffer(fftSize * Float32Array.BYTES_PER_ELEMENT);
-			this.measSab = new SharedArrayBuffer(fftSize * Float32Array.BYTES_PER_ELEMENT);
-			this.flagSab = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT);
-			this.flagArray = new Int32Array(this.flagSab);
-		}
 
 		this.workletNode = new AudioWorkletNode(this.audioContext, 'audio-capture-processor', {
 			channelCount: 2,
@@ -109,31 +101,36 @@ export class WebAudioProvider implements AudioProvider {
 			numberOfInputs: 2,
 		});
 
-		if (hasSAB) {
-			this.workletNode.port.postMessage({
-				type: 'init',
-				fftSize,
-				refSab: this.refSab,
-				measSab: this.measSab,
-				flagSab: this.flagSab
-			});
-		} else {
-			this.workletNode.port.postMessage({ type: 'init', fftSize });
+		// Init worklet sin SABs — usa postMessage (path robusto sin race conditions)
+		this.workletNode.port.postMessage({ type: 'init', fftSize });
 
-			this.workletNode.port.addEventListener('message', (event) => {
-				if (event.data && event.data.type === 'DUAL_BLOCK') {
-					// Bloque dual-channel recibido via postMessage
-					this.refTimeDomain = new Float32Array(event.data.ref);
-					this.measTimeDomain = new Float32Array(event.data.meas);
-				}
-			});
-			this.workletNode.port.start();
-		}
+		// Flag para evitar re-procesar el mismo bloque en cada rAF tick
+		let hasNewData = false;
+
+		this.workletNode.port.addEventListener('message', (event) => {
+			if (event.data && event.data.type === 'DUAL_BLOCK') {
+				this.refTimeDomain = new Float32Array(event.data.ref);
+				this.measTimeDomain = new Float32Array(event.data.meas);
+				hasNewData = true;
+			}
+			if (event.data && event.data.type === 'WORKLET_DIAG') {
+				console.log('[WORKLET-DIAG]', JSON.stringify(event.data));
+			}
+		});
+		this.workletNode.port.start();
 
 		source.connect(this.workletNode, 0, 0); // Mic → worklet input 0
 
-		// Enviar refChannel inicial al worklet
+		// Reconectar generador existente al nuevo worklet para loopback
+		// (si el generador ya estaba activo antes de iniciar captura,
+		// sigue conectado al viejo workletNode — hay que reconectar)
+		if (this.generatorGainNode) {
+			this.generatorGainNode.connect(this.workletNode, 0, 1);
+		}
+
+		// Enviar refChannel y measChannel iniciales al worklet
 		this.workletNode.port.postMessage({ type: 'setRefChannel', channel: uiStore.refChannel });
+		this.workletNode.port.postMessage({ type: 'setMeasChannel', channel: uiStore.measChannel });
 
 		const readData = () => {
 			// Fast-path RTA (AnalyserNode de medición, solo para Spectrum)
@@ -143,19 +140,9 @@ export class WebAudioProvider implements AudioProvider {
 			}
 
 			// Dual-channel time-domain para el worker DSP
-			if (listener.onTimeDomainData && this.analyserRef && this.analyserNode) {
-				if (hasSAB && this.refSab && this.measSab && this.flagArray) {
-					// Solo leer si el worklet señalizó bloque listo (Atomics sync)
-					if (Atomics.load(this.flagArray, 0) === 1) {
-						const refData = Float32Array.from(new Float32Array(this.refSab));
-						const measData = Float32Array.from(new Float32Array(this.measSab));
-						Atomics.store(this.flagArray, 0, 0); // Reset flag
-						listener.onTimeDomainData(measData, refData);
-					}
-				} else if (this.refTimeDomain && this.measTimeDomain) {
-					// Fallback: datos ya recibidos via postMessage
-					listener.onTimeDomainData(this.measTimeDomain, this.refTimeDomain);
-				}
+			if (listener.onTimeDomainData && hasNewData && this.refTimeDomain && this.measTimeDomain) {
+				hasNewData = false;
+				listener.onTimeDomainData(this.measTimeDomain, this.refTimeDomain);
 			}
 
 			// Leq calculator (mantener existente)

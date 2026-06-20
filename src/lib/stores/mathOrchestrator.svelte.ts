@@ -96,8 +96,20 @@ class MathOrchestrator {
                 const ch = uiStore.refChannel;
                 untrack(() => {
                     const provider = getAudioProvider();
+                    console.log('[ORCH] setRefChannel effect fired, ch=', ch, 'hasMethod=', !!provider.sendWorkletMessage);
                     if (provider.sendWorkletMessage) {
                         provider.sendWorkletMessage({ type: 'setRefChannel', channel: ch });
+                    }
+                });
+            });
+
+            // Enviar measChannel al worklet cuando cambia (0=L, 1=R)
+            $effect(() => {
+                const ch = uiStore.measChannel;
+                untrack(() => {
+                    const provider = getAudioProvider();
+                    if (provider.sendWorkletMessage) {
+                        provider.sendWorkletMessage({ type: 'setMeasChannel', channel: ch });
                     }
                 });
             });
