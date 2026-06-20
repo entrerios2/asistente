@@ -5,7 +5,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	// Inyectamos los headers necesarios para SharedArrayBuffer
 	response.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
-	response.headers.set('Cross-Origin-Embedder-Policy', 'require-corp');
+	response.headers.set('Cross-Origin-Embedder-Policy', 'credentialless');
 
 	return response;
 };

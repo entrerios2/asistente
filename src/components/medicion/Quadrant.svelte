@@ -658,15 +658,15 @@
     $effect(() => {
         if (canvas && containerWidth > 0 && containerHeight > 0) {
             const dpr = window.devicePixelRatio || 1;
-            canvas.width = containerWidth * dpr;
-            canvas.height = containerHeight * dpr;
-            canvas.style.width = `${containerWidth}px`;
-            canvas.style.height = `${containerHeight}px`;
+            const targetW = Math.round(containerWidth * dpr);
+            const targetH = Math.round(containerHeight * dpr);
 
-            const ctx = canvas.getContext("2d");
-            if (ctx) {
-                ctx.resetTransform();
-                ctx.scale(dpr, dpr);
+            // Solo reescribir dimensiones si cambiaron — evita clear implícito del canvas
+            if (canvas.width !== targetW || canvas.height !== targetH) {
+                canvas.width = targetW;
+                canvas.height = targetH;
+                canvas.style.width = `${containerWidth}px`;
+                canvas.style.height = `${containerHeight}px`;
             }
         }
     });
