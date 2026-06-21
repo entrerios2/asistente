@@ -777,6 +777,11 @@
     <!-- CANVAS DEL GRÁFICO -->
     <canvas bind:this={canvas} style="cursor: {cursorStyle}"></canvas>
 
+    <!-- DEBUG: overlay HTML para diagnóstico móvil (temporal) -->
+    <div style="position:absolute;bottom:0;left:50px;z-index:999;background:rgba(0,0,0,0.8);color:yellow;font:10px monospace;padding:2px 6px;pointer-events:none;">
+        cw={Math.round(containerWidth)} ch={Math.round(containerHeight)} bw={canvas?.width ?? '?'} bh={canvas?.height ?? '?'} meas={uiStore.isMeasuring}
+    </div>
+
     <!-- WATERMARK ID DEL CUADRANTE -->
     <span
         class="absolute bottom-2 right-3 text-[108px] font-black pointer-events-none select-none leading-none"
