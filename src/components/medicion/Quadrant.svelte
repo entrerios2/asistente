@@ -317,11 +317,26 @@
 
     // CORE DRAW ENGINE
     let _drawCount = 0;
+    let _ctxLost = $state(false);
     function draw() {
         if (!canvas) return;
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
         if (canvas.width === 0 || canvas.height === 0) return;
+
+        // Detectar context loss (Chrome Android con getUserMedia + AudioWorklet)
+        if (typeof ctx.isContextLost === 'function' && ctx.isContextLost()) {
+            _ctxLost = true;
+            // Forzar restauración: recrear el buffer del canvas
+            const w = canvas.width;
+            const h = canvas.height;
+            canvas.width = 0;
+            canvas.height = 0;
+            canvas.width = w;
+            canvas.height = h;
+            return; // Reintentar en el próximo frame
+        }
+        _ctxLost = false;
 
         _drawCount++;
         const dpr = window.devicePixelRatio || 1;
@@ -812,7 +827,7 @@
 
     <!-- DEBUG: overlay HTML para diagnóstico móvil (temporal) -->
     <div style="position:absolute;bottom:0;left:50px;z-index:999;background:rgba(0,0,0,0.8);color:yellow;font:10px monospace;padding:2px 6px;pointer-events:none;">
-        cw={Math.round(containerWidth)} ch={Math.round(containerHeight)} bw={canvas?.width ?? '?'} bh={canvas?.height ?? '?'} meas={uiStore.isMeasuring} draws={_drawCount}
+        cw={Math.round(containerWidth)} ch={Math.round(containerHeight)} bw={canvas?.width ?? '?'} bh={canvas?.height ?? '?'} meas={uiStore.isMeasuring} lost={_ctxLost}
     </div>
 
     <!-- WATERMARK ID DEL CUADRANTE -->
