@@ -194,9 +194,16 @@
             flex-direction: column;
         }
 
+        .sidebar-wrapper {
+            width: 100% !important;
+            max-height: 45dvh;
+            overflow-y: auto;
+        }
+
         .main-viewport {
-            height: calc(100vh - 100px);   /* fallback */
-            height: calc(100dvh - 100px);  /* preferido */
+            flex: 1;
+            min-height: 40dvh;
+            height: auto;
         }
     }
 </style>

@@ -316,12 +316,14 @@
     }
 
     // CORE DRAW ENGINE
+    let _drawCount = 0;
     function draw() {
         if (!canvas) return;
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
         if (canvas.width === 0 || canvas.height === 0) return;
 
+        _drawCount++;
         const dpr = window.devicePixelRatio || 1;
         const width = canvas.width / dpr;
         const height = canvas.height / dpr;
@@ -330,6 +332,13 @@
         ctx.resetTransform();
         ctx.scale(dpr, dpr);
         ctx.clearRect(0, 0, width, height);
+
+        // DEBUG: rectángulo rojo visible para verificar que canvas context funciona
+        ctx.fillStyle = 'red';
+        ctx.fillRect(10, 10, 60, 20);
+        ctx.fillStyle = 'white';
+        ctx.font = '12px monospace';
+        ctx.fillText(`#${_drawCount}`, 15, 25);
 
         // Actualizar capas calculadas antes de dibujar
         traceManager.updateCalculatedLayers();
@@ -803,7 +812,7 @@
 
     <!-- DEBUG: overlay HTML para diagnóstico móvil (temporal) -->
     <div style="position:absolute;bottom:0;left:50px;z-index:999;background:rgba(0,0,0,0.8);color:yellow;font:10px monospace;padding:2px 6px;pointer-events:none;">
-        cw={Math.round(containerWidth)} ch={Math.round(containerHeight)} bw={canvas?.width ?? '?'} bh={canvas?.height ?? '?'} meas={uiStore.isMeasuring}
+        cw={Math.round(containerWidth)} ch={Math.round(containerHeight)} bw={canvas?.width ?? '?'} bh={canvas?.height ?? '?'} meas={uiStore.isMeasuring} draws={_drawCount}
     </div>
 
     <!-- WATERMARK ID DEL CUADRANTE -->
