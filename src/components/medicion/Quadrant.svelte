@@ -323,8 +323,8 @@
         if (canvas.width === 0 || canvas.height === 0) return;
 
         const dpr = window.devicePixelRatio || 1;
-        const width = containerWidth;
-        const height = containerHeight;
+        const width = canvas.width / dpr;
+        const height = canvas.height / dpr;
 
         // Aplicar transformación en cada frame (defensivo contra resets por resize)
         ctx.resetTransform();
@@ -415,8 +415,8 @@
             hReal: mathOrchestrator.hReal,
             hImag: mathOrchestrator.hImag,
             outputCrestFactor: mathOrchestrator.outputCrestFactor,
-            containerWidth,
-            containerHeight,
+            containerWidth: width,
+            containerHeight: height,
             customPPOSmooth: (idx: number, arr: Float32Array) => arr[idx],
         });
     }
