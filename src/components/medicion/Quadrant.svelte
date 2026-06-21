@@ -616,12 +616,36 @@
             );
         }
 
+        // Inicializar canvas con dimensiones correctas ANTES del primer draw
+        if (container && canvas) {
+            const rect = container.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            containerWidth = rect.width;
+            containerHeight = rect.height;
+            canvas.width = Math.round(rect.width * dpr);
+            canvas.height = Math.round(rect.height * dpr);
+            canvas.style.width = `${rect.width}px`;
+            canvas.style.height = `${rect.height}px`;
+        }
+
         // Observer del redimensionamiento físico del cuadrante
         const observer = new ResizeObserver((entries) => {
             for (const entry of entries) {
                 const { width, height } = entry.contentRect;
                 containerWidth = width;
                 containerHeight = height;
+                // Redimensionar canvas buffer inmediatamente (no esperar $effect)
+                if (canvas) {
+                    const dpr = window.devicePixelRatio || 1;
+                    const targetW = Math.round(width * dpr);
+                    const targetH = Math.round(height * dpr);
+                    if (canvas.width !== targetW || canvas.height !== targetH) {
+                        canvas.width = targetW;
+                        canvas.height = targetH;
+                        canvas.style.width = `${width}px`;
+                        canvas.style.height = `${height}px`;
+                    }
+                }
             }
         });
 
