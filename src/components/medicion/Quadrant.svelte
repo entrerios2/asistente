@@ -381,18 +381,29 @@
                     );
                 }
             } else {
-                smoothedMagnitude.set(interpEngine.interpMagnitude);
+                // Guard: source may be larger than BINS (e.g., worker sends different FFT size)
+                if (interpEngine.interpMagnitude.length > BINS) {
+                    smoothedMagnitude.set(interpEngine.interpMagnitude.subarray(0, BINS));
+                } else {
+                    smoothedMagnitude.set(interpEngine.interpMagnitude);
+                }
             }
 
             const specPPO = metricConfigs["Spectrum"]?.smoothingPPO || 48;
             const hasLive = liveData && liveData.length > 0;
             const rawSpec = hasLive ? liveData : interpEngine.interpMagnitude;
             if (activeMetrics.includes("Spectrum") && specPPO < 48) {
-                for (let i = 0; i < BINS; i++) {
+                const loopLen = Math.min(BINS, rawSpec.length);
+                for (let i = 0; i < loopLen; i++) {
                     smoothedSpectrum[i] = getPPOSmoothedValue(i, rawSpec, specPPO);
                 }
             } else {
-                smoothedSpectrum.set(rawSpec);
+                // Guard: rawSpec (liveData) may be larger than BINS
+                if (rawSpec.length > BINS) {
+                    smoothedSpectrum.set(rawSpec.subarray(0, BINS));
+                } else {
+                    smoothedSpectrum.set(rawSpec);
+                }
             }
 
             drawQuadrant({

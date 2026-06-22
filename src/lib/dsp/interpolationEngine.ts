@@ -95,7 +95,15 @@ export class InterpolationEngine {
         // Ease-out cuadrático: respuesta rápida al inicio, desaceleración suave
         const t = 1 - (1 - tLinear) * (1 - tLinear);
 
-        for (let i = 0; i < this.BINS; i++) {
+        // Guard: ensure loop bounds don't exceed actual array sizes
+        const freqLen = Math.min(
+            this.BINS,
+            mathOrchestrator.outputMagnitude?.length ?? this.BINS,
+            mathOrchestrator.outputPhase?.length ?? this.BINS,
+            mathOrchestrator.outputCoherence?.length ?? this.BINS,
+            mathOrchestrator.outputGroupDelay?.length ?? this.BINS,
+        );
+        for (let i = 0; i < freqLen; i++) {
             this.interpMagnitude[i] = this.prevMagnitude[i] * (1 - t) + mathOrchestrator.outputMagnitude[i] * t;
             this.interpPhase[i] = this.prevPhase[i] * (1 - t) + mathOrchestrator.outputPhase[i] * t;
             this.interpCoherence[i] = this.prevCoherence[i] * (1 - t) + mathOrchestrator.outputCoherence[i] * t;
@@ -103,7 +111,12 @@ export class InterpolationEngine {
         }
 
         const factor = snap ? 1.0 : this.SMOOTHING_FACTOR;
-        for (let i = 0; i < this.FFT_SIZE; i++) {
+        const timeLen = Math.min(
+            this.FFT_SIZE,
+            mathOrchestrator.outputImpulse?.length ?? this.FFT_SIZE,
+            mathOrchestrator.outputStep?.length ?? this.FFT_SIZE,
+        );
+        for (let i = 0; i < timeLen; i++) {
             this.interpImpulse[i] +=
                 (mathOrchestrator.outputImpulse[i] - this.interpImpulse[i]) * factor;
             this.interpStep[i] +=
