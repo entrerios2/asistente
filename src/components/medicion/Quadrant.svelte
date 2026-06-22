@@ -445,7 +445,13 @@
             _drawError = e?.message || String(e);
         }
 
-        // DEBUG: After drawQuadrant — draw a yellow rect to verify ctx is still working
+        // DEBUG: After drawQuadrant — reset ALL canvas state and draw yellow rect
+        ctx.resetTransform();
+        ctx.scale(dpr, dpr);
+        ctx.globalAlpha = 1.0;
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.setLineDash([]);
+        ctx.lineWidth = 1;
         ctx.fillStyle = 'yellow';
         ctx.fillRect(10, 75, 120, 15);
         ctx.fillStyle = 'black';
