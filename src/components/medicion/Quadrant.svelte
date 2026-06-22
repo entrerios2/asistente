@@ -318,6 +318,7 @@
     // CORE DRAW ENGINE
     let _drawCount = 0;
     let _ctxLost = $state(false);
+    let _drawError = $state<string | null>(null);
     function draw() {
         if (!canvas) return;
         const ctx = canvas.getContext("2d");
@@ -327,14 +328,13 @@
         // Detectar context loss (Chrome Android con getUserMedia + AudioWorklet)
         if (typeof ctx.isContextLost === 'function' && ctx.isContextLost()) {
             _ctxLost = true;
-            // Forzar restauración: recrear el buffer del canvas
             const w = canvas.width;
             const h = canvas.height;
             canvas.width = 0;
             canvas.height = 0;
             canvas.width = w;
             canvas.height = h;
-            return; // Reintentar en el próximo frame
+            return;
         }
         _ctxLost = false;
 
@@ -348,12 +348,12 @@
         ctx.scale(dpr, dpr);
         ctx.clearRect(0, 0, width, height);
 
-        // DEBUG: rectángulo rojo visible para verificar que canvas context funciona
+        // DEBUG: rectángulo rojo visible (debajo del header de 38px)
         ctx.fillStyle = 'red';
-        ctx.fillRect(10, 10, 60, 20);
+        ctx.fillRect(10, 50, 80, 20);
         ctx.fillStyle = 'white';
-        ctx.font = '12px monospace';
-        ctx.fillText(`#${_drawCount}`, 15, 25);
+        ctx.font = '11px monospace';
+        ctx.fillText(`#${_drawCount}`, 15, 64);
 
         // Actualizar capas calculadas antes de dibujar
         traceManager.updateCalculatedLayers();
@@ -397,52 +397,57 @@
             smoothedSpectrum.set(rawSpec);
         }
 
-        drawQuadrant({
-            ctx,
-            width,
-            height,
-            activeMetrics,
-            hasTimeDomainActive,
-            metricConfigs,
-            metricStyles,
-            interactionState,
-            isDarkMode: uiStore.isDarkMode,
-            sampleRate: uiStore.sampleRate,
-            BINS,
-            interpEngine,
-            liveData,
-            frequencyLUT,
-            smoothedMagnitude,
-            smoothedSpectrum,
-            getPPOSmoothedValue,
-            getMetricValueInterpolated,
-            getImpulseValueInterpolated,
-            getMetricAlpha,
-            getEQResponseCached:
-                mathOrchestrator.getEQResponseCached.bind(mathOrchestrator),
-            myLayers,
-            quadrantLayers,
-            instantaneas: traceManager.instantaneas,
-            showEQOverlay,
-            eqBands: traceManager.eqBands,
-            hoveringEQNode,
-            draggingEQNode,
-            offscreenCanvas,
-            offscreenCtx,
-            spectrogramLUT_RGBA,
-            spectrogramFrameCountRef: spectrogramFrameCount,
-            initOffscreenCanvas,
-            spectrogramDbHistory,
-            sharedImageData,
-            targetTrace,
-            meterStore,
-            hReal: mathOrchestrator.hReal,
-            hImag: mathOrchestrator.hImag,
-            outputCrestFactor: mathOrchestrator.outputCrestFactor,
-            containerWidth: width,
-            containerHeight: height,
-            customPPOSmooth: (idx: number, arr: Float32Array) => arr[idx],
-        });
+        try {
+            drawQuadrant({
+                ctx,
+                width,
+                height,
+                activeMetrics,
+                hasTimeDomainActive,
+                metricConfigs,
+                metricStyles,
+                interactionState,
+                isDarkMode: uiStore.isDarkMode,
+                sampleRate: uiStore.sampleRate,
+                BINS,
+                interpEngine,
+                liveData,
+                frequencyLUT,
+                smoothedMagnitude,
+                smoothedSpectrum,
+                getPPOSmoothedValue,
+                getMetricValueInterpolated,
+                getImpulseValueInterpolated,
+                getMetricAlpha,
+                getEQResponseCached:
+                    mathOrchestrator.getEQResponseCached.bind(mathOrchestrator),
+                myLayers,
+                quadrantLayers,
+                instantaneas: traceManager.instantaneas,
+                showEQOverlay,
+                eqBands: traceManager.eqBands,
+                hoveringEQNode,
+                draggingEQNode,
+                offscreenCanvas,
+                offscreenCtx,
+                spectrogramLUT_RGBA,
+                spectrogramFrameCountRef: spectrogramFrameCount,
+                initOffscreenCanvas,
+                spectrogramDbHistory,
+                sharedImageData,
+                targetTrace,
+                meterStore,
+                hReal: mathOrchestrator.hReal,
+                hImag: mathOrchestrator.hImag,
+                outputCrestFactor: mathOrchestrator.outputCrestFactor,
+                containerWidth: width,
+                containerHeight: height,
+                customPPOSmooth: (idx: number, arr: Float32Array) => arr[idx],
+            });
+            if (_drawError) _drawError = null;
+        } catch (e: any) {
+            _drawError = e?.message || String(e);
+        }
     }
 
     // GESTORES DE EVENTOS DELEGADOS (PAN & ZOOM)
@@ -827,7 +832,7 @@
 
     <!-- DEBUG: overlay HTML para diagnóstico móvil (temporal) -->
     <div style="position:absolute;bottom:0;left:50px;z-index:999;background:rgba(0,0,0,0.8);color:yellow;font:10px monospace;padding:2px 6px;pointer-events:none;">
-        cw={Math.round(containerWidth)} ch={Math.round(containerHeight)} bw={canvas?.width ?? '?'} bh={canvas?.height ?? '?'} meas={uiStore.isMeasuring} lost={_ctxLost}
+        cw={Math.round(containerWidth)} ch={Math.round(containerHeight)} bw={canvas?.width ?? '?'} bh={canvas?.height ?? '?'} meas={uiStore.isMeasuring} lost={_ctxLost} err={_drawError ?? 'none'}
     </div>
 
     <!-- WATERMARK ID DEL CUADRANTE -->
