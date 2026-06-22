@@ -707,22 +707,8 @@
         mathOrchestrator.registerQuadrantMetrics(id, activeMetrics);
     });
 
-    // Ajustar canvas reactivamente multiplicándolo por dpr para nitidez absoluta
-    $effect(() => {
-        if (canvas && containerWidth > 0 && containerHeight > 0) {
-            const dpr = window.devicePixelRatio || 1;
-            const targetW = Math.round(containerWidth * dpr);
-            const targetH = Math.round(containerHeight * dpr);
-
-            // Solo reescribir dimensiones si cambiaron — evita clear implícito del canvas
-            if (canvas.width !== targetW || canvas.height !== targetH) {
-                canvas.width = targetW;
-                canvas.height = targetH;
-                canvas.style.width = `${containerWidth}px`;
-                canvas.style.height = `${containerHeight}px`;
-            }
-        }
-    });
+    // NOTA: El canvas se redimensiona directamente en el ResizeObserver callback (onMount).
+    // NO usar $effect para resize — causa clear implícito del canvas en Chrome Android.
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
