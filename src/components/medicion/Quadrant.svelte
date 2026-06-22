@@ -317,23 +317,19 @@
 
     // CORE DRAW ENGINE
     let _drawCount = 0;
-    let _ctxLost = $state(false);
-    let _drawError = $state<string | null>(null);
+    let _ctxLost = false; // NO $state — evitar que Svelte re-renderice por mutación en draw()
+    let _drawError: string | null = null; // NO $state
+    let _resizeCount = $state(0); // contador de ResizeObserver fires
+    let _bypassDrawQuadrant = false; // TEST: si true, skip drawQuadrant y dibuja algo simple
     function draw() {
         if (!canvas) return;
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
         if (canvas.width === 0 || canvas.height === 0) return;
 
-        // Detectar context loss (Chrome Android con getUserMedia + AudioWorklet)
+        // Detectar context loss — sin $state
         if (typeof ctx.isContextLost === 'function' && ctx.isContextLost()) {
             _ctxLost = true;
-            const w = canvas.width;
-            const h = canvas.height;
-            canvas.width = 0;
-            canvas.height = 0;
-            canvas.width = w;
-            canvas.height = h;
             return;
         }
         _ctxLost = false;
@@ -444,10 +440,17 @@
                 containerHeight: height,
                 customPPOSmooth: (idx: number, arr: Float32Array) => arr[idx],
             });
-            if (_drawError) _drawError = null;
+            _drawError = null;
         } catch (e: any) {
             _drawError = e?.message || String(e);
         }
+
+        // DEBUG: After drawQuadrant — draw a yellow rect to verify ctx is still working
+        ctx.fillStyle = 'yellow';
+        ctx.fillRect(10, 75, 120, 15);
+        ctx.fillStyle = 'black';
+        ctx.font = '10px monospace';
+        ctx.fillText(`AFTER dQ w=${Math.round(width)}`, 12, 86);
     }
 
     // GESTORES DE EVENTOS DELEGADOS (PAN & ZOOM)
@@ -663,6 +666,7 @@
                 const { width, height } = entry.contentRect;
                 containerWidth = width;
                 containerHeight = height;
+                _resizeCount++;
                 // Redimensionar canvas buffer inmediatamente (no esperar $effect)
                 if (canvas) {
                     const dpr = window.devicePixelRatio || 1;
@@ -818,7 +822,7 @@
 
     <!-- DEBUG: overlay HTML para diagnóstico móvil (temporal) -->
     <div style="position:absolute;bottom:0;left:50px;z-index:999;background:rgba(0,0,0,0.8);color:yellow;font:10px monospace;padding:2px 6px;pointer-events:none;">
-        cw={Math.round(containerWidth)} ch={Math.round(containerHeight)} bw={canvas?.width ?? '?'} bh={canvas?.height ?? '?'} meas={uiStore.isMeasuring} lost={_ctxLost} err={_drawError ?? 'none'}
+        cw={Math.round(containerWidth)} ch={Math.round(containerHeight)} bw={canvas?.width ?? '?'} bh={canvas?.height ?? '?'} meas={uiStore.isMeasuring} rsz={_resizeCount}
     </div>
 
     <!-- WATERMARK ID DEL CUADRANTE -->
