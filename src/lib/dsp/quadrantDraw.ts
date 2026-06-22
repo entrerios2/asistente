@@ -107,6 +107,13 @@ export function drawQuadrant(p: DrawParams): void {
     // 2. Dibujar Grilla de Fondo (encima)
     drawGrid(p.ctx, p.width, p.height, p.hasTimeDomainActive, p.activeMetrics, p.metricConfigs, p.interactionState, p.isDarkMode, uiStore.showMinorGrid);
 
+    // DEBUG: verificar que drawGrid ejecutó y el ctx sigue funcional
+    p.ctx.fillStyle = 'lime';
+    p.ctx.fillRect(80, 80, 60, 15);
+    p.ctx.fillStyle = 'black';
+    p.ctx.font = '10px monospace';
+    p.ctx.fillText(`w=${Math.round(p.width)} h=${Math.round(p.height)}`, 82, 91);
+
     // 2.5. Coherence background overlay — solo si Coherence es métrica activa
     const cohCfg = p.metricConfigs["Coherence"];
     if (!p.hasTimeDomainActive && p.activeMetrics.includes("Coherence") && cohCfg?.showBackground) {
