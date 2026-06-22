@@ -107,12 +107,6 @@ export function drawQuadrant(p: DrawParams): void {
     // 2. Dibujar Grilla de Fondo (encima)
     drawGrid(p.ctx, p.width, p.height, p.hasTimeDomainActive, p.activeMetrics, p.metricConfigs, p.interactionState, p.isDarkMode, uiStore.showMinorGrid);
 
-    // DEBUG: verificar que drawGrid ejecutó y el ctx sigue funcional
-    p.ctx.fillStyle = 'lime';
-    p.ctx.fillRect(80, 80, 60, 15);
-    p.ctx.fillStyle = 'black';
-    p.ctx.font = '10px monospace';
-    p.ctx.fillText(`w=${Math.round(p.width)} h=${Math.round(p.height)}`, 82, 91);
 
     // 2.5. Coherence background overlay — solo si Coherence es métrica activa
     const cohCfg = p.metricConfigs["Coherence"];
@@ -259,9 +253,6 @@ export function drawQuadrant(p: DrawParams): void {
         maskCtx = maskCanvas.getContext('2d');
     }
 
-    // DEBUG B: antes del layer loop
-    p.ctx.fillStyle = 'cyan';
-    p.ctx.fillRect(150, 80, 30, 15);
 
     p.quadrantLayers.forEach((layer, index) => {
         if (!layer.visible) return;
@@ -405,9 +396,6 @@ export function drawQuadrant(p: DrawParams): void {
         p.ctx.globalAlpha = 1.0; // Restablecer opacidad
     });
 
-    // DEBUG C: después del layer loop, antes de coherence mask
-    p.ctx.fillStyle = 'orange';
-    p.ctx.fillRect(190, 80, 30, 15);
 
     // Apply coherence mask and composite back to main canvas
     if (needsCoherenceMask && maskCtx && maskCanvas) {
@@ -431,9 +419,6 @@ export function drawQuadrant(p: DrawParams): void {
         p.ctx.drawImage(maskCanvas, 0, 0);
     }
 
-    // DEBUG D: después de coherence mask composite
-    p.ctx.fillStyle = 'blue';
-    p.ctx.fillRect(230, 80, 30, 15);
 
     // 3.5. Renderizar curvas de las Instantáneas globales que estén visibles (Prompt 8)
     p.instantaneas.forEach((snap) => {

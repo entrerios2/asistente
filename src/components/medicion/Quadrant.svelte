@@ -316,25 +316,15 @@
     }
 
     // CORE DRAW ENGINE
-    let _drawCount = 0;
-    let _ctxLost = false; // NO $state — evitar que Svelte re-renderice por mutación en draw()
-    let _drawError: string | null = null; // NO $state
-    let _resizeCount = $state(0); // contador de ResizeObserver fires
-    let _bypassDrawQuadrant = false; // TEST: si true, skip drawQuadrant y dibuja algo simple
     function draw() {
         if (!canvas) return;
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
         if (canvas.width === 0 || canvas.height === 0) return;
 
-        // Detectar context loss — sin $state
-        if (typeof ctx.isContextLost === 'function' && ctx.isContextLost()) {
-            _ctxLost = true;
-            return;
-        }
-        _ctxLost = false;
+        // Detectar context loss
+        if (typeof ctx.isContextLost === 'function' && ctx.isContextLost()) return;
 
-        _drawCount++;
         const dpr = window.devicePixelRatio || 1;
         const width = canvas.width / dpr;
         const height = canvas.height / dpr;
@@ -344,14 +334,8 @@
         ctx.scale(dpr, dpr);
         ctx.clearRect(0, 0, width, height);
 
-        // DEBUG: rectángulo rojo visible (debajo del header de 38px)
-        ctx.fillStyle = 'red';
-        ctx.fillRect(10, 50, 80, 20);
-        ctx.fillStyle = 'white';
-        ctx.font = '11px monospace';
-        ctx.fillText(`#${_drawCount}`, 15, 64);
-
-        // TODO: wrap EVERYTHING in try/catch to capture errors from interpolation/smoothing
+        // Envolver todo en try/catch para evitar que errores transitorios
+        // (ej. buffers con tamaño inesperado durante resize/init) congelen el render loop
         try {
             // Actualizar capas calculadas antes de dibujar
             traceManager.updateCalculatedLayers();
@@ -452,23 +436,9 @@
                 containerHeight: height,
                 customPPOSmooth: (idx: number, arr: Float32Array) => arr[idx],
             });
-            _drawError = null;
-        } catch (e: any) {
-            _drawError = e?.message || String(e);
+        } catch {
+            // Error silencioso — evitar crash del render loop
         }
-
-        // DEBUG: After everything — ALWAYS draw yellow rect with error info
-        ctx.resetTransform();
-        ctx.scale(dpr, dpr);
-        ctx.globalAlpha = 1.0;
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.setLineDash([]);
-        ctx.lineWidth = 1;
-        ctx.fillStyle = _drawError ? 'red' : 'lime';
-        ctx.fillRect(10, 75, 300, 15);
-        ctx.fillStyle = _drawError ? 'white' : 'black';
-        ctx.font = '10px monospace';
-        ctx.fillText(_drawError ? `ERR: ${_drawError.substring(0, 45)}` : `OK w=${Math.round(width)}`, 12, 86);
     }
 
     // GESTORES DE EVENTOS DELEGADOS (PAN & ZOOM)
@@ -684,7 +654,6 @@
                 const { width, height } = entry.contentRect;
                 containerWidth = width;
                 containerHeight = height;
-                _resizeCount++;
                 // Redimensionar canvas buffer inmediatamente (no esperar $effect)
                 if (canvas) {
                     const dpr = window.devicePixelRatio || 1;
@@ -837,11 +806,6 @@
 
     <!-- CANVAS DEL GRÁFICO -->
     <canvas bind:this={canvas} style="cursor: {cursorStyle}"></canvas>
-
-    <!-- DEBUG: overlay HTML para diagnóstico móvil (temporal) -->
-    <div style="position:absolute;bottom:0;left:50px;z-index:999;background:rgba(0,0,0,0.8);color:yellow;font:10px monospace;padding:2px 6px;pointer-events:none;">
-        cw={Math.round(containerWidth)} ch={Math.round(containerHeight)} bw={canvas?.width ?? '?'} bh={canvas?.height ?? '?'} meas={uiStore.isMeasuring} rsz={_resizeCount}
-    </div>
 
     <!-- WATERMARK ID DEL CUADRANTE -->
     <span
