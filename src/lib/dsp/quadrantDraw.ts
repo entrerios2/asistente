@@ -259,6 +259,10 @@ export function drawQuadrant(p: DrawParams): void {
         maskCtx = maskCanvas.getContext('2d');
     }
 
+    // DEBUG B: antes del layer loop
+    p.ctx.fillStyle = 'cyan';
+    p.ctx.fillRect(150, 80, 30, 15);
+
     p.quadrantLayers.forEach((layer, index) => {
         if (!layer.visible) return;
         if (!layer.isMeasuring) return; // La capa no-live ya se dibuja en el bloque anterior
@@ -401,6 +405,10 @@ export function drawQuadrant(p: DrawParams): void {
         p.ctx.globalAlpha = 1.0; // Restablecer opacidad
     });
 
+    // DEBUG C: después del layer loop, antes de coherence mask
+    p.ctx.fillStyle = 'orange';
+    p.ctx.fillRect(190, 80, 30, 15);
+
     // Apply coherence mask and composite back to main canvas
     if (needsCoherenceMask && maskCtx && maskCanvas) {
         // Find the first metric with enableCoherence to get its config
@@ -422,6 +430,10 @@ export function drawQuadrant(p: DrawParams): void {
         // Composite the masked result onto the main canvas
         p.ctx.drawImage(maskCanvas, 0, 0);
     }
+
+    // DEBUG D: después de coherence mask composite
+    p.ctx.fillStyle = 'blue';
+    p.ctx.fillRect(230, 80, 30, 15);
 
     // 3.5. Renderizar curvas de las Instantáneas globales que estén visibles (Prompt 8)
     p.instantaneas.forEach((snap) => {
