@@ -64,16 +64,8 @@ class TraceManager {
         "Step": false
     });
 
-    // Estado de las bandas de EQ (Playground)
-    eqBands = $state<EQBand[]>([
-        { freq: 100, gain: 0, q: 1, type: 'peaking' },
-        { freq: 500, gain: 0, q: 1, type: 'peaking' },
-        { freq: 1000, gain: 0, q: 1, type: 'peaking' },
-        { freq: 5000, gain: 0, q: 1, type: 'peaking' },
-        { freq: 10000, gain: 0, q: 1, type: 'peaking' }
-    ]);
-
-    eqBandsVersion = $state(0);
+    // EQ state has been moved to eqStore (single source of truth).
+    // Use eqStore.activeBands and eqStore.updateBand() instead.
 
     private _targetCurveCache: Float32Array | null = null;
     private _targetCurveCacheKey: string = '';
@@ -96,10 +88,6 @@ class TraceManager {
         return target;
     }
 
-    updateEQBand(index: number, field: 'freq' | 'gain' | 'q' | 'type', value: number | string) {
-        (this.eqBands[index] as any)[field] = value;
-        this.eqBandsVersion++;
-    }
 
     constructor() {
         // Inicializar con una capa por defecto para el primer cuadrante

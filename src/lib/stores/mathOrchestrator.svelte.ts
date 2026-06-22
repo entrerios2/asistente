@@ -6,6 +6,7 @@
 
 import { untrack } from 'svelte';
 import { traceManager } from './traceManager.svelte';
+import { eqStore } from './eqStore.svelte';
 import { uiStore } from './ui.svelte';
 import { meterStore } from './meterStore.svelte';
 import { calibrationStore } from './calibrationStore.svelte';
@@ -42,8 +43,9 @@ class MathOrchestrator {
     // Auto delay compensation tracking
     compensationDelaySamples = 0;
 
-    // Cache for EQ response
+    // Cache for EQ response (magnitude dB + phase radians)
     eqResponseCache = new Float32Array(this.BINS);
+    eqPhaseCache = new Float32Array(this.BINS);
     private lastBandsHash = 0;
     private lastMeasuring = false;
     private lastSimulating = false;
@@ -289,6 +291,7 @@ class MathOrchestrator {
         this.hImag = new Float32Array(this.BINS);
 
         this.eqResponseCache = new Float32Array(this.BINS);
+        this.eqPhaseCache = new Float32Array(this.BINS);
         this.updateEQCache();
         this.dirty = true;
     }
@@ -299,12 +302,10 @@ class MathOrchestrator {
 
     private checkDirty() {
         try {
-            if (typeof traceManager === 'undefined' || !traceManager || !traceManager.eqBands) {
-                return;
-            }
+            const bands = eqStore.activeBands;
             let bandsHash = 0;
-            for (let b = 0; b < traceManager.eqBands.length; b++) {
-                const band = traceManager.eqBands[b];
+            for (let b = 0; b < bands.length; b++) {
+                const band = bands[b];
                 bandsHash += band.freq * 1e6 + band.gain * 1e3 + band.q + (band.type ? band.type.charCodeAt(0) * 100 : 0);
             }
             // Incluir sugerencias de calibración para refrescar el caché de EQ
@@ -337,17 +338,16 @@ class MathOrchestrator {
 
     private updateEQCache() {
         try {
-            if (typeof traceManager === 'undefined' || !traceManager || !traceManager.eqBands) {
-                return;
-            }
             const sr = uiStore.sampleRate;
             const nyquist = sr / 2;
 
-            // 1. Precompute coefficients ONCE per band (avoids recalculating sin/cos 4096× per band)
+            // 1. Precompute coefficients ONCE per band
+            const bands = eqStore.activeBands;
             const bandCoeffs: number[][] = [];
-            for (let b = 0; b < traceManager.eqBands.length; b++) {
-                const band = traceManager.eqBands[b];
-                if (band.gain !== 0 || !['peaking', 'low_shelf', 'high_shelf'].includes(band.type)) {
+            for (let b = 0; b < bands.length; b++) {
+                const band = bands[b];
+                // A2 fix: include notch/bandpass/lowpass/highpass even when gain=0
+                if (band.gain !== 0 || ['lowpass', 'highpass', 'notch', 'bandpass'].includes(band.type)) {
                     bandCoeffs.push(getCoeffsForType(band.type, band.freq, band.gain, band.q, sr));
                 }
             }
@@ -365,38 +365,55 @@ class MathOrchestrator {
             const TWO_PI = 2 * Math.PI;
             const invBins = nyquist / this.BINS;
 
-            // 2. Single pass over bins, evaluating all precomputed filters
+            // 2. Single pass over bins — multiply in complex domain (A1)
             for (let i = 0; i < this.BINS; i++) {
                 const freq = i * invBins || 1e-6;
                 const w = TWO_PI * freq / sr;
                 const cosW = Math.cos(w);
                 const sinW = Math.sin(w);
-                const cos2W = 2 * cosW * cosW - 1;  // cos(2w) = 2cos²(w) - 1 (avoids extra trig)
-                const sin2W = 2 * sinW * cosW;       // sin(2w) = 2sin(w)cos(w)
+                const cos2W = 2 * cosW * cosW - 1;
+                const sin2W = 2 * sinW * cosW;
 
-                let totalGain = 0;
+                // Accumulate total response as complex product H_total = H1 * H2 * ... * Hn
+                let totalRe = 1.0;
+                let totalIm = 0.0;
 
-                // Evaluate each EQ band
+                // Evaluate each EQ band in complex domain
                 for (let b = 0; b < bandCoeffs.length; b++) {
                     const c = bandCoeffs[b];
                     const nR = c[0] + c[1] * cosW + c[2] * cos2W;
                     const nI = -(c[1] * sinW + c[2] * sin2W);
                     const dR = c[3] + c[4] * cosW + c[5] * cos2W;
                     const dI = -(c[4] * sinW + c[5] * sin2W);
-                    totalGain += 10 * Math.log10((nR * nR + nI * nI) / (dR * dR + dI * dI + 1e-20));
+                    const dMagSq = dR * dR + dI * dI + 1e-20;
+                    const hRe = (nR * dR + nI * dI) / dMagSq;
+                    const hIm = (nI * dR - nR * dI) / dMagSq;
+                    // Complex multiply: total = total * H
+                    const newRe = totalRe * hRe - totalIm * hIm;
+                    const newIm = totalRe * hIm + totalIm * hRe;
+                    totalRe = newRe;
+                    totalIm = newIm;
                 }
 
-                // Evaluate each calibration filter
+                // Evaluate each calibration filter in complex domain
                 for (let c2 = 0; c2 < calCoeffs.length; c2++) {
                     const c = calCoeffs[c2];
                     const nR = c[0] + c[1] * cosW + c[2] * cos2W;
                     const nI = -(c[1] * sinW + c[2] * sin2W);
                     const dR = c[3] + c[4] * cosW + c[5] * cos2W;
                     const dI = -(c[4] * sinW + c[5] * sin2W);
-                    totalGain += 10 * Math.log10((nR * nR + nI * nI) / (dR * dR + dI * dI + 1e-20));
+                    const dMagSq = dR * dR + dI * dI + 1e-20;
+                    const hRe = (nR * dR + nI * dI) / dMagSq;
+                    const hIm = (nI * dR - nR * dI) / dMagSq;
+                    const newRe = totalRe * hRe - totalIm * hIm;
+                    const newIm = totalRe * hIm + totalIm * hRe;
+                    totalRe = newRe;
+                    totalIm = newIm;
                 }
 
-                this.eqResponseCache[i] = totalGain;
+                // Convert complex product to magnitude (dB) and phase (radians)
+                this.eqResponseCache[i] = 10 * Math.log10(totalRe * totalRe + totalIm * totalIm + 1e-20);
+                this.eqPhaseCache[i] = Math.atan2(totalIm, totalRe);
             }
         } catch (e) {
             // Ignorar ReferenceError temporal durante la carga ESM
@@ -409,6 +426,14 @@ class MathOrchestrator {
         if (idx < 0) return this.eqResponseCache[0];
         if (idx >= this.BINS) return this.eqResponseCache[this.BINS - 1];
         return this.eqResponseCache[idx];
+    }
+
+    getEQPhaseCached(f: number): number {
+        const binWidth = (uiStore.sampleRate / 2) / this.BINS;
+        const idx = Math.round(f / binWidth);
+        if (idx < 0) return this.eqPhaseCache[0];
+        if (idx >= this.BINS) return this.eqPhaseCache[this.BINS - 1];
+        return this.eqPhaseCache[idx];
     }
 
     run() {

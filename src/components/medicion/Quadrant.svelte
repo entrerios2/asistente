@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount, untrack } from "svelte";
     import { traceManager } from "$lib/stores/traceManager.svelte";
+    import { eqStore } from "$lib/stores/eqStore.svelte";
     import { uiStore } from "$lib/stores/ui.svelte";
     import { meterStore } from "$lib/stores/meterStore.svelte";
     import { mathOrchestrator } from "$lib/stores/mathOrchestrator.svelte";
@@ -422,7 +423,7 @@
                 quadrantLayers,
                 instantaneas: traceManager.instantaneas,
                 showEQOverlay,
-                eqBands: traceManager.eqBands,
+                eqBands: eqStore.activeBands,
                 hoveringEQNode,
                 draggingEQNode,
                 offscreenCanvas,
@@ -469,10 +470,10 @@
         if (
             showEQOverlay &&
             draggingEQNode === null &&
-            traceManager.eqBands.length > 0
+            eqStore.activeBands.length > 0
         ) {
             let found = -1;
-            const bands = traceManager.eqBands;
+            const bands = eqStore.activeBands;
             for (let i = 0; i < bands.length; i++) {
                 const nx = valToX(
                     bands[i].freq,
@@ -521,8 +522,13 @@
                 -30,
                 Math.min(30, parseFloat(gain.toFixed(1))),
             );
-            traceManager.updateEQBand(draggingEQNode, "freq", clampedFreq);
-            traceManager.updateEQBand(draggingEQNode, "gain", clampedGain);
+            // C1 fix: in graphic mode, only allow gain changes (freq is fixed)
+            if (eqStore.eqType === 'grafico') {
+                eqStore.updateBand(draggingEQNode, "gain", clampedGain);
+            } else {
+                eqStore.updateBand(draggingEQNode, "freq", clampedFreq);
+                eqStore.updateBand(draggingEQNode, "gain", clampedGain);
+            }
         }
 
         interactionHandleMouseMove(

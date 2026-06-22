@@ -1,9 +1,26 @@
 /**
  * EQStore: Estado centralizado de ecualización (gráfica y paramétrica).
- * Extraído de Sidebar.svelte para desacoplar el estado de la UI.
+ * Single source of truth para las bandas de EQ activas.
  */
 
-import { traceManager } from './traceManager.svelte';
+/**
+ * Calculates the correct Q factor for a graphic EQ band based on the number of bands.
+ * Uses the Audio EQ Cookbook formula: Q = sqrt(2^BW) / (2^BW - 1)
+ * where BW = totalOctaves / numBands.
+ */
+function graphicBandQ(numBands: number): number {
+    const totalOctaves = Math.log2(20000 / 20); // ≈ 9.97
+    const bwOctaves = totalOctaves / numBands;
+    const bw2 = Math.pow(2, bwOctaves);
+    return Math.sqrt(bw2) / (bw2 - 1);
+}
+
+export interface EQBand {
+    freq: number;
+    gain: number;
+    q: number;
+    type: string;
+}
 
 export interface GraphicBand {
     freq: number;
@@ -28,6 +45,9 @@ class EQStore {
     isCalculatingAutoEQ = $state(false);
     autoEQSourceLayer = $state<string>('active');
 
+    // Version counter for dirty tracking (replaces traceManager.eqBandsVersion)
+    activeBandsVersion = $state(0);
+
     graphicBands = $state<GraphicBand[]>([
         { freq: 31, gain: 0 },
         { freq: 63, gain: 0 },
@@ -50,33 +70,48 @@ class EQStore {
         { id: 6, freq: 16000, gain: 0, q: 1.0, type: "peaking", supportedTypes: ["peaking"], showConfig: false },
     ]);
 
-    constructor() {
-        // Sincronización reactiva con traceManager.eqBands
-        $effect.root(() => {
-            $effect(() => {
-                if (!this.showEQ) {
-                    traceManager.eqBands = [];
-                    return;
-                }
+    /**
+     * Single source of truth: returns the unified EQBand[] for the active EQ type.
+     * Consumers (mathOrchestrator, Quadrant, quadrantDraw) read this instead of traceManager.eqBands.
+     */
+    get activeBands(): EQBand[] {
+        if (!this.showEQ) return [];
 
-                if (this.eqType === "grafico") {
-                    traceManager.eqBands = this.graphicBands.map((b) => ({
-                        freq: b.freq,
-                        gain: b.gain,
-                        q: 1.414,
-                        type: "peaking",
-                    }));
-                } else if (this.eqType === "parametrico") {
-                    traceManager.eqBands = this.parametricFilters
-                        .map((f) => ({
-                            freq: f.freq,
-                            gain: f.gain,
-                            q: f.q,
-                            type: f.type,
-                        }));
-                }
-            });
-        });
+        if (this.eqType === "grafico") {
+            const q = graphicBandQ(this.graphicBands.length);
+            return this.graphicBands.map((b) => ({
+                freq: b.freq,
+                gain: b.gain,
+                q,
+                type: "peaking",
+            }));
+        } else {
+            return this.parametricFilters.map((f) => ({
+                freq: f.freq,
+                gain: f.gain,
+                q: f.q,
+                type: f.type,
+            }));
+        }
+    }
+
+    /**
+     * Updates a band parameter and bumps the version counter.
+     * Replaces traceManager.updateEQBand().
+     */
+    updateBand(index: number, field: 'freq' | 'gain' | 'q' | 'type', value: number | string) {
+        if (this.eqType === 'grafico') {
+            if (field === 'gain') {
+                this.graphicBands[index].gain = value as number;
+            }
+            // In graphic mode, freq/q/type are fixed — only gain changes
+        } else {
+            const filter = this.parametricFilters[index];
+            if (filter) {
+                (filter as any)[field] = value;
+            }
+        }
+        this.activeBandsVersion++;
     }
 
     loadFromConfig(config: any) {

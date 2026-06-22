@@ -1,0 +1,673 @@
+# Plan de Mejora del Sistema de Ecualización (v4)
+
+## Contexto
+
+El sistema de EQ actual permite definir filtros paramétricos y gráficos, visualiza la curva de EQ como overlay, y simula la magnitud resultante (`Simulated Magnitude`). Sin embargo tiene problemas de fidelidad DSP, interacción limitada, y oportunidades de optimización.
+
+### Archivos involucrados
+
+| Archivo | Rol |
+|---|---|
+| [biquad.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/biquad.ts) | Cálculo de coeficientes y respuesta de filtros biquad (Audio EQ Cookbook) |
+| [eqStore.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/eqStore.svelte.ts) | Estado de la UI del EQ (tipo, bandas gráficas, filtros paramétricos) |
+| [traceManager.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/traceManager.svelte.ts) | Almacena `eqBands[]` como estado reactivo compartido |
+| [mathOrchestrator.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/mathOrchestrator.svelte.ts) | `updateEQCache()` y `getEQResponseCached()` — precomputa la respuesta por bin |
+| [canvasRenderers.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/canvasRenderers.ts) | `drawSimulatedMagnitudePath()` y `drawEQOverlayPath()` |
+| [quadrantDraw.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/quadrantDraw.ts) | Invoca el overlay y dibuja los nodos draggables |
+| [Quadrant.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/components/medicion/Quadrant.svelte) | Mouse/touch handlers para drag de nodos EQ |
+| [TabEcualizar.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/components/medicion/TabEcualizar.svelte) | Panel lateral del EQ (controles gráficos/paramétricos) |
+
+---
+
+## Problemas Detectados
+
+### P1. Solo magnitud, sin fase del EQ
+El caché `eqResponseCache[i]` solo almacena **magnitud (dB)**. No se computa la **fase**.
+
+### P2. EQ gráfico usa Q fijo (1.414)
+Todas las bandas usan `q: 1.414` independientemente de la resolución (10 vs 31 bandas).
+
+### P3. EQ gráfico permite cambiar frecuencia por drag
+En modo gráfico las frecuencias son fijas.
+
+### P4. AutoEQ es un placeholder (random)
+`runAutoEQ()` genera valores random con un `setTimeout` falso.
+
+### P5. Suma en dB es una aproximación
+`updateEQCache()` suma dB por filtro. Debería multiplicar en dominio complejo.
+
+### P6. Condición de filtros invertida
+Excluye `notch` y `bandpass` cuando `gain === 0`.
+
+### P7. Duplicación de estado `eqBands`
+`traceManager.eqBands` y `eqStore` duplican estado.
+
+### P8. AutoEQ no permite elegir la fuente de datos
+Actualmente solo trabaja con la medición live. No se puede elegir un snapshot, una capa calculada (promedio de múltiples posiciones), ni ver la ecualización simulada sobre múltiples mediciones.
+
+### P9. No hay métricas de evaluación de efectividad
+No existe un scorecard que muestre qué tan bien la ecualización corrige la respuesta vs la curva target. El archivo [deviationMetrics.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/deviationMetrics.ts) tiene `computeDeviation()` con RMS y Peak, pero no se usa para evaluar AutoEQ ni se muestra antes/después.
+
+---
+
+## Análisis de Factibilidad: Todos los Algoritmos de AutoEQ
+
+> [!NOTE]
+> **Conclusión:** autoeq.app ejecuta Python en servidor y envía resultados al frontend. Sin embargo, todos los algoritmos son implementables en TypeScript puro en el browser. La clave es que nuestra función objetivo (evaluar biquad response) es extremadamente rápida — evaluar 4096 bins × 10 filtros toma ~0.1ms en JS. El cuello de botella nunca es la evaluación, sino la cantidad de iteraciones.
+
+### Análisis por algoritmo
+
+| Algoritmo | Implementable en TS? | Líneas estimadas | Tiempo por ejecución (6 filtros) | Dependencias |
+|---|---|---|---|---|
+| **Greedy Sequential** | ✅ Trivial | ~150 | <100ms | Ninguna |
+| **Nelder-Mead** | ✅ Fácil | ~120 | 200-500ms | Ninguna |
+| **PSO** | ✅ Fácil | ~100 | 500ms-2s | Ninguna |
+| **Genetic Algorithm** | ✅ Medio | ~150 | 1-3s | Ninguna |
+| **Energy Domain (AcoustiQ)** | ✅ Medio | ~80 (variante del objetivo) | Similar al solver usado | Usa uno de los anteriores como solver |
+
+> [!IMPORTANT]
+> **"Energy Domain" no es un algoritmo separado** — es una **variante de la función objetivo** (optimizar en magnitud lineal² en vez de dB). Se puede combinar con cualquiera de los 4 solvers. Lo implementamos como un flag `costDomain: 'dB' | 'energy'` en la configuración.
+
+### Decisión: Implementar los 4 algoritmos
+
+Todos son implementables en TypeScript puro sin dependencias externas, con tamaños de ~100-150 líneas cada uno. El usuario elige cuál usar según su preferencia de velocidad vs calidad.
+
+```
+src/lib/dsp/
+├── autoEQ.ts           ← Orquestador: interfaz común + peak detection
+├── optimizers/
+│   ├── greedyEQ.ts     ← Greedy Sequential (~150 líneas)
+│   ├── nelderMead.ts   ← Nelder-Mead simplex (~120 líneas)
+│   ├── psoEQ.ts        ← Particle Swarm Optimization (~100 líneas)
+│   └── geneticEQ.ts    ← Genetic Algorithm (~150 líneas)
+└── biquad.ts           ← (existente) Coeficientes biquad
+```
+
+---
+
+## Cambios Propuestos
+
+### Grupo A — Correcciones de Fidelidad DSP (Críticas)
+
+#### A1. [MODIFY] [mathOrchestrator.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/mathOrchestrator.svelte.ts) — Respuesta compleja
+
+Cambiar `updateEQCache()` para evaluar en dominio complejo (multiplicando H₁ × H₂ × ... × Hₙ) y almacenar tanto magnitud como fase.
+
+Agregar `eqPhaseCache: Float32Array` y `getEQPhaseCached(f: number): number`.
+
+#### A2. [MODIFY] [mathOrchestrator.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/mathOrchestrator.svelte.ts) — Fix condición
+
+```diff
+-if (band.gain !== 0 || !['peaking', 'low_shelf', 'high_shelf'].includes(band.type)) {
++if (band.gain !== 0 || ['lowpass', 'highpass', 'notch', 'bandpass'].includes(band.type)) {
+```
+
+#### A3. [MODIFY] [eqStore.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/eqStore.svelte.ts) — Q correcto por resolución
+
+```ts
+function graphicBandQ(numBands: number): number {
+    const totalOctaves = Math.log2(20000 / 20);
+    const bwOctaves = totalOctaves / numBands;
+    const bw2 = Math.pow(2, bwOctaves);
+    return Math.sqrt(bw2) / (bw2 - 1);
+}
+```
+
+---
+
+### Grupo B — Visualización de Fase del EQ
+
+#### B1. [MODIFY] [canvasRenderers.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/canvasRenderers.ts) — Fase en overlay
+
+Curva de **fase del EQ** como línea punteada fina (1px, dash `[4,3]`), amarillo atenuado, escala Y de Phase.
+
+#### B2. [NEW] `drawSimulatedPhasePath()` en [canvasRenderers.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/canvasRenderers.ts)
+
+`interpPhase[i] + eqPhaseCache[i]`.
+
+#### B3. [MODIFY] [quadrantDraw.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/quadrantDraw.ts)
+
+Soporte para "Simulated Phase" como nueva pill.
+
+---
+
+### Grupo C — Fix de Interacción Gráfica
+
+#### C1. [MODIFY] [Quadrant.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/components/medicion/Quadrant.svelte)
+
+En modo gráfico, drag solo modifica gain (no freq).
+
+---
+
+### Grupo D — Motor de AutoEQ Multi-Algoritmo
+
+#### D1. [NEW] [autoEQ.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/autoEQ.ts) — Orquestador
+
+```ts
+// === Tipos comunes ===
+export type OptimizerAlgorithm = 'greedy' | 'nelder-mead' | 'pso' | 'genetic' | 'all';
+export type CostDomain = 'dB' | 'energy';
+
+export interface AutoEQConfig {
+    algorithm: OptimizerAlgorithm;
+    costDomain: CostDomain;          // dB (clásico) o energy (AcoustiQ-style)
+    numFilters: number;               // Para paramétrico
+    allowedTypes: FilterType[];
+    freqRange: [number, number];
+    maxBoost: number;
+    maxCut: number;
+    minQ: number;
+    maxQ: number;
+    coherenceThreshold: number;
+    maxIterations: number;
+    preamp: 'auto' | number;
+    trebleAveraging: boolean;         // Opcional
+    trebleFreq: number;
+    onlyCorrectPeaks: boolean;        // Solo cuts, sin boosts
+    // PSO-specific
+    psoPopulation: number;            // 30
+    psoInertia: number;               // 0.7
+    psoCognitive: number;             // 1.5
+    psoSocial: number;                // 1.5
+    // GA-specific
+    gaPopulation: number;             // 50
+    gaMutationRate: number;           // 0.1
+    gaCrossoverRate: number;          // 0.8
+    gaElitism: number;                // 2
+}
+
+export interface AutoEQResult {
+    filters: { fc: number; gain: number; q: number; type: string }[];
+    preamp: number;
+    residualMSE: number;
+    iterations: number;
+    timeMs: number;
+    algorithm: OptimizerAlgorithm;
+}
+
+export interface ProgressCallback {
+    (iteration: number, mse: number, bestFilters: AutoEQResult['filters']): void;
+}
+
+// === Función principal ===
+export function runAutoEQ(
+    magnitude: Float32Array,
+    target: Float32Array,
+    coherence: Float32Array | null,
+    bins: number,
+    sampleRate: number,
+    config: AutoEQConfig,
+    onProgress?: ProgressCallback
+): AutoEQResult;
+```
+
+**Función objetivo compartida:**
+```ts
+function computeCost(
+    filters: FilterParams[],
+    magnitude: Float32Array,
+    target: Float32Array,
+    weights: Float32Array,    // coherencia normalizada
+    bins: number,
+    sampleRate: number,
+    domain: CostDomain
+): number {
+    // 1. Computar respuesta compleja del EQ
+    // 2. Si domain === 'dB':
+    //      cost = Σ(weight[i] * (mag[i] + eqResp[i] - target[i])²) / Σweight
+    // 3. Si domain === 'energy':
+    //      cost = Σ(weight[i] * (10^((mag[i]+eqResp[i])/10) - 10^(target[i]/10))²) / Σweight
+    // 4. + sharpness penalty
+}
+```
+
+**Peak detection compartido (para inicialización):**
+```ts
+function findPeaksAndDips(
+    error: Float32Array,
+    freqs: Float32Array,
+    minProminence: number
+): { index: number; height: number; width: number; isPositive: boolean }[]
+```
+
+#### D2. [NEW] [optimizers/greedyEQ.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/optimizers/greedyEQ.ts) — Greedy Sequential
+
+**~150 líneas.** Inspirado en REW.
+
+```ts
+export function optimizeGreedy(
+    error: Float32Array,       // target - measured
+    freqs: Float32Array,
+    weights: Float32Array,
+    config: AutoEQConfig,
+    sampleRate: number,
+    onProgress?: ProgressCallback
+): FilterParams[]
+```
+
+Algoritmo:
+1. Detectar peaks/dips en el error ponderado.
+2. Para cada filtro (de mayor a menor desviación):
+   a. `fc` = frecuencia del peak más grande
+   b. `gain` = `-peakHeight` (clamped a maxCut/maxBoost)
+   c. `Q` = estimado del ancho del pico (`fc / bandwidth_hz`)
+   d. Si el peak está en extremo bajo → considerar `low_shelf`
+   e. Si está en extremo alto → considerar `high_shelf`
+   f. Restar respuesta del filtro del error residual
+   g. Reportar progreso
+3. Retornar filtros.
+
+#### D3. [NEW] [optimizers/nelderMead.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/optimizers/nelderMead.ts) — Nelder-Mead
+
+**~120 líneas.** Implementación pura TypeScript.
+
+```ts
+export function nelderMead(
+    fn: (x: number[]) => number,
+    x0: number[],
+    options: {
+        maxIterations: number;
+        tolerance: number;
+        bounds?: [number, number][];  // soft constraints via penalty
+    }
+): { x: number[]; fval: number; iterations: number }
+```
+
+Operaciones del simplex:
+- **Reflection** (α=1): refleja el peor punto a través del centroide
+- **Expansion** (γ=2): si la reflexión mejoró, intentar expandir más
+- **Contraction** (ρ=0.5): si no mejoró, contraer
+- **Shrink** (σ=0.5): si nada funciona, encoger todo hacia el mejor punto
+
+Bounds implementados como penalty suave en la función objetivo.
+
+Se usa en combinación con el orquestador: toma la inicialización greedy como `x0`.
+
+#### D4. [NEW] [optimizers/psoEQ.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/optimizers/psoEQ.ts) — Particle Swarm
+
+**~100 líneas.** Implementación pura TypeScript.
+
+```ts
+export function particleSwarm(
+    fn: (x: number[]) => number,
+    dimensions: number,
+    bounds: [number, number][],
+    options: {
+        population: number;     // 30
+        maxIterations: number;  // 200
+        inertia: number;        // 0.7
+        cognitive: number;      // 1.5
+        social: number;         // 1.5
+    },
+    onProgress?: (iter: number, bestCost: number) => void
+): { x: number[]; fval: number; iterations: number }
+```
+
+Algoritmo:
+1. Inicializar partículas con posiciones random dentro de bounds
+2. Para cada iteración:
+   a. Evaluar fitness de cada partícula
+   b. Actualizar personal best y global best
+   c. Actualizar velocidad: `v = w*v + c1*r1*(pbest-x) + c2*r2*(gbest-x)`
+   d. Actualizar posición: `x = x + v`
+   e. Clamp a bounds
+3. Retornar global best.
+
+#### D5. [NEW] [optimizers/geneticEQ.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/optimizers/geneticEQ.ts) — Genetic Algorithm
+
+**~150 líneas.** Implementación pura TypeScript.
+
+```ts
+export function geneticOptimize(
+    fn: (x: number[]) => number,
+    dimensions: number,
+    bounds: [number, number][],
+    options: {
+        population: number;      // 50
+        maxIterations: number;   // 200
+        mutationRate: number;    // 0.1
+        crossoverRate: number;   // 0.8
+        elitism: number;         // 2
+    },
+    onProgress?: (gen: number, bestCost: number) => void
+): { x: number[]; fval: number; iterations: number }
+```
+
+Algoritmo:
+1. Inicializar población random dentro de bounds
+2. Para cada generación:
+   a. Evaluar fitness
+   b. Selección por torneo (tournament size = 3)
+   c. Crossover uniforme (mezclar genes de 2 padres)
+   d. Mutación gaussiana (perturbar genes con probabilidad `mutationRate`)
+   e. Elitismo: los top-N pasan directamente
+3. Retornar mejor individuo.
+
+#### D6. [MODIFY] [TabEcualizar.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/components/medicion/TabEcualizar.svelte) — UI del AutoEQ
+
+Panel de configuración con:
+
+**Sección principal:**
+- Selector de algoritmo: `Greedy` | `Nelder-Mead` | `PSO` | `Genético` | **`Benchmark (todos)`**
+- Descripción breve del algoritmo seleccionado
+- Dominio de costo: `dB` | `Energía`
+
+**Controles generales:**
+
+| Control | Default | Rango |
+|---|---|---|
+| Número de filtros | 6 | 1-20 |
+| Tipos permitidos | Peak, LS, HS | Checkboxes |
+| Rango de frecuencia | 20-20000 Hz | Dual slider |
+| Max boost (dB) | +6 | 0-20 |
+| Max cut (dB) | -12 | -30 a 0 |
+| Min Q | 0.2 | 0.1-1 |
+| Max Q | 6.0 | 1-20 |
+| Umbral coherencia | 0.3 | 0-1 |
+| Max iteraciones | 200 | 50-1000 |
+| Treble averaging | ✓ on | Toggle (opcional) |
+| Treble freq | 10000 | 5000-15000 |
+| Solo cortar | off | Toggle |
+| Preamp | auto | -20 a +6 / auto |
+
+**Controles específicos por algoritmo** (expandible):
+- **PSO:** Población, Inercia, Cognitivo, Social
+- **Genético:** Población, Tasa mutación, Tasa crossover, Elitismo
+- **Nelder-Mead:** Tolerancia
+- **Greedy:** (sin parámetros adicionales)
+
+**UI de ejecución:**
+- Barra de progreso con MSE actual
+- Botón "Preview" → muestra overlay sin aplicar
+- Botón "Aplicar" → transfiere filtros a eqStore
+- Botón "Cancelar" → aborta la optimización
+- Tabla de resultados: filtros con fc, gain, Q, tipo
+
+**Para EQ gráfico (20+ bandas):**
+- Solo Greedy disponible (inversión directa ponderada por coherencia)
+- Los otros algoritmos no aplican (frecuencias y Q fijos)
+
+#### D7. [MODIFY] [eqStore.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/eqStore.svelte.ts) — Estado AutoEQ
+
+Agregar `autoEQConfig` con todos los controles como estado reactivo persistible.
+
+#### D8. Modo "Benchmark All" en [autoEQ.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/autoEQ.ts)
+
+Cuando `algorithm === 'all'`, ejecutar los 4 algoritmos secuencialmente y retornar todos los resultados:
+
+```ts
+export interface BenchmarkResult {
+    results: {
+        algorithm: OptimizerAlgorithm;
+        result: AutoEQResult;
+        metrics: DeviationResult;       // Métricas después de aplicar este EQ
+        improvement: number;            // % mejora vs sin EQ
+    }[];
+    best: OptimizerAlgorithm;           // Ranking automático por WMSE
+    totalTimeMs: number;
+}
+
+export async function benchmarkAll(
+    magnitude: Float32Array,
+    target: Float32Array,
+    coherence: Float32Array | null,
+    bins: number,
+    sampleRate: number,
+    config: AutoEQConfig,
+    onProgress?: (algorithm: string, progress: number) => void
+): Promise<BenchmarkResult>
+```
+
+**Flujo:**
+1. Ejecutar Greedy (≈100ms)
+2. Ejecutar Nelder-Mead con inicialización Greedy (≈500ms)
+3. Ejecutar PSO (≈1-2s)
+4. Ejecutar GA (≈1-3s)
+5. Para cada resultado, computar métricas (`computeDeviation` con EQ aplicado)
+6. Rankear por Weighted MSE (menor = mejor)
+7. Retornar todos los resultados + ranking
+
+**Tiempo total estimado:** 3-6 segundos para 6 filtros. Aceptable para una operación que el usuario lanza explícitamente.
+
+**UI del Benchmark** (en TabEcualizar):
+
+```
+┌───────────────────────────────────────────────┐
+│  COMPARACIÓN DE ALGORITMOS                    │
+│  ┌───────────┬───────┬───────┬───────┬─────────┐ │
+│  │ Algo.     │ WMSE  │ RMS   │ ±3dB  │ Tiempo  │ │
+│  ├───────────┼───────┼───────┼───────┼─────────┤ │
+│  │ ⭐ NM     │ 1.2   │ 1.8   │ 92%   │ 420ms   │ │
+│  │ PSO       │ 1.4   │ 2.0   │ 89%   │ 1.8s    │ │
+│  │ Greedy    │ 2.1   │ 2.4   │ 85%   │ 80ms    │ │
+│  │ Genético  │ 1.5   │ 2.1   │ 88%   │ 2.4s    │ │
+│  └───────────┴───────┴───────┴───────┴─────────┘ │
+│                                               │
+│  ⭐ = Recomendado (mejor WMSE)                 │
+│  [Usar NM] [Usar PSO] [Usar Greedy] [Usar GA] │
+│  [Preview NM ◉] [Preview PSO ○]                │
+└───────────────────────────────────────────────┘
+```
+
+- Tabla ordenada por WMSE (mejor primero)
+- ⭐ marca el recomendado
+- Botón "Usar" por cada algoritmo para aplicar esos filtros
+- Radio "Preview" para ver el overlay de cada resultado sin aplicar
+- Al hacer click en una fila, se muestra el detalle de filtros de ese algoritmo
+- Barra de progreso durante la ejecución muestra qué algoritmo está corriendo
+
+---
+
+### Grupo E — Limpieza Arquitectónica
+
+#### E1. [MODIFY] [traceManager.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/traceManager.svelte.ts)
+Eliminar `eqBands` y `eqBandsVersion`.
+
+#### E2. [MODIFY] [eqStore.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/eqStore.svelte.ts)
+Exponer getter `activeBands: EQBand[]`.
+
+#### E3. [MODIFY] refs en mathOrchestrator, Quadrant, quadrantDraw
+`traceManager.eqBands` → `eqStore.activeBands`.
+
+---
+
+### Grupo F — Optimizaciones de Performance
+
+#### F1. [MODIFY] [mathOrchestrator.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/mathOrchestrator.svelte.ts)
+Memoizar coeficientes biquad.
+
+---
+
+### Grupo G — Selección de Fuente de Datos para AutoEQ
+
+> [!IMPORTANT]
+> El usuario debe poder elegir **sobre qué medición** calcular la ecualización. Esto es fundamental para un workflow profesional de optimización multi-posición (ej: medir en 3-5 posiciones, promediar, y ecualizar sobre el promedio).
+
+#### G1. [MODIFY] [eqStore.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/eqStore.svelte.ts) — Estado de fuente
+
+Agregar estado para la selección de fuente de datos del AutoEQ:
+
+```ts
+autoEQSource = $state<{
+    type: 'live' | 'snapshot' | 'calculated';
+    // Para snapshot: IDs de las instantáneas seleccionadas
+    snapshotIds: string[];
+    // Para calculated: operación sobre las snapshots seleccionadas
+    calcOperation: 'average' | 'min' | 'max';
+}>({
+    type: 'live',
+    snapshotIds: [],
+    calcOperation: 'average'
+});
+```
+
+#### G2. [MODIFY] [TabEcualizar.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/components/medicion/TabEcualizar.svelte) — UI de selección de fuente
+
+**Panel "Fuente de Datos"** (arriba del panel de AutoEQ):
+
+1. **Selector de tipo:** Radio buttons `Medición Live` | `Snapshots` | `Capa Calculada`
+2. **Si "Snapshots":**
+   - Lista de instantáneas disponibles con checkboxes para seleccionar múltiples
+   - Al seleccionar múltiples, se muestra un selector de operación: `Promedio` | `Mínimo` | `Máximo`
+   - La magnitud usada para el cálculo es el resultado de la operación sobre los snapshots seleccionados
+3. **Si "Capa Calculada":**
+   - Dropdown con las capas calculadas existentes (`traceManager.layers.filter(l => l.isCalculated)`)
+4. **Si "Medición Live":**
+   - Usa `mathOrchestrator.outputMagnitude` directamente (comportamiento actual)
+
+#### G3. [MODIFY] [autoEQ.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/autoEQ.ts) — Resolver fuente
+
+Agregar función que resuelva el `Float32Array` de magnitud según la fuente seleccionada:
+
+```ts
+function resolveMagnitudeSource(
+    source: AutoEQSource,
+    traceManager: TraceManager,
+    mathOrchestrator: MathOrchestrator
+): { magnitude: Float32Array; coherence: Float32Array | null }
+```
+
+- Para `'live'`: `mathOrchestrator.outputMagnitude` + `mathOrchestrator.outputCoherence`
+- Para `'snapshot'`: extraer `data['Magnitude']` de los snapshots seleccionados. Si hay múltiples, computar la operación (promedio/min/max) bin a bin. Coherence = promedio de `data['Coherence']` si existe.
+- Para `'calculated'`: usar `layer.data`.
+
+#### G4. [MODIFY] [canvasRenderers.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/canvasRenderers.ts) — Simulated sobre snapshots
+
+Cuando se aplica la ecualización, mostrar el overlay de **Simulated Magnitude** no solo sobre la medición principal, sino también sobre cada snapshot activo (visible) como curvas semi-transparentes. Esto permite al usuario ver cómo la ecualización afecta cada posición individual.
+
+```ts
+// Para cada snapshot visible:
+//   simulated[i] = snapshot.data['Magnitude'][i] + eqResponseCache[i]
+// Dibujar como líneas más finas (0.5px) en el color del snapshot con alpha 0.3
+```
+
+---
+
+### Grupo H — Métricas de Evaluación de Efectividad del EQ
+
+> [!IMPORTANT]
+> Agregar un **scorecard** que cuantifique la efectividad de la ecualización comparando antes vs después. Esto permite evaluar y comparar algoritmos objetivamente.
+
+#### H1. [MODIFY] [deviationMetrics.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/deviationMetrics.ts) — Ampliar métricas
+
+Expandir `computeDeviation()` y agregar nuevas métricas:
+
+```ts
+export interface DeviationResult {
+    rms: number;              // RMS deviation (dB) — existente
+    peak: number;             // Peak deviation (dB) — existente
+    count: number;            // Bins evaluados — existente
+    weightedMSE: number;      // MSE ponderado por coherencia (NUEVO)
+    spectralFlatness: number; // Flatness del error: 0 = muy variable, 1 = uniforme (NUEVO)
+    meanDeviation: number;    // Desviación media con signo (bias) (NUEVO)
+    percentWithin3dB: number; // % de bins dentro de ±3dB del target (NUEVO)
+    percentWithin6dB: number; // % de bins dentro de ±6dB del target (NUEVO)
+}
+```
+
+**Nuevas métricas:**
+
+| Métrica | Fórmula | Qué mide |
+|---|---|---|
+| **RMS** (existente) | `√(Σ(diff²)/N)` | Desviación general promedio |
+| **Peak** (existente) | `max(|diff|)` | Peor desviación puntual |
+| **Weighted MSE** | `Σ(w·diff²)/Σw` donde w = coherencia | Desviación pesada por confianza |
+| **Spectral Flatness** | `geomean(|diff|) / mean(|diff|)` | Uniformidad del error residual |
+| **Mean Deviation** | `Σ(diff)/N` | Bias: si el EQ está sistemáticamente arriba o abajo |
+| **% within ±3dB** | `count(|diff| < 3) / N × 100` | Fracción "aceptable" |
+| **% within ±6dB** | `count(|diff| < 6) / N × 100` | Fracción "tolerable" |
+
+#### H2. [NEW] Spatial Consistency (σ entre snapshots)
+
+Cuando se tienen múltiples snapshots (ej: 3 posiciones), calcular la **desviación estándar posición a posición** después de aplicar el EQ:
+
+```ts
+export function computeSpatialConsistency(
+    snapshots: Float32Array[],   // Magnitud de cada snapshot
+    eqResponse: Float32Array,    // Respuesta del EQ
+    bins: number,
+    sampleRate: number,
+    freqRange: [number, number]
+): {
+    stdDevPerBin: Float32Array;  // σ por bin (para graficar)
+    meanStdDev: number;          // σ promedio (un número)
+    maxStdDev: number;           // σ peor caso
+}
+```
+
+Esto mide qué tan **consistente** es la corrección entre posiciones. Un buen EQ debería reducir la varianza espacial (según McCarthy §14 y SMPTE 202M: meta < 3dB).
+
+#### H3. [MODIFY] [TabEcualizar.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/components/medicion/TabEcualizar.svelte) — Panel de scorecard
+
+Agregar un panel **"Evaluación"** después del resultado del AutoEQ:
+
+```
+┌─────────────────────────────────────────┐
+│  EVALUACIÓN DEL EQ                      │
+│  ┌──────────────┬──────────┬──────────┐ │
+│  │ Métrica      │ Antes    │ Después  │ │
+│  ├──────────────┼──────────┼──────────┤ │
+│  │ RMS (dB)     │ 8.2      │ 2.1  ↓   │ │
+│  │ Peak (dB)    │ 15.3     │ 4.8  ↓   │ │
+│  │ WMSE         │ 12.4     │ 1.9  ↓   │ │
+│  │ ±3dB (%)     │ 34%      │ 87%  ↑   │ │
+│  │ ±6dB (%)     │ 71%      │ 98%  ↑   │ │
+│  │ Bias (dB)    │ +2.1     │ -0.2     │ │
+│  │ Spatial σ    │ 4.5      │ 3.1  ↓   │ │
+│  └──────────────┴──────────┴──────────┘ │
+│  Score general: ████████░░ 82%          │
+└─────────────────────────────────────────┘
+```
+
+- **Antes:** métricas de la medición original vs target
+- **Después:** métricas de (medición + EQ) vs target
+- **Flechas:** ↑/↓ indican mejora o empeoramiento
+- **Score general:** promedio ponderado de las mejoras (heurístico)
+- **Spatial σ:** solo visible si hay múltiples snapshots seleccionados
+
+---
+
+## Orden de Implementación
+
+1. **Grupo A** — fidelidad DSP
+2. **Grupo E** — limpieza arquitectónica
+3. **Grupo C** — fix drag gráfico
+4. **Grupo B** — visualización de fase
+5. **Grupo G** — selección de fuente de datos
+6. **Grupo H** — métricas de evaluación (H1, H2)
+7. **Grupo D** — AutoEQ multi-algoritmo (D1 orquestador → D2 greedy → D3 NM → D4 PSO → D5 GA → D7 estado → D6 UI)
+8. **Grupo H3** — panel de scorecard (requiere D completo)
+9. **Grupo F** — optimización
+
+---
+
+## Verification Plan
+
+### Automated Tests
+- `npm run build` — sin errores.
+
+### Manual Verification
+1. Peaking filter +6dB @ 1kHz Q=1 → curva correcta
+2. Dos filtros solapados → multiplicación compleja
+3. EQ gráfico 31 bandas → Q ≈ 4.3
+4. Simulated Magnitude/Phase correctos
+5. Fase del EQ visible en overlay
+6. Modo gráfico: drag solo gain
+7. AutoEQ con fuente live → funciona como antes
+8. AutoEQ con snapshot seleccionado → usa los datos del snapshot
+9. AutoEQ con múltiples snapshots + promedio → optimiza sobre el promedio
+10. Simulated overlay visible sobre cada snapshot activo
+11. Greedy reduce MSE rápidamente
+12. Nelder-Mead mejora sobre Greedy
+13. PSO encuentra soluciones globales
+14. GA converge (más lento pero robusto)
+15. Dominio energía vs dB → diferencias visibles
+16. EQ gráfico 31 bandas + Greedy funciona
+17. Treble averaging toggle on/off
+18. Scorecard muestra antes/después correctamente
+19. Spatial σ baja cuando se ecualiza sobre promedio de posiciones
+20. Modo Benchmark ejecuta los 4 algoritmos y muestra tabla comparativa
+21. El ranking automático por WMSE es correcto
+22. Botón "Usar" aplica los filtros del algoritmo seleccionado
+23. Preview alterna entre resultados de distintos algoritmos
+24. Cancelar optimización funciona
