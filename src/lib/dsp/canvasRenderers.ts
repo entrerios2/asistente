@@ -1300,3 +1300,56 @@ export function drawEQOverlayPath(
 
     ctx.setLineDash([]);
 }
+
+/**
+ * B1+B2: Draw the EQ filter phase response overlay on the Phase Y-axis.
+ * Uses the precomputed phase cache from mathOrchestrator.
+ */
+export function drawEQPhaseOverlayPath(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    metricConfigs: Record<string, MetricConfig>,
+    state: InteractionState,
+    getEQPhaseCached: (f: number) => number,
+    bins: number,
+    sampleRate: number = 48000
+) {
+    ctx.setLineDash([6, 4]);
+    ctx.strokeStyle = '#00e5ff';
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = 0.7;
+
+    const path = new Path2D();
+    const binWidth = sampleRate / 2 / bins;
+    let started = false;
+    let prevX = -100;
+
+    for (let bin = 1; bin < bins; bin++) {
+        const freq = bin * binWidth;
+        if (freq < freqMin || freq > freqMax) continue;
+        const x = valToX(freq, width, false, state);
+        if (x < -10 || x > width + 10) continue;
+        if (x - prevX < 2 && prevX > -100) continue;
+        prevX = x;
+
+        // Phase in radians → degrees for display on Phase axis
+        const phaseRad = getEQPhaseCached(freq);
+        const phaseDeg = phaseRad * (180 / Math.PI);
+        const y = valToY(phaseDeg, height, "Phase", metricConfigs, state);
+
+        if (!started) {
+            path.moveTo(x, y);
+            started = true;
+        } else {
+            path.lineTo(x, y);
+        }
+    }
+
+    if (started) {
+        ctx.stroke(path);
+    }
+
+    ctx.globalAlpha = 1.0;
+    ctx.setLineDash([]);
+}

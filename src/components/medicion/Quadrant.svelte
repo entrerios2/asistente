@@ -321,6 +321,7 @@
     let _cachedCtx: CanvasRenderingContext2D | null = null;
     const _identitySmooth = (idx: number, arr: Float32Array) => arr[idx];
     const _boundGetEQResponse = mathOrchestrator.getEQResponseCached.bind(mathOrchestrator);
+    const _boundGetEQPhase = mathOrchestrator.getEQPhaseCached.bind(mathOrchestrator);
 
     function draw() {
         if (!canvas) return;
@@ -419,6 +420,7 @@
                 getImpulseValueInterpolated,
                 getMetricAlpha,
                 getEQResponseCached: _boundGetEQResponse,
+                getEQPhaseCached: _boundGetEQPhase,
                 myLayers,
                 quadrantLayers,
                 instantaneas: traceManager.instantaneas,

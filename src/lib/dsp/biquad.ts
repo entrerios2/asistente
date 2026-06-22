@@ -119,19 +119,44 @@ export function bandpassCoeffs(fc: number, _gain: number, Q: number, fs: number)
     return [b0 / a0, b1 / a0, b2 / a0, 1.0, a1 / a0, a2 / a0];
 }
 
+/**
+ * F1: Coefficient memoization cache.
+ * Key: "type|fc|gain|Q|fs" (rounded to 3 decimals for floating point stability).
+ * LRU eviction at 256 entries to bound memory.
+ */
+const _coeffCache = new Map<string, number[]>();
+const _COEFF_CACHE_MAX = 256;
+
+function _coeffCacheKey(type: string, fc: number, gain: number, Q: number, fs: number): string {
+    return `${type}|${fc.toFixed(3)}|${gain.toFixed(3)}|${Q.toFixed(3)}|${fs}`;
+}
+
 export function getCoeffsForType(
     type: string, fc: number, gain: number, Q: number, fs: number
 ): number[] {
+    const key = _coeffCacheKey(type, fc, gain, Q, fs);
+    const cached = _coeffCache.get(key);
+    if (cached) return cached;
+
+    let result: number[];
     switch (type) {
-        case 'peaking':                        return peakingCoeffs(fc, gain, Q, fs);
-        case 'low_shelf':  case 'lowshelf':    return lowShelfCoeffs(fc, gain, Q, fs);
-        case 'high_shelf': case 'highshelf':   return highShelfCoeffs(fc, gain, Q, fs);
-        case 'lowpass':                        return lowpassCoeffs(fc, gain, Q, fs);
-        case 'highpass':                       return highpassCoeffs(fc, gain, Q, fs);
-        case 'notch':                          return notchCoeffs(fc, gain, Q, fs);
-        case 'bandpass':                       return bandpassCoeffs(fc, gain, Q, fs);
-        default:                               return peakingCoeffs(fc, gain, Q, fs);
+        case 'peaking':                        result = peakingCoeffs(fc, gain, Q, fs); break;
+        case 'low_shelf':  case 'lowshelf':    result = lowShelfCoeffs(fc, gain, Q, fs); break;
+        case 'high_shelf': case 'highshelf':   result = highShelfCoeffs(fc, gain, Q, fs); break;
+        case 'lowpass':                        result = lowpassCoeffs(fc, gain, Q, fs); break;
+        case 'highpass':                       result = highpassCoeffs(fc, gain, Q, fs); break;
+        case 'notch':                          result = notchCoeffs(fc, gain, Q, fs); break;
+        case 'bandpass':                       result = bandpassCoeffs(fc, gain, Q, fs); break;
+        default:                               result = peakingCoeffs(fc, gain, Q, fs); break;
     }
+
+    // LRU eviction: remove oldest if at capacity
+    if (_coeffCache.size >= _COEFF_CACHE_MAX) {
+        const firstKey = _coeffCache.keys().next().value;
+        if (firstKey !== undefined) _coeffCache.delete(firstKey);
+    }
+    _coeffCache.set(key, result);
+    return result;
 }
 
 /**

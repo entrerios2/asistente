@@ -16,7 +16,8 @@ import {
     drawScope,
     drawCrestFactor,
     drawPhaseDelay,
-    drawEQOverlayPath
+    drawEQOverlayPath,
+    drawEQPhaseOverlayPath
 } from './canvasRenderers';
 import {
     freqMin,
@@ -64,6 +65,7 @@ export interface DrawParams {
     getImpulseValueInterpolated: (timeMs: number, arr: Float32Array) => number;
     getMetricAlpha: (metric: string) => number;
     getEQResponseCached: (freq: number) => number;
+    getEQPhaseCached: (freq: number) => number;
 
     // Capas y snapshots
     myLayers: MeasurementLayer[];
@@ -591,6 +593,17 @@ export function drawQuadrant(p: DrawParams): void {
             p.BINS,
             p.sampleRate
         );
+
+        // B3: Draw EQ phase overlay when Phase metric is visible
+        if (p.activeMetrics.includes('Phase')) {
+            drawEQPhaseOverlayPath(
+                p.ctx, p.width, p.height,
+                p.metricConfigs, p.interactionState,
+                p.getEQPhaseCached,
+                p.BINS,
+                p.sampleRate
+            );
+        }
 
         // Dibujar nodos de filtros
         const bands = p.eqBands;
