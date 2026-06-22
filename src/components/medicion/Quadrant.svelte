@@ -351,49 +351,50 @@
         ctx.font = '11px monospace';
         ctx.fillText(`#${_drawCount}`, 15, 64);
 
-        // Actualizar capas calculadas antes de dibujar
-        traceManager.updateCalculatedLayers();
-
-        const liveData = traceManager.liveFrequencyData;
-
-        const currentVersion = mathOrchestrator.version;
-        if (currentVersion !== localLastVersion) {
-            localLastVersion = currentVersion;
-            interpEngine.updateHistory();
-        }
-
-        // Interpolación temporal a 60+ FPS (suaviza transiciones entre resultados del worker)
-        interpEngine.interpolateBuffers(dirty, mathOrchestrator);
-        if (dirty) {
-            dirty = false;
-        }
-
-        // Pre-suavizar las curvas para esta animación a 60FPS (incluyendo las transiciones de interpolación)
-        const magPPO = metricConfigs["Magnitude"]?.smoothingPPO || 48;
-        if (activeMetrics.includes("Magnitude") && magPPO < 48) {
-            for (let i = 0; i < BINS; i++) {
-                smoothedMagnitude[i] = getPPOSmoothedValue(
-                    i,
-                    interpEngine.interpMagnitude,
-                    magPPO,
-                );
-            }
-        } else {
-            smoothedMagnitude.set(interpEngine.interpMagnitude);
-        }
-
-        const specPPO = metricConfigs["Spectrum"]?.smoothingPPO || 48;
-        const hasLive = liveData && liveData.length > 0;
-        const rawSpec = hasLive ? liveData : interpEngine.interpMagnitude;
-        if (activeMetrics.includes("Spectrum") && specPPO < 48) {
-            for (let i = 0; i < BINS; i++) {
-                smoothedSpectrum[i] = getPPOSmoothedValue(i, rawSpec, specPPO);
-            }
-        } else {
-            smoothedSpectrum.set(rawSpec);
-        }
-
+        // TODO: wrap EVERYTHING in try/catch to capture errors from interpolation/smoothing
         try {
+            // Actualizar capas calculadas antes de dibujar
+            traceManager.updateCalculatedLayers();
+
+            const liveData = traceManager.liveFrequencyData;
+
+            const currentVersion = mathOrchestrator.version;
+            if (currentVersion !== localLastVersion) {
+                localLastVersion = currentVersion;
+                interpEngine.updateHistory();
+            }
+
+            // Interpolación temporal a 60+ FPS (suaviza transiciones entre resultados del worker)
+            interpEngine.interpolateBuffers(dirty, mathOrchestrator);
+            if (dirty) {
+                dirty = false;
+            }
+
+            // Pre-suavizar las curvas para esta animación a 60FPS (incluyendo las transiciones de interpolación)
+            const magPPO = metricConfigs["Magnitude"]?.smoothingPPO || 48;
+            if (activeMetrics.includes("Magnitude") && magPPO < 48) {
+                for (let i = 0; i < BINS; i++) {
+                    smoothedMagnitude[i] = getPPOSmoothedValue(
+                        i,
+                        interpEngine.interpMagnitude,
+                        magPPO,
+                    );
+                }
+            } else {
+                smoothedMagnitude.set(interpEngine.interpMagnitude);
+            }
+
+            const specPPO = metricConfigs["Spectrum"]?.smoothingPPO || 48;
+            const hasLive = liveData && liveData.length > 0;
+            const rawSpec = hasLive ? liveData : interpEngine.interpMagnitude;
+            if (activeMetrics.includes("Spectrum") && specPPO < 48) {
+                for (let i = 0; i < BINS; i++) {
+                    smoothedSpectrum[i] = getPPOSmoothedValue(i, rawSpec, specPPO);
+                }
+            } else {
+                smoothedSpectrum.set(rawSpec);
+            }
+
             drawQuadrant({
                 ctx,
                 width,
@@ -445,18 +446,18 @@
             _drawError = e?.message || String(e);
         }
 
-        // DEBUG: After drawQuadrant — reset ALL canvas state and draw yellow rect
+        // DEBUG: After everything — ALWAYS draw yellow rect with error info
         ctx.resetTransform();
         ctx.scale(dpr, dpr);
         ctx.globalAlpha = 1.0;
         ctx.globalCompositeOperation = 'source-over';
         ctx.setLineDash([]);
         ctx.lineWidth = 1;
-        ctx.fillStyle = 'yellow';
-        ctx.fillRect(10, 75, 120, 15);
-        ctx.fillStyle = 'black';
+        ctx.fillStyle = _drawError ? 'red' : 'lime';
+        ctx.fillRect(10, 75, 300, 15);
+        ctx.fillStyle = _drawError ? 'white' : 'black';
         ctx.font = '10px monospace';
-        ctx.fillText(`AFTER dQ w=${Math.round(width)}`, 12, 86);
+        ctx.fillText(_drawError ? `ERR: ${_drawError.substring(0, 45)}` : `OK w=${Math.round(width)}`, 12, 86);
     }
 
     // GESTORES DE EVENTOS DELEGADOS (PAN & ZOOM)
