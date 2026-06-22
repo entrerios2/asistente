@@ -316,9 +316,15 @@
     }
 
     // CORE DRAW ENGINE
+    // Pre-cached references para evitar crear objetos nuevos en cada frame
+    let _cachedCtx: CanvasRenderingContext2D | null = null;
+    const _identitySmooth = (idx: number, arr: Float32Array) => arr[idx];
+    const _boundGetEQResponse = mathOrchestrator.getEQResponseCached.bind(mathOrchestrator);
+
     function draw() {
         if (!canvas) return;
-        const ctx = canvas.getContext("2d");
+        if (!_cachedCtx) _cachedCtx = canvas.getContext("2d");
+        const ctx = _cachedCtx;
         if (!ctx) return;
         if (canvas.width === 0 || canvas.height === 0) return;
 
@@ -411,8 +417,7 @@
                 getMetricValueInterpolated,
                 getImpulseValueInterpolated,
                 getMetricAlpha,
-                getEQResponseCached:
-                    mathOrchestrator.getEQResponseCached.bind(mathOrchestrator),
+                getEQResponseCached: _boundGetEQResponse,
                 myLayers,
                 quadrantLayers,
                 instantaneas: traceManager.instantaneas,
@@ -434,7 +439,7 @@
                 outputCrestFactor: mathOrchestrator.outputCrestFactor,
                 containerWidth: width,
                 containerHeight: height,
-                customPPOSmooth: (idx: number, arr: Float32Array) => arr[idx],
+                customPPOSmooth: _identitySmooth,
             });
         } catch {
             // Error silencioso — evitar crash del render loop

@@ -32,6 +32,10 @@ import { uiStore } from '../stores/ui.svelte';
 
 const maxHistory = 100;
 
+// Cached offscreen canvas for coherence masking (reused across frames)
+let _maskCanvas: HTMLCanvasElement | null = null;
+let _maskCtx: CanvasRenderingContext2D | null = null;
+
 export interface DrawParams {
     ctx: CanvasRenderingContext2D;
     width: number;
@@ -106,7 +110,6 @@ export function drawQuadrant(p: DrawParams): void {
 
     // 2. Dibujar Grilla de Fondo (encima)
     drawGrid(p.ctx, p.width, p.height, p.hasTimeDomainActive, p.activeMetrics, p.metricConfigs, p.interactionState, p.isDarkMode, uiStore.showMinorGrid);
-
 
     // 2.5. Coherence background overlay — solo si Coherence es métrica activa
     const cohCfg = p.metricConfigs["Coherence"];
@@ -243,16 +246,23 @@ export function drawQuadrant(p: DrawParams): void {
     });
 
     // If coherence masking is needed, prepare an offscreen canvas for masked metrics
-    let maskCanvas: HTMLCanvasElement | null = null;
-    let maskCtx: CanvasRenderingContext2D | null = null;
-
+    // Cached at module level to avoid creating a new canvas element every frame
     if (needsCoherenceMask) {
-        maskCanvas = document.createElement('canvas');
-        maskCanvas.width = p.width;
-        maskCanvas.height = p.height;
-        maskCtx = maskCanvas.getContext('2d');
+        if (!_maskCanvas) {
+            _maskCanvas = document.createElement('canvas');
+        }
+        if (_maskCanvas.width !== Math.round(p.width) || _maskCanvas.height !== Math.round(p.height)) {
+            _maskCanvas.width = Math.round(p.width);
+            _maskCanvas.height = Math.round(p.height);
+            _maskCtx = _maskCanvas.getContext('2d');
+        }
+        // Clear previous frame's content
+        if (_maskCtx) {
+            _maskCtx.clearRect(0, 0, _maskCanvas.width, _maskCanvas.height);
+        }
     }
-
+    const maskCanvas = needsCoherenceMask ? _maskCanvas : null;
+    const maskCtx = needsCoherenceMask ? _maskCtx : null;
 
     p.quadrantLayers.forEach((layer, index) => {
         if (!layer.visible) return;
@@ -396,7 +406,6 @@ export function drawQuadrant(p: DrawParams): void {
         p.ctx.globalAlpha = 1.0; // Restablecer opacidad
     });
 
-
     // Apply coherence mask and composite back to main canvas
     if (needsCoherenceMask && maskCtx && maskCanvas) {
         // Find the first metric with enableCoherence to get its config
@@ -418,7 +427,6 @@ export function drawQuadrant(p: DrawParams): void {
         // Composite the masked result onto the main canvas
         p.ctx.drawImage(maskCanvas, 0, 0);
     }
-
 
     // 3.5. Renderizar curvas de las Instantáneas globales que estén visibles (Prompt 8)
     p.instantaneas.forEach((snap) => {
