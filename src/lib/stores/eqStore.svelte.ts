@@ -48,6 +48,44 @@ class EQStore {
     // Version counter for dirty tracking (replaces traceManager.eqBandsVersion)
     activeBandsVersion = $state(0);
 
+    // ─── AutoEQ Configuration (D7) ───
+    autoEQAlgorithm = $state<'greedy' | 'nelder-mead' | 'pso' | 'genetic' | 'all'>('greedy');
+    autoEQCostDomain = $state<'dB' | 'energy'>('dB');
+    autoEQNumFilters = $state(6);
+    autoEQMaxBoost = $state(6);
+    autoEQMaxCut = $state(-12);
+    autoEQMinQ = $state(0.2);
+    autoEQMaxQ = $state(6.0);
+    autoEQMaxIterations = $state(200);
+    autoEQCoherenceThreshold = $state(0.3);
+    autoEQTrebleAveraging = $state(true);
+    autoEQTrebleFreq = $state(10000);
+    autoEQOnlyCorrectPeaks = $state(false);
+    autoEQShowAdvanced = $state(false);
+
+    // PSO-specific
+    autoEQPSOPopulation = $state(30);
+    autoEQPSOInertia = $state(0.7);
+    autoEQPSOCognitive = $state(1.5);
+    autoEQPSOSocial = $state(1.5);
+
+    // GA-specific
+    autoEQGAPopulation = $state(50);
+    autoEQGAMutationRate = $state(0.1);
+    autoEQGACrossoverRate = $state(0.8);
+    autoEQGAElitism = $state(2);
+
+    // ─── AutoEQ Source Selection (G1) ───
+    autoEQSourceType = $state<'live' | 'snapshot' | 'calculated'>('live');
+    autoEQSnapshotIds = $state<string[]>([]);
+    autoEQCalcOperation = $state<'average' | 'min' | 'max'>('average');
+
+    // ─── AutoEQ Results ───
+    autoEQProgress = $state<{ algorithm: string; progress: number } | null>(null);
+    autoEQLastResult = $state<any | null>(null);
+    autoEQBenchmarkResults = $state<any | null>(null);
+    autoEQPreviewIndex = $state<number>(-1); // -1 = none, 0..N = preview specific result
+
     graphicBands = $state<GraphicBand[]>([
         { freq: 31, gain: 0 },
         { freq: 63, gain: 0 },

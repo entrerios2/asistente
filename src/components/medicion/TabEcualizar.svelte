@@ -7,6 +7,7 @@
     import { computeDeviation, type DeviationResult } from "$lib/dsp/deviationMetrics";
     import { filterSvgIcons } from "$lib/icons/filterIcons";
     import { eqStore, type GraphicBand } from "$lib/stores/eqStore.svelte";
+    import { runAutoEQ, benchmarkAll, DEFAULT_CONFIG, type AutoEQConfig, type AutoEQResult, type BenchmarkResult } from "$lib/dsp/autoEQ";
 
     let {
         statusText = $bindable("Listo para medir")
@@ -41,7 +42,6 @@
         });
     }
 
-    // Ajustar número de bandas en modo gráfico
     $effect(() => {
         const count = eqStore.numGraphicBands;
         const currentGraphicBands = untrack(() => eqStore.graphicBands);
@@ -52,24 +52,120 @@
         });
     });
 
-    function runAutoEQ() {
-        eqStore.isCalculatingAutoEQ = true;
-        statusText = "Calculando curva de corrección AutoEQ...";
-        setTimeout(() => {
-            if (eqStore.eqType === "grafico") {
-                eqStore.graphicBands.forEach((b) => {
-                    b.gain = Math.round((Math.random() * 12 - 6) * 10) / 10;
-                });
-            } else if (eqStore.eqType === "parametrico") {
-                eqStore.parametricFilters.forEach((f) => {
-                    f.gain = Math.round((Math.random() * 10 - 5) * 10) / 10;
-                    f.q = Math.round((0.5 + Math.random() * 2) * 10) / 10;
-                });
-            }
-            eqStore.isCalculatingAutoEQ = false;
-            statusText = "AutoEQ calculado con éxito";
-        }, 1200);
+    function buildAutoEQConfig(): AutoEQConfig {
+        return {
+            ...DEFAULT_CONFIG,
+            algorithm: eqStore.autoEQAlgorithm,
+            costDomain: eqStore.autoEQCostDomain,
+            numFilters: eqStore.autoEQNumFilters,
+            maxBoost: eqStore.autoEQMaxBoost,
+            maxCut: eqStore.autoEQMaxCut,
+            minQ: eqStore.autoEQMinQ,
+            maxQ: eqStore.autoEQMaxQ,
+            maxIterations: eqStore.autoEQMaxIterations,
+            coherenceThreshold: eqStore.autoEQCoherenceThreshold,
+            trebleAveraging: eqStore.autoEQTrebleAveraging,
+            trebleFreq: eqStore.autoEQTrebleFreq,
+            onlyCorrectPeaks: eqStore.autoEQOnlyCorrectPeaks,
+            psoPopulation: eqStore.autoEQPSOPopulation,
+            psoInertia: eqStore.autoEQPSOInertia,
+            psoCognitive: eqStore.autoEQPSOCognitive,
+            psoSocial: eqStore.autoEQPSOSocial,
+            gaPopulation: eqStore.autoEQGAPopulation,
+            gaMutationRate: eqStore.autoEQGAMutationRate,
+            gaCrossoverRate: eqStore.autoEQGACrossoverRate,
+            gaElitism: eqStore.autoEQGAElitism,
+        };
     }
+
+    function resolveMagnitudeSource(): { magnitude: Float32Array; coherence: Float32Array | null } {
+        const bins = mathOrchestrator.BINS;
+        if (eqStore.autoEQSourceType === 'live') {
+            return { magnitude: mathOrchestrator.outputMagnitude, coherence: mathOrchestrator.outputCoherence };
+        }
+        if (eqStore.autoEQSourceType === 'snapshot') {
+            const selected = traceManager.instantaneas.filter((s: any) => eqStore.autoEQSnapshotIds.includes(s.id));
+            if (selected.length === 0) return { magnitude: mathOrchestrator.outputMagnitude, coherence: mathOrchestrator.outputCoherence };
+            if (selected.length === 1) {
+                return { magnitude: selected[0].data?.['Magnitude'] || new Float32Array(bins), coherence: selected[0].data?.['Coherence'] || null };
+            }
+            const result = new Float32Array(bins);
+            const cohResult = new Float32Array(bins);
+            for (let i = 0; i < bins; i++) {
+                const vals = selected.map((s: any) => s.data?.['Magnitude']?.[i] || 0);
+                const cohVals = selected.map((s: any) => s.data?.['Coherence']?.[i] || 1);
+                if (eqStore.autoEQCalcOperation === 'average') result[i] = vals.reduce((a: number, b: number) => a + b, 0) / vals.length;
+                else if (eqStore.autoEQCalcOperation === 'min') result[i] = Math.min(...vals);
+                else result[i] = Math.max(...vals);
+                cohResult[i] = cohVals.reduce((a: number, b: number) => a + b, 0) / cohVals.length;
+            }
+            return { magnitude: result, coherence: cohResult };
+        }
+        const layer = traceManager.layers.find(l => l.id === eqStore.autoEQSourceLayer);
+        if (layer?.data) return { magnitude: layer.data, coherence: null };
+        return { magnitude: mathOrchestrator.outputMagnitude, coherence: mathOrchestrator.outputCoherence };
+    }
+
+    const algoDesc: Record<string, string> = {
+        'greedy': 'Rápido — coloca filtros en picos de error (~100ms)',
+        'nelder-mead': 'Preciso — optimización local desde Greedy (~500ms)',
+        'pso': 'Global — enjambre de partículas (~2s)',
+        'genetic': 'Robusto — evolución con mutación (~3s)',
+        'all': 'Benchmark — ejecuta todos y compara (~5s)',
+    };
+
+    function handleRunAutoEQ() {
+        eqStore.isCalculatingAutoEQ = true;
+        eqStore.autoEQBenchmarkResults = null;
+        eqStore.autoEQLastResult = null;
+        eqStore.autoEQPreviewIndex = -1;
+        statusText = "Calculando AutoEQ...";
+        setTimeout(() => {
+            try {
+                const config = buildAutoEQConfig();
+                const { magnitude, coherence } = resolveMagnitudeSource();
+                const target = deviationTarget;
+                const bins = mathOrchestrator.BINS;
+                const sr = uiStore.sampleRate;
+                if (eqStore.autoEQAlgorithm === 'all') {
+                    const result = benchmarkAll(magnitude, target, coherence, bins, sr, config,
+                        (algo, progress) => { eqStore.autoEQProgress = { algorithm: algo, progress }; });
+                    eqStore.autoEQBenchmarkResults = result;
+                    applyAutoEQResult(result.results[0].result);
+                    statusText = `Benchmark completado en ${(result.totalTimeMs / 1000).toFixed(1)}s — mejor: ${result.best}`;
+                } else {
+                    const result = runAutoEQ(magnitude, target, coherence, bins, sr, config,
+                        (algo, iter, _mse) => { eqStore.autoEQProgress = { algorithm: algo, progress: iter / config.maxIterations }; });
+                    eqStore.autoEQLastResult = result;
+                    applyAutoEQResult(result);
+                    statusText = `AutoEQ (${result.algorithm}) completado en ${result.timeMs.toFixed(0)}ms`;
+                }
+            } catch (e: any) { statusText = `Error: ${e.message}`; }
+            eqStore.isCalculatingAutoEQ = false;
+            eqStore.autoEQProgress = null;
+        }, 50);
+    }
+
+    function applyAutoEQResult(result: AutoEQResult) {
+        eqStore.eqType = 'parametrico';
+        eqStore.parametricFilters = result.filters.map((f, i) => ({
+            id: i + 1, freq: Math.round(f.fc), gain: Math.round(f.gain * 10) / 10,
+            q: Math.round(f.q * 10) / 10, type: f.type,
+            supportedTypes: ['peaking', 'low_shelf', 'high_shelf', 'notch'], showConfig: false,
+        }));
+    }
+
+    function applyBenchmarkResult(index: number) {
+        const results = eqStore.autoEQBenchmarkResults as BenchmarkResult | null;
+        if (!results || !results.results[index]) return;
+        applyAutoEQResult(results.results[index].result);
+        eqStore.autoEQPreviewIndex = index;
+    }
+
+    function formatTime(ms: number): string { return ms < 1000 ? `${ms.toFixed(0)}ms` : `${(ms / 1000).toFixed(1)}s`; }
+    function devColor(rms: number): string { return rms > 6 ? '#ff4444' : rms > 3 ? '#fbbf24' : '#00ff88'; }
+    function impArrow(before: number, after: number, lower = true): string { return lower ? (after < before ? '↓' : after > before ? '↑' : '') : (after > before ? '↑' : after < before ? '↓' : ''); }
+    function impColor(before: number, after: number, lower = true): string { return lower ? (after < before ? '#00ff88' : after > before ? '#ff4444' : 'var(--text-muted)') : (after > before ? '#00ff88' : after < before ? '#ff4444' : 'var(--text-muted)'); }
 </script>
 
 <div
@@ -103,95 +199,272 @@
         </div>
     </div>
 
-    <!-- Sección: Cálculo de ecualización -->
+    <!-- Sección: Fuente de Datos (G2) -->
     <div class="flex flex-col gap-2 rounded-lg p-3"
          style="background: var(--bg-tertiary); border: 1px solid var(--border-primary)">
         <span class="text-[9px] font-bold uppercase tracking-wider"
-              style="color: var(--text-muted)">Cálculo de ecualización</span>
+              style="color: var(--text-muted)">Fuente de datos</span>
+        <div class="flex gap-1">
+            {#each [{ value: 'live', label: 'Live', icon: 'mic' }, { value: 'snapshot', label: 'Snapshots', icon: 'camera' }, { value: 'calculated', label: 'Capa', icon: 'layers' }] as source}
+                <button class="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded text-[9px] font-semibold transition-all cursor-pointer"
+                    style="background: {eqStore.autoEQSourceType === source.value ? '#3b82f610' : 'transparent'}; color: {eqStore.autoEQSourceType === source.value ? '#3b82f6' : 'var(--text-muted)'}; border: 1px solid {eqStore.autoEQSourceType === source.value ? '#3b82f630' : 'var(--border-primary)'}"
+                    onclick={() => eqStore.autoEQSourceType = source.value as any}>
+                    <span class="material-symbols-outlined text-[11px]">{source.icon}</span>
+                    {source.label}
+                </button>
+            {/each}
+        </div>
+        {#if eqStore.autoEQSourceType === 'snapshot'}
+            <div class="flex flex-col gap-1 mt-1">
+                {#if traceManager.instantaneas.length === 0}
+                    <span class="text-[9px] italic" style="color: var(--text-muted)">No hay snapshots</span>
+                {:else}
+                    <div class="max-h-[100px] overflow-y-auto flex flex-col gap-0.5">
+                        {#each traceManager.instantaneas as snap}
+                            <label class="flex items-center gap-2 text-[10px] cursor-pointer py-0.5 px-1 rounded hover:bg-white/5" style="color: var(--text-secondary)">
+                                <input type="checkbox" checked={eqStore.autoEQSnapshotIds.includes(snap.id)}
+                                    onchange={() => { eqStore.autoEQSnapshotIds = eqStore.autoEQSnapshotIds.includes(snap.id) ? eqStore.autoEQSnapshotIds.filter(id => id !== snap.id) : [...eqStore.autoEQSnapshotIds, snap.id]; }}
+                                    class="accent-[#3b82f6] w-3 h-3" />
+                                <span class="w-2 h-2 rounded-full" style="background: {snap.color || '#888'}"></span>
+                                {snap.name || snap.id}
+                            </label>
+                        {/each}
+                    </div>
+                    {#if eqStore.autoEQSnapshotIds.length > 1}
+                        <div class="flex gap-1 mt-1">
+                            <span class="text-[8px] font-bold uppercase" style="color: var(--text-muted)">Op:</span>
+                            {#each ['average', 'min', 'max'] as op}
+                                <button class="px-2 py-0.5 rounded text-[8px] font-semibold cursor-pointer"
+                                    style="background: {eqStore.autoEQCalcOperation === op ? '#3b82f610' : 'transparent'}; color: {eqStore.autoEQCalcOperation === op ? '#3b82f6' : 'var(--text-muted)'}; border: 1px solid {eqStore.autoEQCalcOperation === op ? '#3b82f630' : 'transparent'}"
+                                    onclick={() => eqStore.autoEQCalcOperation = op as any}
+                                >{op === 'average' ? 'Promedio' : op === 'min' ? 'Mínimo' : 'Máximo'}</button>
+                            {/each}
+                        </div>
+                    {/if}
+                {/if}
+            </div>
+        {/if}
+        {#if eqStore.autoEQSourceType === 'calculated'}
+            <select class="w-full rounded-md text-xs py-1.5 px-2 mt-1" style="background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-primary)" bind:value={eqStore.autoEQSourceLayer}>
+                <option value="active">Capa activa</option>
+                {#each traceManager.layers as layer}<option value={layer.id}>{layer.name}</option>{/each}
+            </select>
+        {/if}
+    </div>
+
+    <!-- Sección: AutoEQ (D6) -->
+    <div class="flex flex-col gap-2 rounded-lg p-3"
+         style="background: var(--bg-tertiary); border: 1px solid var(--border-primary)">
+        <span class="text-[9px] font-bold uppercase tracking-wider" style="color: var(--text-muted)">AutoEQ</span>
 
         <div class="flex flex-col gap-1">
             <label class="text-[9px] font-bold uppercase" style="color: var(--text-muted)">Curva de referencia</label>
-            <div class="flex gap-1">
-                <select
-                    class="flex-1 rounded-md text-xs py-1.5 px-2"
-                    style="background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-primary)"
-                    value={targetTrace.name}
-                    onchange={(e) => {
-                        const val = e.currentTarget.value;
-                        targetTrace.applyPreset(val as any);
-                    }}>
-                    <option value="Flat">Flat (0dB)</option>
-                    <option value="House">House curve</option>
-                    <option value="BK">B&K cinema</option>
-                    <option value="Harman">Harman 2019</option>
-                    <option value="X-Curve">X-Curve</option>
+            <select class="w-full rounded-md text-xs py-1.5 px-2" style="background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-primary)"
+                value={targetTrace.name} onchange={(e) => targetTrace.applyPreset(e.currentTarget.value as any)}>
+                <option value="Flat">Flat (0dB)</option>
+                <option value="House">House curve</option>
+                <option value="BK">B&K cinema</option>
+                <option value="Harman">Harman 2019</option>
+                <option value="X-Curve">X-Curve</option>
+            </select>
+        </div>
+
+        <div class="flex flex-col gap-1">
+            <label class="text-[9px] font-bold uppercase" style="color: var(--text-muted)">Algoritmo</label>
+            <select class="w-full rounded-md text-xs py-1.5 px-2" style="background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-primary)"
+                bind:value={eqStore.autoEQAlgorithm}>
+                <option value="greedy">Greedy (rápido)</option>
+                <option value="nelder-mead">Nelder-Mead (preciso)</option>
+                <option value="pso">PSO (global)</option>
+                <option value="genetic">Genético (robusto)</option>
+                <option value="all">⭐ Benchmark (todos)</option>
+            </select>
+            <span class="text-[8px] italic" style="color: var(--text-muted)">{algoDesc[eqStore.autoEQAlgorithm] || ''}</span>
+        </div>
+
+        <div class="flex gap-2">
+            <div class="flex-1 flex flex-col gap-1">
+                <label class="text-[8px] font-bold uppercase" style="color: var(--text-muted)">Filtros</label>
+                <input type="number" min="1" max="20" bind:value={eqStore.autoEQNumFilters}
+                    class="w-full bg-[#121216] border border-[#1a1a24] rounded px-2 py-1 text-xs text-gray-200 text-center" />
+            </div>
+            <div class="flex-1 flex flex-col gap-1">
+                <label class="text-[8px] font-bold uppercase" style="color: var(--text-muted)">Dominio</label>
+                <select bind:value={eqStore.autoEQCostDomain} class="w-full bg-[#121216] border border-[#1a1a24] rounded px-2 py-1 text-xs text-gray-200">
+                    <option value="dB">dB</option>
+                    <option value="energy">Energía</option>
                 </select>
             </div>
         </div>
 
-        <div class="flex flex-col gap-1">
-            <label class="text-[9px] font-bold uppercase" style="color: var(--text-muted)">Capa fuente</label>
-            <select
-                class="w-full rounded-md text-xs py-1.5 px-2"
-                style="background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-primary)"
-                bind:value={eqStore.autoEQSourceLayer}>
-                <option value="active">Capa activa</option>
-                {#each traceManager.layers as layer}
-                    <option value={layer.id}>{layer.name}</option>
-                {/each}
-            </select>
-        </div>
+        <button class="text-[8px] font-semibold self-start px-2 py-0.5 rounded cursor-pointer" style="color: var(--text-muted); background: transparent; border: none"
+            onclick={() => eqStore.autoEQShowAdvanced = !eqStore.autoEQShowAdvanced}>
+            {eqStore.autoEQShowAdvanced ? '▾' : '▸'} Avanzados
+        </button>
+
+        {#if eqStore.autoEQShowAdvanced}
+            <div class="flex flex-col gap-2 pl-2 border-l-2" style="border-color: var(--border-primary)">
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="flex flex-col gap-0.5">
+                        <label class="text-[8px]" style="color: var(--text-muted)">Max boost (dB)</label>
+                        <input type="number" min="0" max="18" step="1" bind:value={eqStore.autoEQMaxBoost} class="bg-[#121216] border border-[#1a1a24] rounded px-2 py-0.5 text-[10px] text-gray-200" />
+                    </div>
+                    <div class="flex flex-col gap-0.5">
+                        <label class="text-[8px]" style="color: var(--text-muted)">Max cut (dB)</label>
+                        <input type="number" min="-30" max="0" step="1" bind:value={eqStore.autoEQMaxCut} class="bg-[#121216] border border-[#1a1a24] rounded px-2 py-0.5 text-[10px] text-gray-200" />
+                    </div>
+                    <div class="flex flex-col gap-0.5">
+                        <label class="text-[8px]" style="color: var(--text-muted)">Min Q</label>
+                        <input type="number" min="0.1" max="2" step="0.1" bind:value={eqStore.autoEQMinQ} class="bg-[#121216] border border-[#1a1a24] rounded px-2 py-0.5 text-[10px] text-gray-200" />
+                    </div>
+                    <div class="flex flex-col gap-0.5">
+                        <label class="text-[8px]" style="color: var(--text-muted)">Max Q</label>
+                        <input type="number" min="1" max="20" step="0.5" bind:value={eqStore.autoEQMaxQ} class="bg-[#121216] border border-[#1a1a24] rounded px-2 py-0.5 text-[10px] text-gray-200" />
+                    </div>
+                    <div class="flex flex-col gap-0.5">
+                        <label class="text-[8px]" style="color: var(--text-muted)">Coherencia mín</label>
+                        <input type="number" min="0" max="1" step="0.05" bind:value={eqStore.autoEQCoherenceThreshold} class="bg-[#121216] border border-[#1a1a24] rounded px-2 py-0.5 text-[10px] text-gray-200" />
+                    </div>
+                    <div class="flex flex-col gap-0.5">
+                        <label class="text-[8px]" style="color: var(--text-muted)">Iteraciones</label>
+                        <input type="number" min="50" max="1000" step="50" bind:value={eqStore.autoEQMaxIterations} class="bg-[#121216] border border-[#1a1a24] rounded px-2 py-0.5 text-[10px] text-gray-200" />
+                    </div>
+                </div>
+                <label class="flex items-center gap-2 text-[9px] cursor-pointer" style="color: var(--text-secondary)">
+                    <input type="checkbox" bind:checked={eqStore.autoEQTrebleAveraging} class="accent-[#3b82f6] w-3 h-3" />
+                    Treble averaging (>{eqStore.autoEQTrebleFreq}Hz)
+                </label>
+                <label class="flex items-center gap-2 text-[9px] cursor-pointer" style="color: var(--text-secondary)">
+                    <input type="checkbox" bind:checked={eqStore.autoEQOnlyCorrectPeaks} class="accent-[#3b82f6] w-3 h-3" />
+                    Solo corregir picos (no boost)
+                </label>
+            </div>
+        {/if}
+
+        {#if eqStore.autoEQProgress}
+            <div class="flex flex-col gap-1">
+                <div class="flex justify-between text-[8px]" style="color: var(--text-muted)">
+                    <span>{eqStore.autoEQProgress.algorithm}</span>
+                    <span>{Math.round(eqStore.autoEQProgress.progress * 100)}%</span>
+                </div>
+                <div class="w-full h-1 rounded-full overflow-hidden" style="background: var(--bg-secondary)">
+                    <div class="h-full rounded-full transition-all" style="width: {eqStore.autoEQProgress.progress * 100}%; background: #3b82f6"></div>
+                </div>
+            </div>
+        {/if}
 
         <button
             class="w-full min-h-[38px] bg-[#00ff88]/10 text-[#00ff88] hover:bg-[#00ff88]/20 border border-[#00ff88]/20 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-40"
-            onclick={runAutoEQ}
-            disabled={!eqStore.showEQ || eqStore.isCalculatingAutoEQ}
-        >
-            <span class="material-symbols-outlined text-sm"
-                >{eqStore.isCalculatingAutoEQ ? "sync" : "auto_awesome"}</span>
-            {eqStore.isCalculatingAutoEQ
-                ? "Calculando..."
-                : "Calcular ecualización"}
+            onclick={handleRunAutoEQ}
+            disabled={!eqStore.showEQ || eqStore.isCalculatingAutoEQ}>
+            <span class="material-symbols-outlined text-sm">{eqStore.isCalculatingAutoEQ ? "sync" : "auto_awesome"}</span>
+            {eqStore.isCalculatingAutoEQ ? "Calculando..." : eqStore.autoEQAlgorithm === 'all' ? "Benchmark (todos)" : "Calcular AutoEQ"}
         </button>
     </div>
 
-    <!-- Tabla de desviación -->
+    <!-- Benchmark Results (D8 UI) -->
+    {#if eqStore.autoEQBenchmarkResults}
+        {@const benchResults = eqStore.autoEQBenchmarkResults as BenchmarkResult}
+        <div class="flex flex-col gap-2 rounded-lg p-3" style="background: var(--bg-tertiary); border: 1px solid var(--border-primary)">
+            <div class="flex justify-between items-center">
+                <span class="text-[9px] font-bold uppercase tracking-wider" style="color: var(--text-muted)">Comparación de algoritmos</span>
+                <span class="text-[8px] font-mono" style="color: var(--text-muted)">{formatTime(benchResults.totalTimeMs)}</span>
+            </div>
+            <table class="w-full text-[8px]" style="color: var(--text-secondary)">
+                <thead>
+                    <tr class="border-b" style="border-color: var(--border-primary)">
+                        <th class="text-left py-1 font-semibold" style="color: var(--text-muted)">Algo.</th>
+                        <th class="text-right py-1 font-semibold" style="color: var(--text-muted)">RMS</th>
+                        <th class="text-right py-1 font-semibold" style="color: var(--text-muted)">±3dB</th>
+                        <th class="text-right py-1 font-semibold" style="color: var(--text-muted)">Mejora</th>
+                        <th class="text-right py-1 font-semibold" style="color: var(--text-muted)">⏱</th>
+                        <th class="text-center py-1" style="color: var(--text-muted)"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {#each benchResults.results as entry, idx}
+                        <tr class="border-b cursor-pointer hover:bg-white/5 transition-all"
+                            style="border-color: var(--border-primary); {eqStore.autoEQPreviewIndex === idx ? 'background: #3b82f610' : ''}"
+                            onclick={() => eqStore.autoEQPreviewIndex = idx}>
+                            <td class="py-1.5 font-semibold">
+                                {#if idx === 0}<span title="Recomendado">⭐</span>{/if}
+                                {entry.algorithm === 'nelder-mead' ? 'NM' : entry.algorithm === 'genetic' ? 'GA' : entry.algorithm.toUpperCase()}
+                            </td>
+                            <td class="text-right py-1.5 font-mono" style="color: {devColor(entry.metrics.rms)}">{entry.metrics.rms.toFixed(1)}</td>
+                            <td class="text-right py-1.5 font-mono">{entry.metrics.percentWithin3dB.toFixed(0)}%</td>
+                            <td class="text-right py-1.5 font-mono" style="color: {entry.improvement > 0 ? '#00ff88' : '#ff4444'}">
+                                {entry.improvement > 0 ? '+' : ''}{entry.improvement.toFixed(0)}%
+                            </td>
+                            <td class="text-right py-1.5 font-mono" style="color: var(--text-muted)">{formatTime(entry.result.timeMs)}</td>
+                            <td class="text-center py-1.5">
+                                <button class="px-1.5 py-0.5 rounded text-[7px] font-bold cursor-pointer" style="color: #00ff88; background: #00ff8810; border: 1px solid #00ff8820"
+                                    onclick={(e) => { e.stopPropagation(); applyBenchmarkResult(idx); }}>Usar</button>
+                            </td>
+                        </tr>
+                    {/each}
+                </tbody>
+            </table>
+        </div>
+    {/if}
+
+    <!-- Scorecard (H3) -->
     <div class="flex flex-col gap-1.5 rounded-lg p-3"
          style="background: var(--bg-tertiary); border: 1px solid var(--border-primary)">
-        <span class="text-[9px] font-bold uppercase tracking-wider"
-              style="color: var(--text-muted)">Desviación vs target</span>
-
+        <span class="text-[9px] font-bold uppercase tracking-wider" style="color: var(--text-muted)">Evaluación del EQ</span>
         <table class="w-full text-[9px]" style="color: var(--text-secondary)">
             <thead>
                 <tr class="border-b" style="border-color: var(--border-primary)">
-                    <th class="text-left py-1 font-semibold" style="color: var(--text-muted)">Capa</th>
-                    <th class="text-right py-1 font-semibold" style="color: var(--text-muted)">Original</th>
-                    <th class="text-right py-1 font-semibold" style="color: var(--text-muted)">Ecualizada</th>
+                    <th class="text-left py-1 font-semibold" style="color: var(--text-muted)">Métrica</th>
+                    <th class="text-right py-1 font-semibold" style="color: var(--text-muted)">Antes</th>
+                    <th class="text-right py-1 font-semibold" style="color: var(--text-muted)">Después</th>
+                    <th class="text-center py-1 w-4"></th>
                 </tr>
             </thead>
             <tbody>
-                {#each traceManager.layers.filter(l => l.visible && l.data && l.data.length > 0) as layer}
-                    {@const orig = computeDeviation(layer.data, deviationTarget, mathOrchestrator.outputCoherence, mathOrchestrator.BINS)}
+                {#each traceManager.layers.filter(l => l.visible && l.data && l.data.length > 0).slice(0, 1) as layer}
+                    {@const orig = computeDeviation(layer.data, deviationTarget, mathOrchestrator.outputCoherence, mathOrchestrator.BINS, uiStore.sampleRate)}
                     {@const eqd = computeDeviationWithEQ(layer.data, deviationTarget, mathOrchestrator.outputCoherence, mathOrchestrator.BINS)}
                     <tr class="border-b" style="border-color: var(--border-primary)">
-                        <td class="py-1 truncate max-w-[80px]" title={layer.name}>{layer.name}</td>
-                        <td class="text-right py-1 font-mono">
-                            <span style="color: {orig.rms > 6 ? '#ff4444' : orig.rms > 3 ? '#fbbf24' : '#00ff88'}">{orig.rms.toFixed(1)}</span>
-                            <span style="color: var(--text-muted)">rms</span>
-                            / <span>{orig.peak.toFixed(1)}</span>
-                            <span style="color: var(--text-muted)">p</span>
-                        </td>
-                        <td class="text-right py-1 font-mono">
-                            <span style="color: {eqd.rms > 6 ? '#ff4444' : eqd.rms > 3 ? '#fbbf24' : '#00ff88'}">{eqd.rms.toFixed(1)}</span>
-                            <span style="color: var(--text-muted)">rms</span>
-                            / <span>{eqd.peak.toFixed(1)}</span>
-                            <span style="color: var(--text-muted)">p</span>
-                        </td>
+                        <td class="py-1">RMS (dB)</td>
+                        <td class="text-right py-1 font-mono">{orig.rms.toFixed(1)}</td>
+                        <td class="text-right py-1 font-mono" style="color: {devColor(eqd.rms)}">{eqd.rms.toFixed(1)}</td>
+                        <td class="text-center py-1" style="color: {impColor(orig.rms, eqd.rms)}">{impArrow(orig.rms, eqd.rms)}</td>
+                    </tr>
+                    <tr class="border-b" style="border-color: var(--border-primary)">
+                        <td class="py-1">Peak (dB)</td>
+                        <td class="text-right py-1 font-mono">{orig.peak.toFixed(1)}</td>
+                        <td class="text-right py-1 font-mono">{eqd.peak.toFixed(1)}</td>
+                        <td class="text-center py-1" style="color: {impColor(orig.peak, eqd.peak)}">{impArrow(orig.peak, eqd.peak)}</td>
+                    </tr>
+                    <tr class="border-b" style="border-color: var(--border-primary)">
+                        <td class="py-1">WMSE</td>
+                        <td class="text-right py-1 font-mono">{orig.weightedMSE.toFixed(1)}</td>
+                        <td class="text-right py-1 font-mono">{eqd.weightedMSE.toFixed(1)}</td>
+                        <td class="text-center py-1" style="color: {impColor(orig.weightedMSE, eqd.weightedMSE)}">{impArrow(orig.weightedMSE, eqd.weightedMSE)}</td>
+                    </tr>
+                    <tr class="border-b" style="border-color: var(--border-primary)">
+                        <td class="py-1">±3dB (%)</td>
+                        <td class="text-right py-1 font-mono">{orig.percentWithin3dB.toFixed(0)}%</td>
+                        <td class="text-right py-1 font-mono" style="color: {eqd.percentWithin3dB > 80 ? '#00ff88' : eqd.percentWithin3dB > 50 ? '#fbbf24' : '#ff4444'}">{eqd.percentWithin3dB.toFixed(0)}%</td>
+                        <td class="text-center py-1" style="color: {impColor(orig.percentWithin3dB, eqd.percentWithin3dB, false)}">{impArrow(orig.percentWithin3dB, eqd.percentWithin3dB, false)}</td>
+                    </tr>
+                    <tr class="border-b" style="border-color: var(--border-primary)">
+                        <td class="py-1">±6dB (%)</td>
+                        <td class="text-right py-1 font-mono">{orig.percentWithin6dB.toFixed(0)}%</td>
+                        <td class="text-right py-1 font-mono">{eqd.percentWithin6dB.toFixed(0)}%</td>
+                        <td class="text-center py-1" style="color: {impColor(orig.percentWithin6dB, eqd.percentWithin6dB, false)}">{impArrow(orig.percentWithin6dB, eqd.percentWithin6dB, false)}</td>
+                    </tr>
+                    <tr>
+                        <td class="py-1">Bias (dB)</td>
+                        <td class="text-right py-1 font-mono">{orig.meanDeviation > 0 ? '+' : ''}{orig.meanDeviation.toFixed(1)}</td>
+                        <td class="text-right py-1 font-mono">{eqd.meanDeviation > 0 ? '+' : ''}{eqd.meanDeviation.toFixed(1)}</td>
+                        <td class="text-center py-1" style="color: {impColor(Math.abs(orig.meanDeviation), Math.abs(eqd.meanDeviation))}">{impArrow(Math.abs(orig.meanDeviation), Math.abs(eqd.meanDeviation))}</td>
                     </tr>
                 {/each}
             </tbody>
         </table>
     </div>
+
 
     <!-- Selector de Tipo de Ecualizador -->
     <div class="flex flex-col gap-1.5">
