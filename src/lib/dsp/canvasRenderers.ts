@@ -1229,6 +1229,27 @@ export function drawPhaseDelay(
     ctx.stroke();
 }
 
+// ── Shared log-frequency LUT for EQ curve rendering ──
+// ~400 points log-spaced 20Hz–20kHz: smooth at low freqs, lightweight vs 8192 bins
+const EQ_CURVE_POINTS = 400;
+let _eqFreqLUT: Float32Array | null = null;
+let _eqFreqLUTSr = 0;
+let _eqFreqLUTBins = 0;
+
+function getEqFreqLUT(bins: number, sampleRate: number): Float32Array {
+    if (_eqFreqLUT && _eqFreqLUTSr === sampleRate && _eqFreqLUTBins === bins) return _eqFreqLUT;
+    const lut = new Float32Array(EQ_CURVE_POINTS);
+    const logMin = Math.log10(freqMin);
+    const logMax = Math.log10(freqMax);
+    for (let i = 0; i < EQ_CURVE_POINTS; i++) {
+        lut[i] = Math.pow(10, logMin + (i / (EQ_CURVE_POINTS - 1)) * (logMax - logMin));
+    }
+    _eqFreqLUT = lut;
+    _eqFreqLUTSr = sampleRate;
+    _eqFreqLUTBins = bins;
+    return lut;
+}
+
 export function drawEQOverlayPath(
     ctx: CanvasRenderingContext2D,
     width: number,
@@ -1238,64 +1259,79 @@ export function drawEQOverlayPath(
     state: InteractionState,
     getEQResponseCached: (f: number) => number,
     bins: number,
-    sampleRate: number = 48000
+    sampleRate: number = 48000,
+    bandCoeffs?: number[][]
 ) {
     ctx.setLineDash(style.lineDash || []);
     ctx.strokeStyle = style.color;
     ctx.lineWidth = style.lineWidth;
 
-    const path = new Path2D();
-    const sr = sampleRate;
-    const binWidth = sr / 2 / bins;
+    const freqs = getEqFreqLUT(bins, sampleRate);
+    const TWO_PI = 2 * Math.PI;
+    const useAnalytic = bandCoeffs && bandCoeffs.length > 0;
 
-    // Pixel-distance based decimation: skip bins closer than 2px (adapts to log scale)
-    let pointCount = 0;
-    let prevX = -100;
+    const xs = new Float64Array(EQ_CURVE_POINTS);
+    const ys = new Float64Array(EQ_CURVE_POINTS);
+    let count = 0;
 
-    // First pass: stroke path
-    let started = false;
-
-    // Collect points for fill
-    const xs: number[] = [];
-    const ys: number[] = [];
-
-    for (let bin = 1; bin < bins; bin++) {
-        const freq = bin * binWidth;
-        if (freq < freqMin || freq > freqMax) continue;
+    for (let i = 0; i < EQ_CURVE_POINTS; i++) {
+        const freq = freqs[i];
         const x = valToX(freq, width, false, state);
         if (x < -10 || x > width + 10) continue;
-        // Skip if less than 2px apart (at high freqs many bins map to same pixel)
-        if (x - prevX < 2 && prevX > -100) continue;
-        prevX = x;
 
-        const val = getEQResponseCached(freq);
-        const y = valToY(val, height, "Magnitude", metricConfigs, state);
-
-        if (!started) {
-            path.moveTo(x, y);
-            started = true;
+        let val: number;
+        if (useAnalytic) {
+            // Evaluate all biquads analytically at exact frequency
+            const w = TWO_PI * freq / sampleRate;
+            const cosW = Math.cos(w);
+            const sinW = Math.sin(w);
+            const cos2W = 2 * cosW * cosW - 1;
+            const sin2W = 2 * sinW * cosW;
+            let totalRe = 1.0, totalIm = 0.0;
+            for (let b = 0; b < bandCoeffs!.length; b++) {
+                const c = bandCoeffs![b];
+                const nR = c[0] + c[1] * cosW + c[2] * cos2W;
+                const nI = -(c[1] * sinW + c[2] * sin2W);
+                const dR = c[3] + c[4] * cosW + c[5] * cos2W;
+                const dI = -(c[4] * sinW + c[5] * sin2W);
+                const dMagSq = dR * dR + dI * dI + 1e-20;
+                const hRe = (nR * dR + nI * dI) / dMagSq;
+                const hIm = (nI * dR - nR * dI) / dMagSq;
+                const newRe = totalRe * hRe - totalIm * hIm;
+                const newIm = totalRe * hIm + totalIm * hRe;
+                totalRe = newRe;
+                totalIm = newIm;
+            }
+            val = 10 * Math.log10(totalRe * totalRe + totalIm * totalIm + 1e-20);
         } else {
-            path.lineTo(x, y);
+            val = getEQResponseCached(freq);
         }
-        xs.push(x);
-        ys.push(y);
-        pointCount++;
+
+        const y = valToY(val, height, "Magnitude", metricConfigs, state);
+        xs[count] = x;
+        ys[count] = y;
+        count++;
     }
 
-    if (pointCount > 0) {
+    if (count > 1) {
+        // Draw smooth path using monotone cubic bezier
+        const path = new Path2D();
+        path.moveTo(xs[0], ys[0]);
+        for (let i = 1; i < count; i++) {
+            const cpx = (xs[i - 1] + xs[i]) / 2;
+            path.bezierCurveTo(cpx, ys[i - 1], cpx, ys[i], xs[i], ys[i]);
+        }
         ctx.stroke(path);
 
-        // Fill semitransparente bajo la curva hasta 0dB
+        // Fill under curve to 0dB
         const zeroY = valToY(0, height, "Magnitude", metricConfigs, state);
-        if (pointCount > 1) {
-            const fillPath = new Path2D();
-            fillPath.moveTo(xs[0], zeroY);
-            for (let i = 0; i < pointCount; i++) fillPath.lineTo(xs[i], ys[i]);
-            fillPath.lineTo(xs[pointCount - 1], zeroY);
-            fillPath.closePath();
-            ctx.fillStyle = 'rgba(251, 191, 36, 0.08)';
-            ctx.fill(fillPath);
-        }
+        const fillPath = new Path2D();
+        fillPath.moveTo(xs[0], zeroY);
+        for (let i = 0; i < count; i++) fillPath.lineTo(xs[i], ys[i]);
+        fillPath.lineTo(xs[count - 1], zeroY);
+        fillPath.closePath();
+        ctx.fillStyle = 'rgba(251, 191, 36, 0.08)';
+        ctx.fill(fillPath);
     }
 
     ctx.setLineDash([]);
@@ -1321,29 +1357,20 @@ export function drawEQPhaseOverlayPath(
     ctx.globalAlpha = 0.7;
 
     const path = new Path2D();
-    const binWidth = sampleRate / 2 / bins;
+    const freqs = getEqFreqLUT(bins, sampleRate);
     let started = false;
-    let prevX = -100;
 
-    for (let bin = 1; bin < bins; bin++) {
-        const freq = bin * binWidth;
-        if (freq < freqMin || freq > freqMax) continue;
+    for (let i = 0; i < EQ_CURVE_POINTS; i++) {
+        const freq = freqs[i];
         const x = valToX(freq, width, false, state);
         if (x < -10 || x > width + 10) continue;
-        if (x - prevX < 2 && prevX > -100) continue;
-        prevX = x;
 
-        // Phase in radians → degrees for display on Phase axis
         const phaseRad = getEQPhaseCached(freq);
         const phaseDeg = phaseRad * (180 / Math.PI);
         const y = valToY(phaseDeg, height, "Phase", metricConfigs, state);
 
-        if (!started) {
-            path.moveTo(x, y);
-            started = true;
-        } else {
-            path.lineTo(x, y);
-        }
+        if (!started) { path.moveTo(x, y); started = true; }
+        else { path.lineTo(x, y); }
     }
 
     if (started) {
@@ -1370,27 +1397,22 @@ export function drawIndividualFilterCurve(
     sampleRate: number = 48000
 ) {
     const [b0, b1, b2, _a0, a1, a2] = coeffs;
-    const binWidth = sampleRate / 2 / bins;
     const TWO_PI = 2 * Math.PI;
+    const freqs = getEqFreqLUT(bins, sampleRate);
 
     ctx.globalAlpha = 0.3;
     ctx.strokeStyle = color;
     ctx.lineWidth = 1.5;
     ctx.setLineDash([]);
 
-    const path = new Path2D();
-    const xs: number[] = [];
-    const ys: number[] = [];
-    let started = false;
-    let prevX = -100;
+    const xs = new Float64Array(EQ_CURVE_POINTS);
+    const ys = new Float64Array(EQ_CURVE_POINTS);
+    let count = 0;
 
-    for (let bin = 1; bin < bins; bin++) {
-        const freq = bin * binWidth;
-        if (freq < freqMin || freq > freqMax) continue;
+    for (let i = 0; i < EQ_CURVE_POINTS; i++) {
+        const freq = freqs[i];
         const x = valToX(freq, width, false, state);
         if (x < -10 || x > width + 10) continue;
-        if (x - prevX < 2 && prevX > -100) continue;
-        prevX = x;
 
         const w = TWO_PI * freq / sampleRate;
         const cosW = Math.cos(w);
@@ -1408,13 +1430,19 @@ export function drawIndividualFilterCurve(
 
         const y = valToY(val, height, "Magnitude", metricConfigs, state);
 
-        if (!started) { path.moveTo(x, y); started = true; }
-        else { path.lineTo(x, y); }
-        xs.push(x);
-        ys.push(y);
+        xs[count] = x;
+        ys[count] = y;
+        count++;
     }
 
-    if (xs.length > 1) {
+    if (count > 1) {
+        // Smooth path using monotone cubic bezier
+        const path = new Path2D();
+        path.moveTo(xs[0], ys[0]);
+        for (let i = 1; i < count; i++) {
+            const cpx = (xs[i - 1] + xs[i]) / 2;
+            path.bezierCurveTo(cpx, ys[i - 1], cpx, ys[i], xs[i], ys[i]);
+        }
         ctx.stroke(path);
 
         // Subtle fill
@@ -1422,8 +1450,8 @@ export function drawIndividualFilterCurve(
         const zeroY = valToY(0, height, "Magnitude", metricConfigs, state);
         const fillPath = new Path2D();
         fillPath.moveTo(xs[0], zeroY);
-        for (let i = 0; i < xs.length; i++) fillPath.lineTo(xs[i], ys[i]);
-        fillPath.lineTo(xs[xs.length - 1], zeroY);
+        for (let i = 0; i < count; i++) fillPath.lineTo(xs[i], ys[i]);
+        fillPath.lineTo(xs[count - 1], zeroY);
         fillPath.closePath();
         ctx.fillStyle = color;
         ctx.fill(fillPath);

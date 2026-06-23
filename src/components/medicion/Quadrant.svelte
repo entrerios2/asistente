@@ -370,6 +370,11 @@
         // Envolver todo en try/catch para evitar que errores transitorios
         // (ej. buffers con tamaño inesperado durante resize/init) congelen el render loop
         try {
+            // Refresh EQ cache at render-loop speed (60fps) — decoupled from DSP throttle
+            if (showEQOverlay) {
+                mathOrchestrator.refreshEQCache();
+            }
+
             // Actualizar capas calculadas antes de dibujar
             traceManager.updateCalculatedLayers();
 

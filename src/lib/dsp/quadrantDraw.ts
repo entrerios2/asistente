@@ -596,13 +596,22 @@ export function drawQuadrant(p: DrawParams): void {
     drawTargetTrace(p.ctx, p.width, p.height, p.targetTrace, p.interactionState, p.hasTimeDomainActive);
 
     if (p.showEQOverlay && p.eqBands.length > 0) {
+        // Precompute biquad coefficients for analytical curve evaluation
+        const bandCoeffs: number[][] = [];
+        for (const band of p.eqBands) {
+            if (band.gain !== 0 || ['lowpass', 'highpass', 'notch', 'bandpass'].includes(band.type)) {
+                bandCoeffs.push(getCoeffsForType(band.type, band.freq, band.gain, band.q, p.sampleRate));
+            }
+        }
+
         drawEQOverlayPath(
             p.ctx, p.width, p.height,
             { color: '#fbbf24', lineWidth: 2, lineDash: [] },
             p.metricConfigs, p.interactionState,
             p.getEQResponseCached,
             p.BINS,
-            p.sampleRate
+            p.sampleRate,
+            bandCoeffs
         );
 
         // B3: Draw EQ phase overlay when Phase metric is visible

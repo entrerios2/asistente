@@ -300,6 +300,31 @@ class MathOrchestrator {
         return 1000 / uiStore.dspUpdateRate;
     }
 
+    /**
+     * Fast EQ-only cache refresh. Call from the render loop (60fps) to ensure
+     * the EQ response curve updates instantly when dragging nodes, without
+     * waiting for the throttled DSP pipeline tick.
+     */
+    refreshEQCache(): void {
+        try {
+            const bands = eqStore.activeBands;
+            let bandsHash = 0;
+            for (let b = 0; b < bands.length; b++) {
+                const band = bands[b];
+                bandsHash += band.freq * 1e6 + band.gain * 1e3 + band.q + (band.type ? band.type.charCodeAt(0) * 100 : 0);
+            }
+            for (const filter of calibrationStore.suggestedFilters) {
+                bandsHash += filter.frequency * 1e6 + filter.gain * 1e3 + filter.q + (filter.enabled ? 1 : 0) + (filter.type ? filter.type.charCodeAt(0) * 100 : 0);
+            }
+            if (bandsHash !== this.lastBandsHash) {
+                this.lastBandsHash = bandsHash;
+                this.updateEQCache();
+            }
+        } catch (e) {
+            // Ignorar ReferenceError temporal durante la carga ESM
+        }
+    }
+
     private checkDirty() {
         try {
             const bands = eqStore.activeBands;
@@ -422,18 +447,23 @@ class MathOrchestrator {
 
     getEQResponseCached(f: number): number {
         const binWidth = (uiStore.sampleRate / 2) / this.BINS;
-        const idx = Math.round(f / binWidth);
-        if (idx < 0) return this.eqResponseCache[0];
-        if (idx >= this.BINS) return this.eqResponseCache[this.BINS - 1];
-        return this.eqResponseCache[idx];
+        const fIdx = f / binWidth;
+        if (fIdx <= 0) return this.eqResponseCache[0];
+        if (fIdx >= this.BINS - 1) return this.eqResponseCache[this.BINS - 1];
+        // Linear interpolation between adjacent bins — eliminates staircase at low freqs
+        const lo = fIdx | 0;
+        const frac = fIdx - lo;
+        return this.eqResponseCache[lo] + frac * (this.eqResponseCache[lo + 1] - this.eqResponseCache[lo]);
     }
 
     getEQPhaseCached(f: number): number {
         const binWidth = (uiStore.sampleRate / 2) / this.BINS;
-        const idx = Math.round(f / binWidth);
-        if (idx < 0) return this.eqPhaseCache[0];
-        if (idx >= this.BINS) return this.eqPhaseCache[this.BINS - 1];
-        return this.eqPhaseCache[idx];
+        const fIdx = f / binWidth;
+        if (fIdx <= 0) return this.eqPhaseCache[0];
+        if (fIdx >= this.BINS - 1) return this.eqPhaseCache[this.BINS - 1];
+        const lo = fIdx | 0;
+        const frac = fIdx - lo;
+        return this.eqPhaseCache[lo] + frac * (this.eqPhaseCache[lo + 1] - this.eqPhaseCache[lo]);
     }
 
     run() {
