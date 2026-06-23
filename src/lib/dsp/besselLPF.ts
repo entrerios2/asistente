@@ -10,7 +10,6 @@
 
 export type BesselFrequency = 'Slow' | 'Medium' | 'Fast';
 
-const ORDER = 5;
 
 // Coefficients from OSM bessellpf.h (pre-warped for DSP update rate)
 const COEFFICIENTS: Record<BesselFrequency, { gain: number; k: number[] }> = {

@@ -16,7 +16,11 @@
 		"noUnusedParameters": true,
 		"isolatedModules": true,
 		"target": "ESNext"
-	}
+	},
+	"exclude": [
+		"src/_deprecated",
+		"src/lib/dsp/apst"
+	]
 	// Path aliases are handled by https://svelte.dev/docs/kit/configuration#alias
 	// except $lib which is handled by https://svelte.dev/docs/kit/configuration#files
 	//

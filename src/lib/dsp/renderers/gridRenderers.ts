@@ -6,10 +6,6 @@ import {
     valToX,
     valToY,
     xToVal,
-    timeMin,
-    timeMax,
-    freqMin,
-    freqMax,
     type InteractionState
 } from '../canvasInteraction';
 import { type MetricConfig } from '../quadrantState';

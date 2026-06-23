@@ -39,8 +39,6 @@ export class WebAudioProvider implements AudioProvider {
 
 	// Pre-allocated buffers for hot path (avoid allocations per frame)
 	private leqTimeData: Float32Array | null = null;
-	private sabRefView: Float32Array | null = null;
-	private sabMeasView: Float32Array | null = null;
 	private sabRefBuf: Float32Array | null = null;
 	private sabMeasBuf: Float32Array | null = null;
 

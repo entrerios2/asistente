@@ -457,7 +457,7 @@ class TraceManager {
         }
     }
 
-    async captureInstantaneaFromLive(name?: string, source: 'manual' | 'secuencial' = 'manual') {
+    async captureInstantaneaFromLive(name?: string, _source: 'manual' | 'secuencial' = 'manual') {
         const metricList = Object.keys(this.metricsToCapture).filter(k => this.metricsToCapture[k]);
         return this.captureInstantanea(name, metricList);
     }

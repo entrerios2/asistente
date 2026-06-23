@@ -5,7 +5,6 @@ import {
     calculateGroupDelay,
     processSignalLevel,
 } from './osmMetrics';
-import { getWeightingGain } from './weighting';
 import { ComplexAveraging } from './averaging';
 import { deconvolve } from './deconvolution';
 import { applySourceWindow } from './sourceWindowing';
@@ -173,7 +172,7 @@ self.onmessage = (event) => {
             FFT_SIZE,
             metrics,
             windowType,
-            weightingType,
+            weightingType: _weightingType,
             averagingType,
             averagingDepth,
             averagingAlpha,
