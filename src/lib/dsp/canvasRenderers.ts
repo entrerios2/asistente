@@ -1353,3 +1353,81 @@ export function drawEQPhaseOverlayPath(
     ctx.globalAlpha = 1.0;
     ctx.setLineDash([]);
 }
+
+/**
+ * P1: Draw the response curve of a single biquad filter (ghost curve).
+ * Shows the individual contribution of the hovered/dragged filter.
+ */
+export function drawIndividualFilterCurve(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    coeffs: number[],
+    color: string,
+    metricConfigs: Record<string, MetricConfig>,
+    state: InteractionState,
+    bins: number,
+    sampleRate: number = 48000
+) {
+    const [b0, b1, b2, _a0, a1, a2] = coeffs;
+    const binWidth = sampleRate / 2 / bins;
+    const TWO_PI = 2 * Math.PI;
+
+    ctx.globalAlpha = 0.3;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([]);
+
+    const path = new Path2D();
+    const xs: number[] = [];
+    const ys: number[] = [];
+    let started = false;
+    let prevX = -100;
+
+    for (let bin = 1; bin < bins; bin++) {
+        const freq = bin * binWidth;
+        if (freq < freqMin || freq > freqMax) continue;
+        const x = valToX(freq, width, false, state);
+        if (x < -10 || x > width + 10) continue;
+        if (x - prevX < 2 && prevX > -100) continue;
+        prevX = x;
+
+        const w = TWO_PI * freq / sampleRate;
+        const cosW = Math.cos(w);
+        const sinW = Math.sin(w);
+        const cos2W = 2 * cosW * cosW - 1;
+        const sin2W = 2 * sinW * cosW;
+
+        const nR = b0 + b1 * cosW + b2 * cos2W;
+        const nI = -(b1 * sinW + b2 * sin2W);
+        const dR = 1 + a1 * cosW + a2 * cos2W;
+        const dI = -(a1 * sinW + a2 * sin2W);
+        const nSq = nR * nR + nI * nI;
+        const dSq = dR * dR + dI * dI + 1e-20;
+        const val = 10 * Math.log10(nSq / dSq);
+
+        const y = valToY(val, height, "Magnitude", metricConfigs, state);
+
+        if (!started) { path.moveTo(x, y); started = true; }
+        else { path.lineTo(x, y); }
+        xs.push(x);
+        ys.push(y);
+    }
+
+    if (xs.length > 1) {
+        ctx.stroke(path);
+
+        // Subtle fill
+        ctx.globalAlpha = 0.06;
+        const zeroY = valToY(0, height, "Magnitude", metricConfigs, state);
+        const fillPath = new Path2D();
+        fillPath.moveTo(xs[0], zeroY);
+        for (let i = 0; i < xs.length; i++) fillPath.lineTo(xs[i], ys[i]);
+        fillPath.lineTo(xs[xs.length - 1], zeroY);
+        fillPath.closePath();
+        ctx.fillStyle = color;
+        ctx.fill(fillPath);
+    }
+
+    ctx.globalAlpha = 1.0;
+}

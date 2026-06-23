@@ -17,8 +17,11 @@ import {
     drawCrestFactor,
     drawPhaseDelay,
     drawEQOverlayPath,
-    drawEQPhaseOverlayPath
+    drawEQPhaseOverlayPath,
+    drawIndividualFilterCurve
 } from './canvasRenderers';
+import { getCoeffsForType } from './biquad';
+import { filterTypeColors, filterTypeName, drawFilterIcon } from './eqNodeIcons';
 import {
     freqMin,
     freqMax,
@@ -77,6 +80,14 @@ export interface DrawParams {
     eqBands: { freq: number; gain: number; q: number; type: string }[];
     hoveringEQNode: number | null;
     draggingEQNode: number | null;
+    selectedEQNode: number | null;
+
+    // EQ score badge
+    eqScoreBadge: {
+        before: { rms: number; peak: number; percentWithin3dB: number; percentWithin6dB: number; meanDeviation: number };
+        after: { rms: number; peak: number; percentWithin3dB: number; percentWithin6dB: number; meanDeviation: number };
+    } | null;
+    eqScoreHover: boolean;
 
     // Spectrogram
     offscreenCanvas: HTMLCanvasElement | null;
@@ -605,42 +616,128 @@ export function drawQuadrant(p: DrawParams): void {
             );
         }
 
-        // Dibujar nodos de filtros
+        // P1b: Ghost curve of active (hovered/dragged/selected) filter
         const bands = p.eqBands;
+        const activeFilterIdx = p.draggingEQNode ?? p.hoveringEQNode ?? p.selectedEQNode;
+        if (activeFilterIdx !== null && activeFilterIdx >= 0 && activeFilterIdx < bands.length) {
+            const activeBand = bands[activeFilterIdx];
+            const activeColor = filterTypeColors[activeBand.type] || '#fbbf24';
+            const coeffs = getCoeffsForType(activeBand.type, activeBand.freq, activeBand.gain, activeBand.q, p.sampleRate);
+            drawIndividualFilterCurve(
+                p.ctx, p.width, p.height, coeffs, activeColor,
+                p.metricConfigs, p.interactionState, p.BINS, p.sampleRate
+            );
+        }
+
+        // P6a: Drag guides — 0dB line + vertical freq line
+        if (p.draggingEQNode !== null && p.draggingEQNode >= 0 && p.draggingEQNode < bands.length) {
+            const dragBand = bands[p.draggingEQNode];
+            // 0dB horizontal reference
+            const zeroY = valToY(0, p.containerHeight, "Magnitude", p.metricConfigs, p.interactionState);
+            p.ctx.setLineDash([4, 4]);
+            p.ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+            p.ctx.lineWidth = 1;
+            p.ctx.beginPath();
+            p.ctx.moveTo(0, zeroY);
+            p.ctx.lineTo(p.width, zeroY);
+            p.ctx.stroke();
+
+            // Vertical freq line
+            const dragX = valToX(dragBand.freq, p.containerWidth, false, p.interactionState);
+            p.ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+            p.ctx.beginPath();
+            p.ctx.moveTo(dragX, 0);
+            p.ctx.lineTo(dragX, p.height);
+            p.ctx.stroke();
+            p.ctx.setLineDash([]);
+        }
+
+        // P2c+P3a: Draw filter nodes with type color + icon + enriched tooltip
         for (let i = 0; i < bands.length; i++) {
             const band = bands[i];
+            const color = filterTypeColors[band.type] || '#fbbf24';
             const x = valToX(band.freq, p.containerWidth, false, p.interactionState);
-            const gain = p.getEQResponseCached(band.freq);
-            const y = valToY(gain, p.containerHeight, "Magnitude", p.metricConfigs, p.interactionState);
+            // Fix: position node at band's individual gain, not total EQ response
+            const y = valToY(band.gain, p.containerHeight, "Magnitude", p.metricConfigs, p.interactionState);
 
             const isHovered = p.hoveringEQNode === i;
             const isDragging = p.draggingEQNode === i;
-            const radius = isDragging ? 8 : isHovered ? 7 : 5;
+            const isActive = isHovered || isDragging;
+            const radius = isDragging ? 18 : isHovered ? 15 : 11;
 
-            p.ctx.shadowColor = '#fbbf24';
-            p.ctx.shadowBlur = isDragging ? 12 : isHovered ? 8 : 0;
+            // Glow
+            if (isActive) {
+                p.ctx.shadowColor = color;
+                p.ctx.shadowBlur = isDragging ? 14 : 10;
+            }
 
+            // Circle background
             p.ctx.beginPath();
             p.ctx.arc(x, y, radius, 0, Math.PI * 2);
-            p.ctx.fillStyle = isDragging ? '#fbbf24' : isHovered ? '#fcd34d' : '#f59e0b';
+            p.ctx.fillStyle = isActive ? color : `${color}cc`;
             p.ctx.fill();
             p.ctx.strokeStyle = '#ffffff';
-            p.ctx.lineWidth = 1.5;
+            p.ctx.lineWidth = isActive ? 2 : 1.5;
             p.ctx.stroke();
             p.ctx.shadowBlur = 0;
 
-            if (isHovered || isDragging) {
-                p.ctx.font = '10px monospace';
-                p.ctx.fillStyle = '#fbbf24';
-                p.ctx.textAlign = 'center';
-                p.ctx.fillText(
-                    `${band.freq >= 1000 ? (band.freq/1000).toFixed(1)+'k' : band.freq}Hz`,
-                    x, y - radius - 12
-                );
-                p.ctx.fillText(
-                    `${band.gain > 0 ? '+' : ''}${band.gain.toFixed(1)}dB`,
-                    x, y - radius - 2
-                );
+            // Draw type icon inside the node
+            drawFilterIcon(p.ctx, x, y, radius, band.type, '#ffffff');
+
+            // P3a: Enriched tooltip on hover/drag
+            if (isActive) {
+                const typeName = filterTypeName(band.type);
+                const freqLabel = band.freq >= 1000 ? `${(band.freq/1000).toFixed(1)}k` : `${band.freq}`;
+                const gainLabel = `${band.gain > 0 ? '+' : ''}${band.gain.toFixed(1)}dB`;
+                const qLabel = `Q: ${band.q.toFixed(1)}`;
+
+                const line1 = `#${i + 1} ${typeName}`;
+                const line2 = `${freqLabel}Hz  ${gainLabel}`;
+                const line3 = qLabel;
+
+                p.ctx.font = '600 9px system-ui, sans-serif';
+                const w1 = p.ctx.measureText(line1).width;
+                const w2 = p.ctx.measureText(line2).width;
+                const w3 = p.ctx.measureText(line3).width;
+                const maxW = Math.max(w1, w2, w3) + 16;
+                const tooltipH = 42;
+
+                // Position: above node, adaptive if near top
+                let tooltipX = x - maxW / 2;
+                let tooltipY = y - radius - tooltipH - 6;
+                if (tooltipY < 4) tooltipY = y + radius + 6;
+                if (tooltipX < 2) tooltipX = 2;
+                if (tooltipX + maxW > p.width - 2) tooltipX = p.width - maxW - 2;
+
+                // Background
+                p.ctx.fillStyle = 'rgba(0, 0, 0, 0.88)';
+                const r2 = 4;
+                p.ctx.beginPath();
+                p.ctx.moveTo(tooltipX + r2, tooltipY);
+                p.ctx.lineTo(tooltipX + maxW - r2, tooltipY);
+                p.ctx.quadraticCurveTo(tooltipX + maxW, tooltipY, tooltipX + maxW, tooltipY + r2);
+                p.ctx.lineTo(tooltipX + maxW, tooltipY + tooltipH - r2);
+                p.ctx.quadraticCurveTo(tooltipX + maxW, tooltipY + tooltipH, tooltipX + maxW - r2, tooltipY + tooltipH);
+                p.ctx.lineTo(tooltipX + r2, tooltipY + tooltipH);
+                p.ctx.quadraticCurveTo(tooltipX, tooltipY + tooltipH, tooltipX, tooltipY + tooltipH - r2);
+                p.ctx.lineTo(tooltipX, tooltipY + r2);
+                p.ctx.quadraticCurveTo(tooltipX, tooltipY, tooltipX + r2, tooltipY);
+                p.ctx.closePath();
+                p.ctx.fill();
+                p.ctx.strokeStyle = `${color}40`;
+                p.ctx.lineWidth = 1;
+                p.ctx.stroke();
+
+                // Text
+                p.ctx.textAlign = 'left';
+                p.ctx.fillStyle = color;
+                p.ctx.font = '600 9px system-ui, sans-serif';
+                p.ctx.fillText(line1, tooltipX + 8, tooltipY + 13);
+                p.ctx.fillStyle = '#e0e0e0';
+                p.ctx.font = '9px system-ui, sans-serif';
+                p.ctx.fillText(line2, tooltipX + 8, tooltipY + 25);
+                p.ctx.fillStyle = '#999';
+                p.ctx.fillText(line3, tooltipX + 8, tooltipY + 37);
             }
         }
     }
@@ -655,8 +752,13 @@ export function drawQuadrant(p: DrawParams): void {
         drawNumericOverlay(p.ctx, p.width, p.height, p.meterStore, p.hasTimeDomainActive);
     }
 
-    // 6. Retícula Crosshair Interactiva
-    if (p.interactionState.showCrosshair) {
+    // 5b. EQ Score Badge (bottom-left corner when EQ overlay active)
+    if (p.showEQOverlay && p.eqScoreBadge && p.eqBands.length > 0) {
+        drawEQScoreBadge(p.ctx, p.eqScoreBadge, p.eqScoreHover);
+    }
+
+    // 6. Retícula Crosshair Interactiva (suppressed when interacting with EQ nodes)
+    if (p.interactionState.showCrosshair && p.hoveringEQNode === null && p.draggingEQNode === null) {
         drawCrosshair(
             p.ctx,
             p.width,
@@ -675,4 +777,166 @@ export function drawQuadrant(p: DrawParams): void {
             p.getImpulseValueInterpolated
         );
     }
+}
+
+// ── EQ Score Badge ──────────────────────────────────────────────
+// Badge position constants
+export const EQ_BADGE_X = 8;
+export const EQ_BADGE_Y_OFFSET = 40; // from bottom
+export const EQ_BADGE_W_COMPACT = 90;
+export const EQ_BADGE_H_COMPACT = 24;
+export const EQ_BADGE_W_EXPANDED = 170;
+export const EQ_BADGE_H_EXPANDED = 120;
+
+type ScoreData = {
+    before: { rms: number; peak: number; percentWithin3dB: number; percentWithin6dB: number; meanDeviation: number };
+    after: { rms: number; peak: number; percentWithin3dB: number; percentWithin6dB: number; meanDeviation: number };
+};
+
+function rmsColor(rms: number): string {
+    return rms > 5 ? '#ff4444' : rms > 2 ? '#fbbf24' : '#00ff88';
+}
+
+function drawEQScoreBadge(
+    ctx: CanvasRenderingContext2D,
+    score: ScoreData,
+    expanded: boolean
+): void {
+    const x = EQ_BADGE_X;
+    const y = ctx.canvas.height - EQ_BADGE_Y_OFFSET;
+
+    ctx.save();
+
+    if (!expanded) {
+        // ── Compact badge ──
+        const w = EQ_BADGE_W_COMPACT;
+        const h = EQ_BADGE_H_COMPACT;
+        const bx = x;
+        const by = y - h;
+
+        // Background
+        ctx.fillStyle = 'rgba(10, 10, 16, 0.85)';
+        ctx.beginPath();
+        ctx.roundRect(bx, by, w, h, 6);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // RMS value
+        const rmsVal = score.after.rms;
+        const color = rmsColor(rmsVal);
+
+        ctx.font = 'bold 10px system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.45)';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('RMS', bx + 6, by + h / 2);
+
+        ctx.font = 'bold 11px system-ui, sans-serif';
+        ctx.fillStyle = color;
+        ctx.fillText(`${rmsVal.toFixed(1)}`, bx + 34, by + h / 2);
+
+        ctx.font = '9px system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        ctx.fillText('dB', bx + 62, by + h / 2);
+
+        // Improvement arrow
+        if (score.before.rms !== score.after.rms) {
+            const improved = score.after.rms < score.before.rms;
+            ctx.fillStyle = improved ? '#00ff88' : '#ff4444';
+            ctx.font = '11px system-ui, sans-serif';
+            ctx.fillText(improved ? '↓' : '↑', bx + w - 14, by + h / 2);
+        }
+    } else {
+        // ── Expanded badge ──
+        const w = EQ_BADGE_W_EXPANDED;
+        const h = EQ_BADGE_H_EXPANDED;
+        const bx = x;
+        const by = y - h;
+
+        // Background
+        ctx.fillStyle = 'rgba(10, 10, 16, 0.92)';
+        ctx.beginPath();
+        ctx.roundRect(bx, by, w, h, 8);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Header
+        ctx.font = 'bold 9px system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        ctx.fillText('Evaluación EQ', bx + 8, by + 6);
+
+        // Column headers
+        const colMetric = bx + 8;
+        const colBefore = bx + 70;
+        const colAfter = bx + 110;
+        const colArrow = bx + 150;
+        let rowY = by + 22;
+        const rowH = 16;
+
+        ctx.font = '8px system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        ctx.fillText('Métrica', colMetric, rowY);
+        ctx.textAlign = 'right';
+        ctx.fillText('Antes', colBefore + 20, rowY);
+        ctx.fillText('Después', colAfter + 20, rowY);
+        ctx.textAlign = 'left';
+        rowY += rowH;
+
+        // Separator
+        ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+        ctx.beginPath();
+        ctx.moveTo(bx + 6, rowY - 4);
+        ctx.lineTo(bx + w - 6, rowY - 4);
+        ctx.stroke();
+
+        // Rows
+        const rows: [string, number, number, boolean][] = [
+            ['RMS (dB)', score.before.rms, score.after.rms, true],
+            ['Peak (dB)', score.before.peak, score.after.peak, true],
+            ['±3dB (%)', score.before.percentWithin3dB, score.after.percentWithin3dB, false],
+            ['±6dB (%)', score.before.percentWithin6dB, score.after.percentWithin6dB, false],
+            ['Bias (dB)', Math.abs(score.before.meanDeviation), Math.abs(score.after.meanDeviation), true],
+        ];
+
+        ctx.font = '9px system-ui, sans-serif';
+        for (const [label, before, after, lowerIsBetter] of rows) {
+            // Metric name
+            ctx.textAlign = 'left';
+            ctx.fillStyle = 'rgba(255,255,255,0.55)';
+            ctx.fillText(label, colMetric, rowY);
+
+            // Before value
+            ctx.textAlign = 'right';
+            ctx.fillStyle = 'rgba(255,255,255,0.45)';
+            const bStr = label.includes('%') ? `${before.toFixed(0)}%` : before.toFixed(1);
+            ctx.fillText(bStr, colBefore + 20, rowY);
+
+            // After value (colored)
+            const afterColor = rmsColor(after);
+            ctx.fillStyle = label.includes('%')
+                ? (after > 80 ? '#00ff88' : after > 50 ? '#fbbf24' : '#ff4444')
+                : afterColor;
+            const aStr = label.includes('%') ? `${after.toFixed(0)}%` : after.toFixed(1);
+            ctx.fillText(aStr, colAfter + 20, rowY);
+
+            // Arrow
+            const improved = lowerIsBetter ? after < before : after > before;
+            const worsened = lowerIsBetter ? after > before : after < before;
+            if (improved || worsened) {
+                ctx.fillStyle = improved ? '#00ff88' : '#ff4444';
+                ctx.textAlign = 'left';
+                ctx.fillText(improved ? (lowerIsBetter ? '↓' : '↑') : (lowerIsBetter ? '↑' : '↓'), colArrow, rowY);
+            }
+
+            rowY += rowH;
+        }
+    }
+
+    ctx.restore();
 }

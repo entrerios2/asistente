@@ -5,7 +5,7 @@
     let {
         quadrantId,
         quadrantLayers,
-        showEQOverlay = $bindable(),
+        showEQOverlay,
         onToggleEQ
     }: {
         quadrantId: string;
@@ -27,7 +27,6 @@
     }
 
     function toggleEQ() {
-        showEQOverlay = !showEQOverlay;
         if (onToggleEQ) onToggleEQ();
     }
 </script>

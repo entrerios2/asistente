@@ -16,13 +16,15 @@
     } from "$lib/dsp/quadrantState";
 
     import ZoomControls from "./ZoomControls.svelte";
+    import EQNodePopover from "./EQNodePopover.svelte";
 
     import MetricConfigPopover from "./MetricConfigPopover.svelte";
     import AddMetricDropdown from "./AddMetricDropdown.svelte";
     import LayerPanel from "./LayerPanel.svelte";
 
     import { InterpolationEngine } from "$lib/dsp/interpolationEngine";
-    import { drawQuadrant } from "$lib/dsp/quadrantDraw";
+    import { drawQuadrant, EQ_BADGE_X, EQ_BADGE_Y_OFFSET, EQ_BADGE_W_COMPACT, EQ_BADGE_H_COMPACT, EQ_BADGE_W_EXPANDED, EQ_BADGE_H_EXPANDED } from "$lib/dsp/quadrantDraw";
+    import { computeDeviation } from "$lib/dsp/deviationMetrics";
     import {
         handleWheel as interactionHandleWheel,
         handleMouseMove as interactionHandleMouseMove,
@@ -63,10 +65,33 @@
             });
         }
     });
-    let showEQOverlay = $state(false);
+    let showEQOverlay = $derived(eqStore.showEQ && eqStore.activeBands.length > 0);
     let draggingEQNode = $state<number | null>(null);
     let hoveringEQNode = $state<number | null>(null);
+    let selectedEQNode = $state<number | null>(null);
+    let popoverPos = $state<{ x: number; y: number }>({ x: 0, y: 0 });
+    let eqScoreHover = $state(false);
 
+    // Compute deviation before/after EQ for badge
+    const deviationTarget = $derived(traceManager.getTargetCurve(mathOrchestrator.BINS, uiStore.sampleRate));
+    const eqScoreBadge = $derived.by(() => {
+        if (!showEQOverlay || eqStore.activeBands.length === 0) return null;
+        const mag = mathOrchestrator.outputMagnitude;
+        const coh = mathOrchestrator.outputCoherence;
+        const bins = mathOrchestrator.BINS;
+        const sr = uiStore.sampleRate;
+        if (!mag || mag.length === 0) return null;
+        const before = computeDeviation(mag, deviationTarget, coh, bins, sr);
+        // Compute corrected magnitude
+        const binWidth = (sr / 2) / bins;
+        const adjusted = new Float32Array(bins);
+        for (let i = 0; i < bins; i++) {
+            const freq = i * binWidth || 1e-6;
+            adjusted[i] = (mag[i] || 0) + mathOrchestrator.getEQResponseCached(freq);
+        }
+        const after = computeDeviation(adjusted, deviationTarget, coh, bins, sr);
+        return { before, after };
+    });
 
     let metricStyles = $state<
         Record<string, { color: string; lineWidth: number; lineDash: number[] }>
@@ -428,6 +453,9 @@
                 eqBands: eqStore.activeBands,
                 hoveringEQNode,
                 draggingEQNode,
+                selectedEQNode,
+                eqScoreBadge,
+                eqScoreHover,
                 offscreenCanvas,
                 offscreenCtx,
                 spectrogramLUT_RGBA,
@@ -451,6 +479,18 @@
 
     // GESTORES DE EVENTOS DELEGADOS (PAN & ZOOM)
     function handleWheel(e: WheelEvent) {
+        // P5: Q control via scroll when hovering an EQ node (parametric only)
+        if (showEQOverlay && hoveringEQNode !== null && eqStore.eqType === 'parametrico') {
+            e.preventDefault();
+            e.stopPropagation();
+            const band = eqStore.activeBands[hoveringEQNode];
+            if (band) {
+                const delta = e.deltaY > 0 ? -0.1 : 0.1;
+                const newQ = Math.max(0.1, Math.min(20, Math.round((band.q + delta) * 10) / 10));
+                eqStore.updateBand(hoveringEQNode, 'q', newQ);
+            }
+            return;
+        }
         interactionHandleWheel(
             e,
             interactionState,
@@ -483,11 +523,8 @@
                     false,
                     interactionState,
                 );
-                const gain = mathOrchestrator.getEQResponseCached(
-                    bands[i].freq,
-                );
                 const ny = valToY(
-                    gain,
+                    bands[i].gain,
                     containerHeight,
                     "Magnitude",
                     metricConfigs,
@@ -495,14 +532,25 @@
                 );
                 const dx = mouseX - nx;
                 const dy = mouseY - ny;
-                if (dx * dx + dy * dy < 144) {
+                if (dx * dx + dy * dy < 400) {
                     found = i;
                     break;
-                } // 144 = 12^2, evita sqrt
+                } // 400 = 20^2, generous hit area for wheel Q control
             }
             hoveringEQNode = found >= 0 ? found : null;
         } else if (!showEQOverlay) {
             hoveringEQNode = null;
+        }
+
+        // Hit-test EQ score badge (bottom-left corner)
+        if (showEQOverlay && eqScoreBadge) {
+            const badgeW = eqScoreHover ? EQ_BADGE_W_EXPANDED : EQ_BADGE_W_COMPACT;
+            const badgeH = eqScoreHover ? EQ_BADGE_H_EXPANDED : EQ_BADGE_H_COMPACT;
+            const badgeX = EQ_BADGE_X;
+            const badgeY = containerHeight - EQ_BADGE_Y_OFFSET - badgeH;
+            eqScoreHover = mouseX >= badgeX && mouseX <= badgeX + badgeW && mouseY >= badgeY && mouseY <= badgeY + badgeH + EQ_BADGE_Y_OFFSET;
+        } else {
+            eqScoreHover = false;
         }
 
         // Drag activo de nodo EQ
@@ -519,11 +567,29 @@
                 "Magnitude",
                 interactionState,
             );
-            const clampedFreq = Math.max(20, Math.min(20000, Math.round(freq)));
-            const clampedGain = Math.max(
+            let clampedFreq = Math.max(20, Math.min(20000, Math.round(freq)));
+            let clampedGain = Math.max(
                 -30,
                 Math.min(30, parseFloat(gain.toFixed(1))),
             );
+
+            // P6c: Snap to ISO 1/3 octave frequencies when Shift is held
+            if (e.shiftKey) {
+                const isoFreqs = [20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000, 20000];
+                let best = isoFreqs[0];
+                let bestDist = Math.abs(Math.log10(clampedFreq) - Math.log10(best));
+                for (const f of isoFreqs) {
+                    const d = Math.abs(Math.log10(clampedFreq) - Math.log10(f));
+                    if (d < bestDist) { bestDist = d; best = f; }
+                }
+                clampedFreq = best;
+            }
+
+            // P6c: Snap gain to 0.5dB steps when Ctrl is held
+            if (e.ctrlKey) {
+                clampedGain = Math.round(clampedGain * 2) / 2;
+            }
+
             // C1 fix: in graphic mode, only allow gain changes (freq is fixed)
             if (eqStore.eqType === 'grafico') {
                 eqStore.updateBand(draggingEQNode, "gain", clampedGain);
@@ -546,12 +612,19 @@
     }
 
     function handleMouseDown(e: MouseEvent) {
+        // P4b: Click on EQ node → select for popover
         if (showEQOverlay && hoveringEQNode !== null) {
             draggingEQNode = hoveringEQNode;
+            // Set selectedEQNode and popover position
+            selectedEQNode = hoveringEQNode;
+            const rect = canvas.getBoundingClientRect();
+            popoverPos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
             e.preventDefault();
             e.stopPropagation();
             return;
         }
+        // Click outside nodes → close popover
+        selectedEQNode = null;
         interactionHandleMouseDown(
             e,
             interactionState,
@@ -813,7 +886,7 @@
 
         <!-- ETIQUETA DE CAPA ACTIVA + BOTÓN DE CAPAS CON BADGE (CON ML-AUTO Y BOTÓN SETTINGS INTEGRADO) -->
         <div class="flex items-center gap-1.5 ml-auto">
-            <LayerPanel quadrantId={id} {quadrantLayers} bind:showEQOverlay />
+            <LayerPanel quadrantId={id} {quadrantLayers} {showEQOverlay} onToggleEQ={() => eqStore.showEQ = !eqStore.showEQ} />
         </div>
     </div>
 
@@ -837,6 +910,16 @@
     <ZoomControls bind:interactionState onDoubleClick={handleDoubleClick} />
 
 
+
+    <!-- P4c: EQ Node Popover (bottom-anchored) -->
+    {#if selectedEQNode !== null && showEQOverlay && eqStore.activeBands[selectedEQNode]}
+        <EQNodePopover
+            nodeIndex={selectedEQNode}
+            {containerWidth}
+            {containerHeight}
+            onClose={() => selectedEQNode = null}
+        />
+    {/if}
 
     <!-- POPOVER DE CONFIGURACIÓN POR MÉTRICA (OSM PARIDAD) -->
     <MetricConfigPopover
