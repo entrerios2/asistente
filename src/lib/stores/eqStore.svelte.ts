@@ -131,43 +131,34 @@ class EQStore {
         { id: 6, freq: 16000, gain: 0, q: 1.0, type: "peaking", supportedTypes: ["peaking"], showConfig: false },
     ]);
 
-    // Cached activeBands — only recomputed when activeBandsVersion changes
-    private _cachedBands: EQBand[] = [];
-    private _cachedBandsVersion = -1;
-
     /**
      * Single source of truth: returns the unified EQBand[] for the active EQ type.
      * Consumers (mathOrchestrator, Quadrant, quadrantDraw) read this instead of traceManager.eqBands.
-     * Cached: only recomputes when activeBandsVersion changes.
+     *
+     * NOTE: No manual caching — Svelte 5's reactivity system automatically tracks
+     * dependencies (showEQ, eqType, graphicBands, parametricFilters) and only
+     * re-evaluates consumers when those change. A manual cache with plain fields
+     * breaks Svelte's dependency tracking and causes stale data.
      */
     get activeBands(): EQBand[] {
         if (!this.showEQ) return [];
 
-        if (this._cachedBandsVersion === this.activeBandsVersion) {
-            return this._cachedBands;
-        }
-
-        let result: EQBand[];
         if (this.eqType === "grafico") {
             const q = graphicBandQ(this.graphicBands.length);
-            result = this.graphicBands.map((b) => ({
+            return this.graphicBands.map((b) => ({
                 freq: b.freq,
                 gain: b.gain,
                 q,
                 type: "peaking",
             }));
         } else {
-            result = this.parametricFilters.map((f) => ({
+            return this.parametricFilters.map((f) => ({
                 freq: f.freq,
                 gain: f.gain,
                 q: f.q,
                 type: f.type,
             }));
         }
-
-        this._cachedBands = result;
-        this._cachedBandsVersion = this.activeBandsVersion;
-        return result;
     }
 
     /**
