@@ -19,6 +19,7 @@ export interface SerializedInstantanea {
         posicion?: string;
         custom: string[];
     };
+    notes?: string;
     sessionId?: string;
     metadata?: {
         sampleRate: number;

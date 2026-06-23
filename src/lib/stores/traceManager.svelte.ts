@@ -51,6 +51,7 @@ export interface Instantanea {
     offsetY: number;
     // Fase 1a: tags, sesión y metadata
     tags: InstantaneaTags;
+    notes?: string;
     sessionId?: string;
     metadata?: InstantaneaMetadata;
 }
@@ -121,6 +122,16 @@ class TraceManager {
         try {
             localStorage.setItem('tagPresets', JSON.stringify(this.tagPresets));
         } catch { /* ignore */ }
+    }
+
+    /** Normaliza tags legacy al formato actual. */
+    _normalizeTags(raw: any): InstantaneaTags {
+        if (!raw) return { custom: [] };
+        return {
+            ubicacion: Array.isArray(raw.ubicacion) ? raw.ubicacion[0] : (raw.ubicacion || undefined),
+            posicion: Array.isArray(raw.posicion) ? raw.posicion[0] : (raw.posicion || undefined),
+            custom: Array.isArray(raw.custom) ? raw.custom : [],
+        };
     }
 
     addTagPreset(category: 'ubicacion' | 'posicion', value: string) {
@@ -197,7 +208,7 @@ class TraceManager {
                     source: item.source || 'manual',
                     metric: item.metric || 'Multimétrica',
                     offsetY: item.offsetY || 0,
-                    tags: item.tags || { custom: [] },
+                    tags: this._normalizeTags(item.tags),
                     sessionId: item.sessionId,
                     metadata: item.metadata,
                 };
@@ -334,92 +345,123 @@ class TraceManager {
     }
 
     /**
-     * Exporta la instantánea multimétrica a un archivo legible .snapshot.json (Prompt 8).
+     * Exporta TODAS las instantáneas a un único archivo .snapshots.json.
      */
-    exportInstantaneaToJSON(id: string) {
-        const ins = this.instantaneas.find(i => i.id === id);
-        if (!ins) return;
-
-        const serializableData: Record<string, number[]> = {};
-        for (const metric in ins.data) {
-            serializableData[metric] = Array.from(ins.data[metric]);
-        }
-
-        const serializable = {
-            id: ins.id,
-            name: ins.name,
-            timestamp: ins.timestamp,
-            visible: ins.visible,
-            color: ins.color,
-            data: serializableData
-        };
-
-        const jsonStr = JSON.stringify(serializable, null, 2);
-        const blob = new Blob([jsonStr], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${ins.name.replace(/\s+/g, '_')}.snapshot.json`;
-        a.click();
-        URL.revokeObjectURL(url);
+    exportAllInstantaneas() {
+        this.exportInstantaneas(this.instantaneas);
     }
 
     /**
-     * Importa una instantánea multimétrica desde un archivo .snapshot.json y la guarda reactivamente (Prompt 8).
+     * Exporta una lista de instantáneas a un archivo .snapshots.json.
      */
-    async importInstantaneaFromJSON(content: string): Promise<Instantanea | null> {
-        try {
-            const parsed = JSON.parse(content);
-            if (!parsed.id || !parsed.name || !parsed.data) {
-                throw new Error('Estructura de archivo .snapshot.json inválida.');
-            }
+    exportInstantaneas(list: Instantanea[]) {
+        if (list.length === 0) return;
 
-            const data: Record<string, Float32Array> = {};
-            for (const metric in parsed.data) {
-                data[metric] = new Float32Array(parsed.data[metric]);
-            }
-
-            const ins: Instantanea = {
-                id: parsed.id,
-                name: parsed.name,
-                timestamp: parsed.timestamp || Date.now(),
-                visible: parsed.visible ?? true,
-                color: parsed.color || '#00ff88',
-                data,
-                source: parsed.source || 'manual',
-                metric: parsed.metric || 'Multimétrica',
-                offsetY: parsed.offsetY || 0,
-                tags: parsed.tags || { custom: [] },
-                sessionId: parsed.sessionId,
-                metadata: parsed.metadata,
-            };
-
-            this.instantaneas.push(ins);
-
-            const { saveInstantanea } = await import('../utils/db');
-            const serializedData: Record<string, ArrayBufferLike> = {};
+        const serializable = list.map(ins => {
+            const serializableData: Record<string, number[]> = {};
             for (const metric in ins.data) {
-                serializedData[metric] = ins.data[metric].buffer;
+                serializableData[metric] = Array.from(ins.data[metric]);
             }
-            await saveInstantanea({
+            return {
                 id: ins.id,
                 name: ins.name,
                 timestamp: ins.timestamp,
-                data: serializedData,
                 visible: ins.visible,
                 color: ins.color,
                 source: ins.source,
                 metric: ins.metric,
                 offsetY: ins.offsetY,
                 tags: ins.tags,
+                notes: ins.notes,
                 sessionId: ins.sessionId,
                 metadata: ins.metadata,
-            });
+                data: serializableData,
+            };
+        });
 
-            return ins;
-        } catch (e) {
-            console.error('[TraceManager] Error importando instantánea:', e);
-            return null;
+        const jsonStr = JSON.stringify({ _version: 1, snapshots: serializable }, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const dateStr = new Date().toISOString().slice(0, 10);
+        a.download = `instantaneas_${dateStr}.snapshots.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    /**
+     * Parsea un archivo .snapshots.json y retorna las instantáneas deserializadas.
+     * No modifica el estado — la UI decide si reemplazar o agregar.
+     */
+    parseSnapshotsFile(content: string): Instantanea[] {
+        const parsed = JSON.parse(content);
+
+        // Soportar formato legacy (una sola instantánea) y nuevo (array)
+        const items = parsed.snapshots
+            ? parsed.snapshots
+            : (parsed.id && parsed.data ? [parsed] : []);
+
+        return items.map((item: any) => {
+            const data: Record<string, Float32Array> = {};
+            for (const metric in item.data) {
+                data[metric] = new Float32Array(item.data[metric]);
+            }
+            return {
+                id: item.id || crypto.randomUUID(),
+                name: item.name || 'Importada',
+                timestamp: item.timestamp || Date.now(),
+                visible: item.visible ?? true,
+                color: item.color || '#00ff88',
+                data,
+                source: item.source || 'manual',
+                metric: item.metric || 'Multimétrica',
+                offsetY: item.offsetY || 0,
+                tags: this._normalizeTags(item.tags),
+                notes: item.notes,
+                sessionId: item.sessionId,
+                metadata: item.metadata,
+            } as Instantanea;
+        });
+    }
+
+    /**
+     * Importa instantáneas al estado y DB.
+     * @param snapshots - instantáneas parseadas
+     * @param replaceAll - si true, borra las existentes primero
+     */
+    async importSnapshots(snapshots: Instantanea[], replaceAll: boolean) {
+        if (replaceAll) {
+            // Borrar todas las existentes de DB
+            const { deleteInstantanea } = await import('../utils/db');
+            for (const existing of this.instantaneas) {
+                try { await deleteInstantanea(existing.id); } catch { /* ignore */ }
+            }
+            // Eliminar capas snapshot vinculadas
+            this.layers = this.layers.filter(l => l.sourceType !== 'snapshot');
+            this.instantaneas = [];
+        }
+
+        const { saveInstantanea } = await import('../utils/db');
+        for (const ins of snapshots) {
+            // Evitar duplicados por ID
+            if (this.instantaneas.find(e => e.id === ins.id)) continue;
+
+            this.instantaneas.push(ins);
+            try {
+                const serializedData: Record<string, ArrayBufferLike> = {};
+                for (const metric in ins.data) {
+                    serializedData[metric] = ins.data[metric].buffer;
+                }
+                await saveInstantanea({
+                    id: ins.id, name: ins.name, timestamp: ins.timestamp,
+                    data: serializedData, visible: ins.visible, color: ins.color,
+                    source: ins.source, metric: ins.metric, offsetY: ins.offsetY,
+                    tags: ins.tags, sessionId: ins.sessionId, metadata: ins.metadata,
+                });
+            } catch (e) {
+                console.error('[TraceManager] Error guardando instantánea importada:', e);
+            }
         }
     }
 

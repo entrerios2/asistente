@@ -7,16 +7,18 @@
         onDiscard,
     }: {
         instantanea: Instantanea;
-        onSave: (tags: InstantaneaTags, name: string) => void;
+        onSave: (tags: InstantaneaTags, name: string, notes?: string) => void;
         onDiscard: () => void;
     } = $props();
 
     let selectedUbicacion = $state<string | undefined>(traceManager.lastUsedTags.ubicacion);
     let selectedPosicion = $state<string | undefined>(traceManager.lastUsedTags.posicion);
-    let customNote = $state("");
+    let customTags = $state<string[]>([]);
+    let newCustomTag = $state("");
+    let notes = $state("");
     let editedName = $state(instantanea.name);
 
-    // Custom tag inputs
+    // Custom tag inputs for presets
     let showAddUbicacion = $state(false);
     let showAddPosicion = $state(false);
     let newUbicacionValue = $state("");
@@ -37,14 +39,13 @@
         const tags: InstantaneaTags = {
             ubicacion: selectedUbicacion,
             posicion: selectedPosicion,
-            custom: customNote.trim() ? [customNote.trim()] : [],
+            custom: customTags.filter(t => t.trim()),
         };
-        // Update sticky tags
         traceManager.lastUsedTags = {
             ubicacion: selectedUbicacion,
             posicion: selectedPosicion,
         };
-        onSave(tags, editedName);
+        onSave(tags, editedName, notes.trim() || undefined);
     }
 
     function handleCloseRequest() {
@@ -69,11 +70,8 @@
             handleSave();
         } else if (e.key === "Escape") {
             e.preventDefault();
-            if (showCloseConfirm) {
-                cancelCloseConfirm();
-            } else {
-                handleCloseRequest();
-            }
+            if (showCloseConfirm) cancelCloseConfirm();
+            else handleCloseRequest();
         }
     }
 
@@ -102,10 +100,21 @@
         }
         showAddPosicion = false;
     }
+
+    function addCustomTag() {
+        const trimmed = newCustomTag.trim();
+        if (trimmed && !customTags.includes(trimmed)) {
+            customTags = [...customTags, trimmed];
+        }
+        newCustomTag = "";
+    }
+
+    function removeCustomTag(tag: string) {
+        customTags = customTags.filter(t => t !== tag);
+    }
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<!-- Backdrop -->
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
     class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center"
@@ -115,13 +124,11 @@
     aria-modal="true"
     aria-label="Etiquetar instantánea"
 >
-    <!-- Modal -->
     <div
         class="bg-[#16161e] border border-[#2a2a3a] rounded-2xl shadow-2xl w-[380px] max-w-[90vw] p-5 flex flex-col gap-4"
         onkeydown={handleKeydown}
     >
         {#if showCloseConfirm}
-            <!-- Close confirmation dialog -->
             <div class="flex flex-col gap-3 items-center py-2">
                 <span class="material-symbols-outlined text-[#fbbf24] text-2xl">help</span>
                 <p class="text-xs text-gray-300 text-center">¿Qué querés hacer con esta instantánea?</p>
@@ -148,9 +155,7 @@
                 <button
                     class="text-[10px] text-gray-500 hover:text-gray-300 cursor-pointer transition-colors"
                     onclick={cancelCloseConfirm}
-                >
-                    Cancelar
-                </button>
+                >Cancelar</button>
             </div>
         {:else}
             <!-- Header -->
@@ -168,20 +173,16 @@
                 </button>
             </div>
 
-            <!-- Name input -->
+            <!-- Name -->
             <div class="flex flex-col gap-1.5">
                 <label for="snap-name" class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Nombre</label>
-                <input
-                    id="snap-name"
-                    type="text"
-                    bind:value={editedName}
+                <input id="snap-name" type="text" bind:value={editedName}
                     class="bg-[#0d0d14] border border-[#2a2a3a] rounded-lg px-3 py-2 text-xs text-gray-200
                            focus:outline-none focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6]/30 transition-all"
-                    autofocus
-                />
+                    autofocus />
             </div>
 
-            <!-- Ubicación tags -->
+            <!-- Ubicación (single select) -->
             <div class="flex flex-col gap-1.5">
                 <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Ubicación</label>
                 <div class="flex flex-wrap gap-1.5">
@@ -193,34 +194,25 @@
                                         : 'bg-[#0d0d14] border-[#2a2a3a] text-gray-400 hover:text-gray-200 hover:border-gray-600'}"
                             style={selectedUbicacion === ub ? `background-color: ${UBICACION_COLORS[ub] || '#3b82f6'}` : ''}
                             onclick={() => toggleUbicacion(ub)}
-                        >
-                            {ub}
-                        </button>
+                        >{ub}</button>
                     {/each}
-                    <!-- Add custom ubicacion -->
                     {#if showAddUbicacion}
                         <div class="flex items-center gap-1">
-                            <input
-                                type="text"
-                                bind:value={newUbicacionValue}
-                                placeholder="Nuevo..."
+                            <input type="text" bind:value={newUbicacionValue} placeholder="Nuevo..."
                                 class="bg-[#0d0d14] border border-[#3b82f6]/50 rounded-lg px-2 py-1 text-[10px] text-gray-200 w-20
                                        focus:outline-none focus:border-[#3b82f6]"
                                 onkeydown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); addCustomUbicacion(); } else if (e.key === 'Escape') { e.stopPropagation(); showAddUbicacion = false; } }}
-                                autofocus
-                            />
+                                autofocus />
                             <button class="text-[#3b82f6] text-[10px] font-bold cursor-pointer hover:text-white transition-colors" onclick={addCustomUbicacion}>✓</button>
                         </div>
                     {:else}
-                        <button
-                            class="px-2 py-1.5 rounded-lg text-[10px] font-semibold bg-[#0d0d14] border border-dashed border-[#2a2a3a] text-gray-600 hover:text-gray-400 hover:border-gray-500 cursor-pointer transition-all min-h-[28px]"
-                            onclick={() => { showAddUbicacion = true; }}
-                        >+</button>
+                        <button class="px-2 py-1.5 rounded-lg text-[10px] font-semibold bg-[#0d0d14] border border-dashed border-[#2a2a3a] text-gray-600 hover:text-gray-400 hover:border-gray-500 cursor-pointer transition-all min-h-[28px]"
+                            onclick={() => { showAddUbicacion = true; }}>+</button>
                     {/if}
                 </div>
             </div>
 
-            <!-- Posición tags -->
+            <!-- Posición (single select) -->
             <div class="flex flex-col gap-1.5">
                 <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Posición</label>
                 <div class="flex flex-wrap gap-1.5">
@@ -231,47 +223,68 @@
                                         ? 'bg-[#3b82f6] border-transparent text-white shadow-lg'
                                         : 'bg-[#0d0d14] border-[#2a2a3a] text-gray-400 hover:text-gray-200 hover:border-gray-600'}"
                             onclick={() => togglePosicion(pos)}
-                        >
-                            {pos}
-                        </button>
+                        >{pos}</button>
                     {/each}
-                    <!-- Add custom posicion -->
                     {#if showAddPosicion}
                         <div class="flex items-center gap-1">
-                            <input
-                                type="text"
-                                bind:value={newPosicionValue}
-                                placeholder="Nuevo..."
+                            <input type="text" bind:value={newPosicionValue} placeholder="Nuevo..."
                                 class="bg-[#0d0d14] border border-[#3b82f6]/50 rounded-lg px-2 py-1 text-[10px] text-gray-200 w-20
                                        focus:outline-none focus:border-[#3b82f6]"
                                 onkeydown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); addCustomPosicion(); } else if (e.key === 'Escape') { e.stopPropagation(); showAddPosicion = false; } }}
-                                autofocus
-                            />
+                                autofocus />
                             <button class="text-[#3b82f6] text-[10px] font-bold cursor-pointer hover:text-white transition-colors" onclick={addCustomPosicion}>✓</button>
                         </div>
                     {:else}
-                        <button
-                            class="px-2 py-1.5 rounded-lg text-[10px] font-semibold bg-[#0d0d14] border border-dashed border-[#2a2a3a] text-gray-600 hover:text-gray-400 hover:border-gray-500 cursor-pointer transition-all min-h-[28px]"
-                            onclick={() => { showAddPosicion = true; }}
-                        >+</button>
+                        <button class="px-2 py-1.5 rounded-lg text-[10px] font-semibold bg-[#0d0d14] border border-dashed border-[#2a2a3a] text-gray-600 hover:text-gray-400 hover:border-gray-500 cursor-pointer transition-all min-h-[28px]"
+                            onclick={() => { showAddPosicion = true; }}>+</button>
                     {/if}
+                </div>
+            </div>
+
+            <!-- Etiquetas libres -->
+            <div class="flex flex-col gap-1.5">
+                <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Etiquetas</label>
+                {#if customTags.length > 0}
+                    <div class="flex flex-wrap gap-1.5">
+                        {#each customTags as tag}
+                            <span class="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold bg-[#a855f7]/15 text-[#a855f7] border border-[#a855f7]/20">
+                                {tag}
+                                <button class="text-[#a855f7]/50 hover:text-white cursor-pointer transition-colors text-[10px] leading-none"
+                                    onclick={() => removeCustomTag(tag)}>×</button>
+                            </span>
+                        {/each}
+                    </div>
+                {/if}
+                <div class="flex gap-1.5">
+                    <input
+                        type="text"
+                        bind:value={newCustomTag}
+                        placeholder="Ej: post-EQ, referencia, cliente..."
+                        class="flex-1 bg-[#0d0d14] border border-[#2a2a3a] rounded-lg px-3 py-1.5 text-[10px] text-gray-200 placeholder:text-gray-600
+                               focus:outline-none focus:border-[#a855f7] focus:ring-1 focus:ring-[#a855f7]/30 transition-all"
+                        onkeydown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); addCustomTag(); } }}
+                    />
+                    <button
+                        class="px-2.5 py-1.5 rounded-lg text-[10px] font-bold bg-[#a855f7]/10 border border-[#a855f7]/20 text-[#a855f7] hover:bg-[#a855f7]/20 cursor-pointer transition-all min-h-[28px]"
+                        onclick={addCustomTag}
+                        disabled={!newCustomTag.trim()}
+                    >+</button>
                 </div>
             </div>
 
             <!-- Notas -->
             <div class="flex flex-col gap-1.5">
-                <label for="snap-note" class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Notas (opcional)</label>
-                <input
-                    id="snap-note"
-                    type="text"
-                    bind:value={customNote}
+                <label for="snap-notes" class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Notas</label>
+                <textarea
+                    id="snap-notes"
+                    bind:value={notes}
                     placeholder="Agregar nota..."
-                    class="bg-[#0d0d14] border border-[#2a2a3a] rounded-lg px-3 py-2 text-xs text-gray-200 placeholder:text-gray-600
-                           focus:outline-none focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6]/30 transition-all"
-                />
+                    class="bg-[#0d0d14] border border-[#2a2a3a] rounded-lg px-3 py-2 text-[10px] text-gray-200 placeholder:text-gray-600
+                           focus:outline-none focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6]/30 transition-all resize-none min-h-[40px]"
+                ></textarea>
             </div>
 
-            <!-- Save button -->
+            <!-- Save -->
             <div class="flex gap-2 pt-1">
                 <button
                     class="flex-1 bg-gradient-to-r from-[#3b82f6] to-[#2563eb] hover:from-[#2563eb] hover:to-[#1d4ed8]
@@ -284,7 +297,6 @@
                 </button>
             </div>
 
-            <!-- Keyboard hints -->
             <div class="flex justify-center gap-4 text-[9px] text-gray-600">
                 <span><kbd class="bg-[#0d0d14] px-1.5 py-0.5 rounded border border-[#2a2a3a] font-mono">Enter</kbd> Guardar</span>
                 <span><kbd class="bg-[#0d0d14] px-1.5 py-0.5 rounded border border-[#2a2a3a] font-mono">Esc</kbd> Cerrar</span>

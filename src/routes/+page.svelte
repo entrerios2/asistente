@@ -127,24 +127,27 @@
     // CaptureModal handlers (global, independiente del tab activo)
     let pendingCapture = $derived(traceManager.pendingCaptureForModal);
 
-    async function handleModalSave(tags: InstantaneaTags, name: string) {
+    async function handleModalSave(tags: InstantaneaTags, name: string, notes?: string) {
         if (!pendingCapture) return;
         const ins = traceManager.instantaneas.find(i => i.id === pendingCapture!.id);
         if (ins) {
             ins.tags = tags;
             ins.name = name;
+            ins.notes = notes;
             ins.color = UBICACION_COLORS[tags.ubicacion || ''] || ins.color;
             try {
                 const { saveInstantanea } = await import('$lib/utils/db');
-                const serializedData: Record<string, ArrayBufferLike> = {};
+                const serializedData: Record<string, ArrayBuffer> = {};
                 for (const metric in ins.data) {
-                    serializedData[metric] = ins.data[metric].buffer;
+                    serializedData[metric] = new Float32Array(ins.data[metric]).buffer.slice(0);
                 }
+                const plainTags = ins.tags ? JSON.parse(JSON.stringify(ins.tags)) : undefined;
+                const plainMeta = ins.metadata ? JSON.parse(JSON.stringify(ins.metadata)) : undefined;
                 await saveInstantanea({
                     id: ins.id, name: ins.name, timestamp: ins.timestamp,
                     data: serializedData, visible: ins.visible, color: ins.color,
                     source: ins.source, metric: ins.metric, offsetY: ins.offsetY,
-                    tags: ins.tags, sessionId: ins.sessionId, metadata: ins.metadata,
+                    tags: plainTags, notes: ins.notes, sessionId: ins.sessionId, metadata: plainMeta,
                 });
             } catch (e) {
                 console.error('[Page] Error guardando tags:', e);
