@@ -1,6 +1,7 @@
 <script lang="ts">
     import { uiStore } from "$lib/stores/ui.svelte";
     import { traceManager } from "$lib/stores/traceManager.svelte";
+    import SnapshotPicker from "./SnapshotPicker.svelte";
 
     let {
         quadrantId,
@@ -16,7 +17,8 @@
 
     let showLayerDropdown = $state(false);
     let showAddLayerMenu = $state(false);
-    let showSnapshotSubmenu = $state(false);
+    let showSnapshotPicker = $state(false);
+    let snapshotPickerIds = $state<string[]>([]);
 
     const activeLayer = $derived(quadrantLayers.find(l => l.id === uiStore.activeLayerId));
 
@@ -127,44 +129,48 @@
                             <div class="relative">
                                 <button
                                     class="w-full text-left px-3 py-1.5 text-[10px] text-[#3b82f6] hover:bg-[#3b82f6]/5 flex items-center gap-1.5 cursor-pointer"
-                                    onclick={(e) => { e.stopPropagation(); showSnapshotSubmenu = !showSnapshotSubmenu; }}>
+                                    onclick={(e) => { e.stopPropagation(); showSnapshotPicker = !showSnapshotPicker; }}>
                                     <span class="material-symbols-outlined text-[12px]">photo_camera</span>
                                     Instantánea
-                                    <span class="material-symbols-outlined text-[10px] ml-auto">{showSnapshotSubmenu ? 'expand_less' : 'expand_more'}</span>
+                                    <span class="material-symbols-outlined text-[10px] ml-auto">{showSnapshotPicker ? 'expand_less' : 'expand_more'}</span>
                                 </button>
-                                {#if showSnapshotSubmenu}
-                                    <div class="bg-[#0a0a0e] border-t py-0.5" style="border-color: var(--border-primary)">
-                                        {#each traceManager.instantaneas as inst}
-                                            <button
-                                                class="w-full text-left px-4 py-1 text-[9px] text-gray-300 hover:bg-[#3b82f6]/5 hover:text-white cursor-pointer truncate"
-                                                onclick={() => {
-                                                    const layer = traceManager.addLayer(inst.name, quadrantId, 'snapshot');
-                                                    if (layer && inst.data) {
-                                                        const firstMetric = Object.values(inst.data)[0];
-                                                        if (firstMetric) {
-                                                            traceManager.setLayerSource(layer.id, 'snapshot', firstMetric);
-                                                        }
+                                {#if showSnapshotPicker}
+                                    <div class="bg-[#0a0a0e] border-t py-1 px-1" style="border-color: var(--border-primary)">
+                                        <SnapshotPicker
+                                            mode="single"
+                                            bind:selectedIds={snapshotPickerIds}
+                                            onSelect={(ids) => {
+                                                if (ids.length > 0) {
+                                                    const snap = traceManager.instantaneas.find(s => s.id === ids[0]);
+                                                    if (snap) {
+                                                        traceManager.addSnapshotLayer(snap, quadrantId);
                                                     }
-                                                    showSnapshotSubmenu = false;
+                                                    snapshotPickerIds = [];
+                                                    showSnapshotPicker = false;
                                                     showAddLayerMenu = false;
                                                     showLayerDropdown = false;
-                                                }}
-                                                title={inst.name}
-                                            >
-                                                {inst.name}
-                                            </button>
-                                        {:else}
-                                            <span class="block px-4 py-1 text-[9px] text-gray-600 italic">Sin instantáneas</span>
-                                        {/each}
+                                                }
+                                            }}
+                                            maxHeight="120px"
+                                        />
                                     </div>
                                 {/if}
                             </div>
-                            <button
-                                class="w-full text-left px-3 py-1.5 text-[10px] text-[#a855f7] hover:bg-[#a855f7]/5 flex items-center gap-1.5 cursor-pointer"
-                                onclick={() => { traceManager.addCalculatedLayer('Avg', quadrantId, 'average'); showAddLayerMenu = false; showLayerDropdown = false; }}>
-                                <span class="material-symbols-outlined text-[12px]">functions</span>
-                                Calculada
-                            </button>
+                            <div class="flex flex-col">
+                                <span class="px-3 py-1.5 text-[10px] text-[#a855f7] flex items-center gap-1.5">
+                                    <span class="material-symbols-outlined text-[12px]">functions</span>
+                                    Calculada
+                                </span>
+                                <div class="flex gap-0.5 px-3 pb-1.5">
+                                    {#each [['average', 'Promedio'], ['min', 'Mínimo'], ['max', 'Máximo']] as [op, label]}
+                                        <button
+                                            class="flex-1 px-1.5 py-1 text-[9px] font-semibold rounded bg-[#a855f7]/5 text-[#a855f7]/70 hover:bg-[#a855f7]/15 hover:text-[#a855f7] cursor-pointer transition-all min-h-[24px]"
+                                            onclick={() => { traceManager.addCalculatedLayer(label, quadrantId, op as any); showAddLayerMenu = false; showLayerDropdown = false; }}>
+                                            {label}
+                                        </button>
+                                    {/each}
+                                </div>
+                            </div>
                         </div>
                     {/if}
                 </div>

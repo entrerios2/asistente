@@ -37,18 +37,9 @@ export interface ParametricFilter {
     showConfig: boolean;
 }
 
-export interface AutoEQResult {
-    algorithm: string;
-    bands: EQBand[];
-    score: number;
-    elapsed: number;
-    iterations?: number;
-}
-
-export interface BenchmarkResults {
-    results: AutoEQResult[];
-    bestIndex: number;
-}
+import { type AutoEQResult as _AutoEQResult, type BenchmarkResult as _BenchmarkResult } from '$lib/dsp/autoEQ';
+export type AutoEQResult = _AutoEQResult;
+export type BenchmarkResults = _BenchmarkResult;
 
 export interface EQConfig {
     eqType?: 'grafico' | 'parametrico';

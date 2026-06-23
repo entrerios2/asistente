@@ -20,18 +20,47 @@ export interface MeasurementLayer {
     isCalculated?: boolean;        // true = capa virtual calculada
     calcOperation?: 'average' | 'sum' | 'subtract' | 'min' | 'max';  // Operación
     calcTargetMetrics?: string[];  // Métricas sobre las que calcular (vacío = todas)
+    // Fase 1b: vínculo a instantánea y datos multi-métrica
+    instantaneaId?: string;
+    multiMetricData?: Record<string, Float32Array>;
+    color?: string;
+    dashPattern?: number[];
+}
+
+export interface InstantaneaTags {
+    ubicacion?: string;
+    posicion?: string;
+    custom: string[];
+}
+
+export interface InstantaneaMetadata {
+    sampleRate: number;
+    fftSize: number;
+    averagingDepth: number;
 }
 
 export interface Instantanea {
     id: string;
     name: string;
     timestamp: number;
-    data: Record<string, Float32Array>; // Mapea métricas (Magnitude, Phase, Coherence, Impulse, etc.) a sus buffers
+    data: Record<string, Float32Array>;
     visible: boolean;
     color: string;
     source: 'manual' | 'secuencial';
     metric: string;
     offsetY: number;
+    // Fase 1a: tags, sesión y metadata
+    tags: InstantaneaTags;
+    sessionId?: string;
+    metadata?: InstantaneaMetadata;
+}
+
+export interface Session {
+    id: string;
+    name: string;
+    venue?: string;
+    event?: string;
+    createdAt: number;
 }
 
 export interface EQBand {
@@ -40,6 +69,16 @@ export interface EQBand {
     q: number;
     type: string;
 }
+
+// Fase 1e: Palette de colores por ubicación
+export const UBICACION_COLORS: Record<string, string> = {
+    'Principal': '#00ff88',
+    'Delay 1': '#06b6d4',
+    'Delay 2': '#6366f1',
+    'Delay 3': '#a855f7',
+    'Relleno': '#f97316',
+    'Subwoofer': '#ef4444',
+};
 
 class TraceManager {
     // Propiedad reactiva para forzar la reactividad en Svelte 5
@@ -53,6 +92,43 @@ class TraceManager {
     
     // SISTEMA DE CAPAS GLOBALES (PROMPT 6)
     layers = $state<MeasurementLayer[]>([]);
+
+    // Fase 1c: Sesiones
+    sessions = $state<Session[]>([]);
+    activeSessionId = $state<string | null>(null);
+
+    // Fase 1d: Tag presets y sticky tags (persistidos en localStorage)
+    tagPresets = $state(this._loadTagPresets());
+    lastUsedTags = $state<{ ubicacion?: string; posicion?: string }>({});
+
+    // Estado reactivo para mostrar el modal de captura desde cualquier origen
+    pendingCaptureForModal = $state<Instantanea | null>(null);
+
+    private _loadTagPresets(): { ubicacion: string[]; posicion: string[] } {
+        const defaults = {
+            ubicacion: ['Principal', 'Delay 1', 'Delay 2', 'Delay 3', 'Relleno', 'Subwoofer'],
+            posicion: ['Izquierda', 'Centro', 'Derecha', 'Arriba', 'Abajo'],
+        };
+        if (typeof window === 'undefined') return defaults;
+        try {
+            const saved = localStorage.getItem('tagPresets');
+            if (saved) return JSON.parse(saved);
+        } catch { /* ignore */ }
+        return defaults;
+    }
+
+    private _saveTagPresets() {
+        try {
+            localStorage.setItem('tagPresets', JSON.stringify(this.tagPresets));
+        } catch { /* ignore */ }
+    }
+
+    addTagPreset(category: 'ubicacion' | 'posicion', value: string) {
+        const trimmed = value.trim();
+        if (!trimmed || this.tagPresets[category].includes(trimmed)) return;
+        this.tagPresets[category] = [...this.tagPresets[category], trimmed];
+        this._saveTagPresets();
+    }
 
     // Configuración de capturas (checkboxes interactivos)
     metricsToCapture = $state<Record<string, boolean>>({
@@ -100,10 +176,11 @@ class TraceManager {
 
     /**
      * Carga asíncronamente todas las instantáneas guardadas en IndexedDB al arrancar la aplicación (Prompt 8).
+     * Fase 1i: Retrocompatibilidad — si un registro no tiene `tags`, asignar `{ custom: [] }`.
      */
     async loadFromDB() {
         try {
-            const { loadAllInstantaneas } = await import('../utils/db');
+            const { loadAllInstantaneas, loadAllSessions } = await import('../utils/db');
             const items = await loadAllInstantaneas();
             this.instantaneas = items.map((item: any) => {
                 const data: Record<string, Float32Array> = {};
@@ -119,18 +196,39 @@ class TraceManager {
                     color: item.color || '#00ff88',
                     source: item.source || 'manual',
                     metric: item.metric || 'Multimétrica',
-                    offsetY: item.offsetY || 0
+                    offsetY: item.offsetY || 0,
+                    tags: item.tags || { custom: [] },
+                    sessionId: item.sessionId,
+                    metadata: item.metadata,
                 };
             });
+            // Cargar sesiones
+            const sessions = await loadAllSessions();
+            this.sessions = sessions;
         } catch (e) {
             console.error('[TraceManager] Error cargando instantáneas de IndexedDB:', e);
         }
     }
 
     /**
-     * Captura una instantánea multimétrica en caliente de los buffers de mathOrchestrator (Prompt 8).
+     * Fase 1g: Genera un nombre automático basado en tags + hora.
      */
-    async captureInstantanea(name?: string, metricsToCapture?: string[]) {
+    generateSnapName(tags: { ubicacion?: string; posicion?: string }): string {
+        const parts = [tags.ubicacion, tags.posicion].filter(Boolean);
+        const time = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        return parts.length > 0 ? `${parts.join(' · ')} · ${time}` : time;
+    }
+
+    /**
+     * Captura una instantánea multimétrica en caliente de los buffers de mathOrchestrator.
+     * Fase 1f: Acepta tags y metadata, auto-asigna color por ubicación y sessionId.
+     */
+    async captureInstantanea(
+        name?: string,
+        metricsToCapture?: string[],
+        tags?: InstantaneaTags,
+        metadata?: InstantaneaMetadata
+    ) {
         const id = crypto.randomUUID();
         const data: Record<string, Float32Array> = {};
 
@@ -151,16 +249,22 @@ class TraceManager {
             }
         }
 
+        const resolvedTags: InstantaneaTags = tags || { custom: [] };
+        const autoColor = UBICACION_COLORS[resolvedTags.ubicacion || ''] || '#00ff88';
+
         const ins: Instantanea = {
             id,
-            name: name || `Instantánea ${new Date().toLocaleTimeString()}`,
+            name: name || this.generateSnapName(resolvedTags),
             timestamp: Date.now(),
             data,
             visible: true,
-            color: '#00ff88',
+            color: autoColor,
             source: uiStore.measurementMode === 'manual' ? 'manual' : 'secuencial',
             metric: 'Multimétrica',
-            offsetY: 0
+            offsetY: 0,
+            tags: resolvedTags,
+            sessionId: this.activeSessionId || undefined,
+            metadata,
         };
 
         this.instantaneas.push(ins);
@@ -181,13 +285,39 @@ class TraceManager {
                 color: ins.color,
                 source: ins.source,
                 metric: ins.metric,
-                offsetY: ins.offsetY
+                offsetY: ins.offsetY,
+                tags: ins.tags,
+                sessionId: ins.sessionId,
+                metadata: ins.metadata,
             });
         } catch (e) {
             console.error('[TraceManager] Error guardando instantánea en IndexedDB:', e);
         }
 
+        // Abrir modal para etiquetar
+        this.pendingCaptureForModal = ins;
+
         return ins;
+    }
+
+    /**
+     * Fase 1h: Crea una capa snapshot vinculada a una instantánea con datos multi-métrica.
+     */
+    addSnapshotLayer(instantanea: Instantanea, quadrantId: string): MeasurementLayer {
+        const layer: MeasurementLayer = {
+            id: crypto.randomUUID(),
+            name: instantanea.name,
+            visible: true,
+            isMeasuring: false,
+            quadrantId,
+            sourceType: 'snapshot',
+            data: instantanea.data['Magnitude'] || new Float32Array(0),
+            instantaneaId: instantanea.id,
+            multiMetricData: { ...instantanea.data },
+            color: instantanea.color,
+        };
+        this.layers.push(layer);
+        return layer;
     }
 
     /**
@@ -258,7 +388,10 @@ class TraceManager {
                 data,
                 source: parsed.source || 'manual',
                 metric: parsed.metric || 'Multimétrica',
-                offsetY: parsed.offsetY || 0
+                offsetY: parsed.offsetY || 0,
+                tags: parsed.tags || { custom: [] },
+                sessionId: parsed.sessionId,
+                metadata: parsed.metadata,
             };
 
             this.instantaneas.push(ins);
@@ -277,7 +410,10 @@ class TraceManager {
                 color: ins.color,
                 source: ins.source,
                 metric: ins.metric,
-                offsetY: ins.offsetY
+                offsetY: ins.offsetY,
+                tags: ins.tags,
+                sessionId: ins.sessionId,
+                metadata: ins.metadata,
             });
 
             return ins;
@@ -450,10 +586,35 @@ class TraceManager {
         }
     }
 
+    /**
+     * Fase 2a: Sincroniza visibilidad de instantánea con capas snapshot.
+     * Cuando se hace visible, crea una capa snapshot en el primer cuadrante.
+     * Cuando se oculta, elimina las capas vinculadas.
+     */
+    syncSnapshotVisibility(snapId: string, visible: boolean) {
+        const snap = this.instantaneas.find(s => s.id === snapId);
+        if (!snap) return;
+
+        if (visible) {
+            // Crear capa snapshot si no existe ya una vinculada
+            const existingLayer = this.layers.find(l => l.instantaneaId === snapId);
+            if (!existingLayer) {
+                this.addSnapshotLayer(snap, 'q-1');
+            }
+        } else {
+            // Eliminar capas vinculadas a esta instantánea
+            this.layers = this.layers.filter(l => l.instantaneaId !== snapId);
+        }
+    }
+
+    /**
+     * Fase 2b: Toggle de visibilidad de instantánea + sincronización con capas.
+     */
     toggleVisibility(id: string) {
         const ins = this.instantaneas.find(i => i.id === id);
         if (ins) {
             ins.visible = !ins.visible;
+            this.syncSnapshotVisibility(id, ins.visible);
         }
     }
 

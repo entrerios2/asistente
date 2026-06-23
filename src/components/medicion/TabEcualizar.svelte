@@ -4,10 +4,11 @@
     import { traceManager } from "$lib/stores/traceManager.svelte";
     import { targetTrace } from "$lib/stores/targetTrace.svelte";
     import { mathOrchestrator } from "$lib/stores/mathOrchestrator.svelte";
-    import { computeDeviation, type DeviationResult } from "$lib/dsp/deviationMetrics";
+
     import { filterSvgIcons } from "$lib/icons/filterIcons";
     import { eqStore, type GraphicBand } from "$lib/stores/eqStore.svelte";
     import { filterTypeColors, filterTypeName } from "$lib/dsp/eqNodeIcons";
+    import SnapshotPicker from "./SnapshotPicker.svelte";
     import { runAutoEQ, benchmarkAll, DEFAULT_CONFIG, type AutoEQConfig, type AutoEQResult, type BenchmarkResult } from "$lib/dsp/autoEQ";
 
     let {
@@ -29,21 +30,8 @@
     );
 
     // --- Functions ---
-    function computeDeviationWithEQ(
-        magnitude: Float32Array,
-        target: Float32Array | null,
-        coherence: Float32Array | null,
-        bins: number
-    ): DeviationResult {
-        const sampleRate = uiStore.sampleRate;
-        const binWidth = (sampleRate / 2) / bins;
-        const adjusted = new Float32Array(bins);
-        for (let i = 0; i < bins; i++) {
-            const freq = i * binWidth || 1e-6;
-            adjusted[i] = (magnitude[i] || 0) + mathOrchestrator.getEQResponseCached(freq);
-        }
-        return computeDeviation(adjusted, target, coherence, bins, sampleRate);
-    }
+    // computeDeviationWithEQ available for future use — currently called inline
+
 
     function generateGraphicBands(count: number): GraphicBand[] {
         const logMin = Math.log10(20);
@@ -177,8 +165,7 @@
 
     function formatTime(ms: number): string { return ms < 1000 ? `${ms.toFixed(0)}ms` : `${(ms / 1000).toFixed(1)}s`; }
     function devColor(rms: number): string { return rms > 6 ? '#ff4444' : rms > 3 ? '#fbbf24' : '#00ff88'; }
-    function impArrow(before: number, after: number, lower = true): string { return lower ? (after < before ? '↓' : after > before ? '↑' : '') : (after > before ? '↑' : after < before ? '↓' : ''); }
-    function impColor(before: number, after: number, lower = true): string { return lower ? (after < before ? '#00ff88' : after > before ? '#ff4444' : 'var(--text-muted)') : (after > before ? '#00ff88' : after < before ? '#ff4444' : 'var(--text-muted)'); }
+
 </script>
 
 <div class="flex-1 overflow-y-auto flex flex-col gap-0" id="panel-eq">
@@ -340,7 +327,7 @@
             <!-- MODO PARAMÉTRICO -->
             {:else}
                 <div class="flex flex-col gap-2 pl-2" style="border-left: 2px solid var(--border-primary)">
-                    {#each eqStore.parametricFilters as filter, idx}
+                    {#each eqStore.parametricFilters as filter}
                         <div class="rounded-lg p-2.5 flex flex-col gap-2" style="background: var(--bg-tertiary); border: 1px solid var(--border-primary)">
                             <div class="flex justify-between items-center">
                                 <div class="flex items-center gap-2">
@@ -433,34 +420,16 @@
                 {/each}
             </div>
             {#if eqStore.autoEQSourceType === 'snapshot'}
-                <div class="flex flex-col gap-1 mt-1">
-                    {#if traceManager.instantaneas.length === 0}
-                        <span class="text-[9px] italic" style="color: var(--text-muted)">No hay snapshots</span>
-                    {:else}
-                        <div class="max-h-[100px] overflow-y-auto flex flex-col gap-0.5">
-                            {#each traceManager.instantaneas as snap}
-                                <label class="flex items-center gap-2 text-[10px] cursor-pointer py-0.5 px-1 rounded hover:bg-white/5" style="color: var(--text-secondary)">
-                                    <input type="checkbox" checked={eqStore.autoEQSnapshotIds.includes(snap.id)}
-                                        onchange={() => { eqStore.autoEQSnapshotIds = eqStore.autoEQSnapshotIds.includes(snap.id) ? eqStore.autoEQSnapshotIds.filter(id => id !== snap.id) : [...eqStore.autoEQSnapshotIds, snap.id]; }}
-                                        class="accent-[#3b82f6] w-3 h-3" />
-                                    <span class="w-2 h-2 rounded-full" style="background: {snap.color || '#888'}"></span>
-                                    {snap.name || snap.id}
-                                </label>
-                            {/each}
-                        </div>
-                        {#if eqStore.autoEQSnapshotIds.length > 1}
-                            <div class="flex items-center gap-1 mt-1">
-                                <span class="text-[8px] font-bold uppercase" style="color: var(--text-muted)">Op:</span>
-                                {#each ['average', 'min', 'max'] as op}
-                                    <button class="px-2 py-0.5 rounded text-[8px] font-semibold cursor-pointer"
-                                        style="background: {eqStore.autoEQCalcOperation === op ? '#3b82f610' : 'transparent'}; color: {eqStore.autoEQCalcOperation === op ? '#3b82f6' : 'var(--text-muted)'}; border: 1px solid {eqStore.autoEQCalcOperation === op ? '#3b82f630' : 'transparent'}"
-                                        onclick={() => eqStore.autoEQCalcOperation = op as any}
-                                    >{op === 'average' ? 'Promedio' : op === 'min' ? 'Mínimo' : 'Máximo'}</button>
-                                {/each}
-                            </div>
-                            <span class="text-[8px] italic" style="color: #a855f7">Se creará una capa calculada automáticamente</span>
-                        {/if}
-                    {/if}
+                <div class="mt-1">
+                    <SnapshotPicker
+                        mode="multi"
+                        bind:selectedIds={eqStore.autoEQSnapshotIds}
+                        onSelect={(ids) => eqStore.autoEQSnapshotIds = ids}
+                        showOperations={true}
+                        bind:operation={eqStore.autoEQCalcOperation}
+                        onOperationChange={(op) => eqStore.autoEQCalcOperation = op}
+                        maxHeight="200px"
+                    />
                 </div>
             {/if}
             {#if eqStore.autoEQSourceType === 'calculated'}

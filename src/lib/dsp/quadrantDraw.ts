@@ -221,22 +221,84 @@ export function drawQuadrant(p: DrawParams): void {
     for (let li = 0; li < p.myLayers.length; li++) {
         const layer = p.myLayers[li];
         if (layer.isMeasuring) continue; // La capa live se dibuja aparte con el pipeline principal
-        if (layer.data.length === 0) continue;
 
         const dashPattern = LAYER_DASHES[li % LAYER_DASHES.length];
         const isActive = layer.id === uiStore.activeLayerId;
         const lineWidth = isActive ? 1.8 : 1;
         let alpha = isActive ? 1.0 : 0.75;
 
-        // Determinar la métrica principal para el color
-        const metricForColor = p.activeMetrics[0] || 'Magnitude';
-        const color = METRIC_COLORS[metricForColor] || '#ff4444';
-
         // Estilo especial para capas calculadas
         if (layer.isCalculated) {
             alpha = 0.9;
-            p.ctx.setLineDash([4, 2, 1, 2]); // Trazo distintivo
         }
+
+        // Fase 2d: Capas snapshot con multiMetricData — dibujar cada métrica activa
+        if (layer.sourceType === 'snapshot' && layer.multiMetricData) {
+            // Obtener offsetY de la instantánea origen
+            const snapOrigin = layer.instantaneaId
+                ? p.instantaneas.find((s: any) => s.id === layer.instantaneaId)
+                : null;
+            const offsetY = snapOrigin?.offsetY || 0;
+            const snapColor = layer.color || '#888';
+            const snapDash = layer.dashPattern || dashPattern;
+
+            p.activeMetrics.forEach((metric) => {
+                if (p.metricConfigs[metric]?.hidden) return;
+                if (p.hasTimeDomainActive && !["Impulse", "Step"].includes(metric)) return;
+                if (!p.hasTimeDomainActive && ["Impulse", "Step"].includes(metric)) return;
+                if (metric === "Coherence" && p.metricConfigs["Coherence"]?.showLine === false) return;
+
+                const bufferToDraw = layer.multiMetricData![metric];
+                if (!bufferToDraw || bufferToDraw.length === 0) return;
+
+                p.ctx.globalAlpha = alpha * p.getMetricAlpha(metric);
+
+                // Aplicar offsetY: crear buffer ajustado si hay offset
+                let adjustedBuffer = bufferToDraw;
+                if (offsetY !== 0 && metric !== "Phase" && metric !== "Coherence") {
+                    adjustedBuffer = new Float32Array(bufferToDraw.length);
+                    for (let i = 0; i < bufferToDraw.length; i++) {
+                        adjustedBuffer[i] = bufferToDraw[i] + offsetY;
+                    }
+                }
+
+                if (metric === "Phase") {
+                    drawPhasePath(
+                        p.ctx, p.width, p.height,
+                        { color: snapColor, lineWidth, lineDash: snapDash },
+                        p.frequencyLUT, adjustedBuffer, p.metricConfigs,
+                        p.interactionState, p.interpEngine.interpCoherence
+                    );
+                } else if (metric === "Simulated Magnitude") {
+                    drawSimulatedMagnitudePath(
+                        p.ctx, p.width, p.height,
+                        { color: snapColor, lineWidth, lineDash: snapDash },
+                        p.frequencyLUT, p.interpEngine.interpCoherence,
+                        adjustedBuffer, p.metricConfigs, p.interactionState,
+                        (idx: number, arr: Float32Array) => arr[idx],
+                        p.getEQResponseCached, p.BINS, p.sampleRate
+                    );
+                } else {
+                    drawMetricPath(
+                        p.ctx, adjustedBuffer, p.width, p.height,
+                        snapColor, lineWidth, snapDash, metric,
+                        p.frequencyLUT, p.interpEngine.interpCoherence,
+                        p.metricConfigs, p.interactionState,
+                        (idx: number, arr: Float32Array) => arr[idx],
+                        p.sampleRate
+                    );
+                }
+            });
+
+            p.ctx.globalAlpha = 1.0;
+            continue; // Ya dibujamos todas las métricas, no caer al drawMetricPath genérico
+        }
+
+        // Capas no-live sin multiMetricData (calculated, etc.)
+        if (layer.data.length === 0) continue;
+
+        const metricForColor = p.activeMetrics[0] || 'Magnitude';
+        const color = METRIC_COLORS[metricForColor] || '#ff4444';
 
         p.ctx.globalAlpha = alpha;
         drawMetricPath(
@@ -441,81 +503,6 @@ export function drawQuadrant(p: DrawParams): void {
         p.ctx.drawImage(maskCanvas, 0, 0);
     }
 
-    // 3.5. Renderizar curvas de las Instantáneas globales que estén visibles (Prompt 8)
-    p.instantaneas.forEach((snap) => {
-        if (!snap.visible) return;
-
-        // Estilo para instantáneas en segundo plano: delgadas y discontinuas
-        const lw = 1.3;
-        const op = 0.75;
-        p.ctx.globalAlpha = op;
-
-        p.activeMetrics.forEach((metric) => {
-            if (p.metricConfigs[metric]?.hidden) return;
-            if (p.hasTimeDomainActive && !["Impulse", "Step"].includes(metric)) return;
-            if (!p.hasTimeDomainActive && ["Impulse", "Step"].includes(metric)) return;
-
-            // Aplicar Hover Focus y Solo Mode (Prompt 11) en instantáneas
-            p.ctx.globalAlpha = op * p.getMetricAlpha(metric);
-
-            // Color reservado para la métrica
-            const color = p.metricStyles[metric]?.color || METRIC_COLORS[metric] || '#ff4444';
-
-            // Extraer el buffer específico de esta métrica desde la instantánea multimétrica
-            const bufferToDraw = snap.data[metric];
-
-            if (bufferToDraw && bufferToDraw.length > 0) {
-                if (metric === "Phase") {
-                    drawPhasePath(
-                        p.ctx,
-                        p.width,
-                        p.height,
-                        { color, lineWidth: lw, lineDash: [6, 4] },
-                        p.frequencyLUT,
-                        bufferToDraw,
-                        p.metricConfigs,
-                        p.interactionState,
-                        p.interpEngine.interpCoherence
-                    );
-                } else if (metric === "Simulated Magnitude") {
-                    drawSimulatedMagnitudePath(
-                        p.ctx,
-                        p.width,
-                        p.height,
-                        { color, lineWidth: lw, lineDash: [6, 4] },
-                        p.frequencyLUT,
-                        p.interpEngine.interpCoherence,
-                        bufferToDraw,
-                        p.metricConfigs,
-                        p.interactionState,
-                        (idx: number, arr: Float32Array) => arr[idx],
-                        p.getEQResponseCached,
-                        p.BINS,
-                        p.sampleRate
-                    );
-                } else {
-                    drawMetricPath(
-                        p.ctx,
-                        bufferToDraw,
-                        p.width,
-                        p.height,
-                        color,
-                        lw,
-                        [6, 4],
-                        metric,
-                        p.frequencyLUT,
-                        p.interpEngine.interpCoherence,
-                        p.metricConfigs,
-                        p.interactionState,
-                        (idx: number, arr: Float32Array) => arr[idx],
-                        p.sampleRate
-                    );
-                }
-            }
-        });
-
-        p.ctx.globalAlpha = 1.0;
-    });
 
 
     // Bloques standalone para métricas que NO están en el layer loop

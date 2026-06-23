@@ -1,6 +1,6 @@
 <script lang="ts">
     import { uiStore } from "$lib/stores/ui.svelte";
-    import { traceManager } from "$lib/stores/traceManager.svelte";
+
 
     let { statusText = $bindable("Listo para medir") } = $props();
     let progress = $state(0);
@@ -114,26 +114,7 @@
         uiStore.isMeasuring = !uiStore.isMeasuring;
     }
 
-    async function runSequentialSequence() {
-        const activeSegments = segments.filter((s) => s.checked);
-        if (activeSegments.length === 0) {
-            uiStore.isMeasuring = false;
-            statusText = "Seleccione al menos un segmento";
-            return;
-        }
 
-        // Limpiar resultados anteriores
-        activeSegments.forEach((s) => (s.result = undefined));
-
-        // Marcar todos como pendientes — módulo APST no implementado aún
-        for (const seg of activeSegments) {
-            seg.result = "⚠️ Pendiente de implementación";
-        }
-
-        uiStore.isMeasuring = false;
-        progress = 0;
-        statusText = "Secuencia no implementada — requiere módulo APST";
-    }
 
     function calculateDelay() {
         statusText = "⚠️ Cálculo de retardo no implementado — requiere módulo APST";
@@ -143,12 +124,7 @@
         statusText = `Retardo de ${manualDelay} ms aplicado`;
     }
 
-    function captureActiveLive() {
-        traceManager.captureInstantanea(
-            `Instantánea #${traceManager.instantaneas.length + 1}`
-        );
-        statusText = "Instantánea capturada con éxito";
-    }
+
 
 
 </script>

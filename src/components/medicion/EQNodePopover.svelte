@@ -6,12 +6,10 @@
     let {
         nodeIndex,
         containerWidth,
-        containerHeight,
         onClose,
     }: {
         nodeIndex: number;
         containerWidth: number;
-        containerHeight: number;
         onClose: () => void;
     } = $props();
 
@@ -84,7 +82,7 @@
     // Fixed at bottom center
     const popoverW = containerWidth > 500 ? 420 : Math.min(containerWidth - 16, 340);
     const adaptedX = $derived(Math.round((containerWidth - popoverW) / 2));
-    const adaptedY = $derived(containerHeight - 8); // will use bottom positioning
+
 
     function handleKeydown(e: KeyboardEvent) {
         if (e.key === 'Escape') onClose();

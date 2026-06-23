@@ -61,14 +61,14 @@
     let draggingEQNode = $state<number | null>(null);
     let hoveringEQNode = $state<number | null>(null);
     let selectedEQNode = $state<number | null>(null);
-    let popoverPos = $state<{ x: number; y: number }>({ x: 0, y: 0 });
+
     let eqScoreHover = $state(false);
 
     // Compute deviation before/after EQ for badge
     const deviationTarget = $derived(traceManager.getTargetCurve(mathOrchestrator.BINS, uiStore.sampleRate));
     const eqScoreBadge = $derived.by(() => {
-        const _v = mathOrchestrator.version;
-        const _e = eqStore.activeBandsVersion;
+        void mathOrchestrator.version;
+        void eqStore.activeBandsVersion;
         if (!showEQOverlay || eqStore.activeBands.length === 0) return null;
         return computeEQScoreBadge(
             mathOrchestrator.outputMagnitude, mathOrchestrator.outputCoherence,
@@ -282,7 +282,7 @@
         if (r.draggingEQNode !== undefined) draggingEQNode = r.draggingEQNode;
         if (r.selectedEQNode !== undefined) selectedEQNode = r.selectedEQNode;
         if (r.eqScoreHover !== undefined) eqScoreHover = r.eqScoreHover;
-        if (r.popoverPos) popoverPos = r.popoverPos;
+
         if (r.bandUpdates) {
             for (const u of r.bandUpdates) eqStore.updateBand(u.index, u.field, u.value);
         }
@@ -518,7 +518,6 @@
         <EQNodePopover
             nodeIndex={selectedEQNode}
             {containerWidth}
-            {containerHeight}
             onClose={() => selectedEQNode = null}
         />
     {/if}

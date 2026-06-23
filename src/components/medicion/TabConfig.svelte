@@ -10,11 +10,7 @@
     let inputDevices = $state<{ id: string; name: string; channels?: number }[]>([]);
     let outputDevices = $state<{ id: string; name: string; channels?: number }[]>([]);
 
-    const activeInDevice = $derived(inputDevices.find(d => d.id === uiStore.audioInDevice));
-    const inputChannelsCount = $derived(activeInDevice && activeInDevice.channels ? activeInDevice.channels : 2);
 
-    const activeOutDevice = $derived(outputDevices.find(d => d.id === uiStore.audioOutDevice));
-    const outputChannelsCount = $derived(activeOutDevice && activeOutDevice.channels ? activeOutDevice.channels : 2);
 
     async function loadDevices() {
         try {
@@ -82,8 +78,7 @@
         await loadDevices();
     });
 
-    // Acento unificado
-    const accent = '#3b82f6';
+
     const accentBg = 'bg-[#3b82f6]/15 text-[#3b82f6] shadow';
     const inactiveBtn = 'text-gray-500 hover:text-gray-300';
 </script>
