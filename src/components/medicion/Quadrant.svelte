@@ -26,6 +26,14 @@
     import { drawQuadrant, EQ_BADGE_X, EQ_BADGE_Y_OFFSET, EQ_BADGE_W_COMPACT, EQ_BADGE_H_COMPACT, EQ_BADGE_W_EXPANDED, EQ_BADGE_H_EXPANDED } from "$lib/dsp/quadrantDraw";
     import { computeDeviation } from "$lib/dsp/deviationMetrics";
     import {
+        getPPOSmoothedValue as _ppoSmooth,
+        isMetricDisabled as _isMetricDisabled,
+        getMetricAlpha as _getMetricAlpha,
+        hitTestEQNodes,
+        mouseToEQParams,
+        preSmoothBuffer,
+    } from "$lib/dsp/quadrantHelpers";
+    import {
         handleWheel as interactionHandleWheel,
         handleMouseMove as interactionHandleMouseMove,
         handleMouseDown as interactionHandleMouseDown,
@@ -37,8 +45,6 @@
         rebuildFrequencyLUT,
         valToX,
         valToY,
-        xToVal,
-        yToVal,
         type InteractionState,
     } from "$lib/dsp/canvasInteraction";
 
@@ -284,23 +290,7 @@
     );
 
     function isMetricDisabled(name: string): boolean {
-        if (
-            [
-                "Spectrum",
-                "Magnitude",
-                "Simulated Magnitude",
-                "Phase",
-                "Coherence",
-                "Group Delay",
-                "Spectrogram",
-            ].includes(name)
-        ) {
-            if (hasTimeDomainActive) return true;
-        }
-        if (["Impulse", "Step"].includes(name)) {
-            if (hasFreqDomainActive) return true;
-        }
-        return false;
+        return _isMetricDisabled(name, hasTimeDomainActive, hasFreqDomainActive);
     }
 
     function toggleMetric(name: string) {
@@ -321,28 +311,7 @@
         dataArray: Float32Array,
         ppo: number,
     ): number {
-        if (ppo >= 48) return dataArray[binIndex];
-
-        const octaveFraction = 1 / ppo;
-        const binWidth = uiStore.sampleRate / 2 / BINS;
-        const freq = binIndex * binWidth || 1e-6;
-
-        const f_start = freq * Math.pow(2, -octaveFraction / 2);
-        const f_end = freq * Math.pow(2, octaveFraction / 2);
-
-        const k_start = Math.max(0, Math.round(f_start / binWidth));
-        const k_end = Math.min(
-            dataArray.length - 1,
-            Math.round(f_end / binWidth),
-        );
-
-        let sum = 0;
-        let count = 0;
-        for (let k = k_start; k <= k_end; k++) {
-            sum += dataArray[k];
-            count++;
-        }
-        return count > 0 ? sum / count : dataArray[binIndex];
+        return _ppoSmooth(binIndex, dataArray, ppo, uiStore.sampleRate, BINS);
     }
 
     // CORE DRAW ENGINE
@@ -398,39 +367,12 @@
 
             // Pre-suavizar las curvas para esta animación a 60FPS (incluyendo las transiciones de interpolación)
             const magPPO = metricConfigs["Magnitude"]?.smoothingPPO || 48;
-            if (activeMetrics.includes("Magnitude") && magPPO < 48) {
-                for (let i = 0; i < BINS; i++) {
-                    smoothedMagnitude[i] = getPPOSmoothedValue(
-                        i,
-                        interpEngine.interpMagnitude,
-                        magPPO,
-                    );
-                }
-            } else {
-                // Guard: source may be larger than BINS (e.g., worker sends different FFT size)
-                if (interpEngine.interpMagnitude.length > BINS) {
-                    smoothedMagnitude.set(interpEngine.interpMagnitude.subarray(0, BINS));
-                } else {
-                    smoothedMagnitude.set(interpEngine.interpMagnitude);
-                }
-            }
+            preSmoothBuffer(smoothedMagnitude, interpEngine.interpMagnitude, BINS, magPPO, uiStore.sampleRate);
 
             const specPPO = metricConfigs["Spectrum"]?.smoothingPPO || 48;
             const hasLive = liveData && liveData.length > 0;
             const rawSpec = hasLive ? liveData : interpEngine.interpMagnitude;
-            if (activeMetrics.includes("Spectrum") && specPPO < 48) {
-                const loopLen = Math.min(BINS, rawSpec.length);
-                for (let i = 0; i < loopLen; i++) {
-                    smoothedSpectrum[i] = getPPOSmoothedValue(i, rawSpec, specPPO);
-                }
-            } else {
-                // Guard: rawSpec (liveData) may be larger than BINS
-                if (rawSpec.length > BINS) {
-                    smoothedSpectrum.set(rawSpec.subarray(0, BINS));
-                } else {
-                    smoothedSpectrum.set(rawSpec);
-                }
-            }
+            preSmoothBuffer(smoothedSpectrum, rawSpec, BINS, specPPO, uiStore.sampleRate);
 
             drawQuadrant({
                 ctx,
@@ -523,30 +465,10 @@
             draggingEQNode === null &&
             eqStore.activeBands.length > 0
         ) {
-            let found = -1;
-            const bands = eqStore.activeBands;
-            for (let i = 0; i < bands.length; i++) {
-                const nx = valToX(
-                    bands[i].freq,
-                    containerWidth,
-                    false,
-                    interactionState,
-                );
-                const ny = valToY(
-                    bands[i].gain,
-                    containerHeight,
-                    "Magnitude",
-                    metricConfigs,
-                    interactionState,
-                );
-                const dx = mouseX - nx;
-                const dy = mouseY - ny;
-                if (dx * dx + dy * dy < 400) {
-                    found = i;
-                    break;
-                } // 400 = 20^2, generous hit area for wheel Q control
-            }
-            hoveringEQNode = found >= 0 ? found : null;
+            hoveringEQNode = hitTestEQNodes(
+                mouseX, mouseY, eqStore.activeBands,
+                containerWidth, containerHeight, metricConfigs, interactionState,
+            );
         } else if (!showEQOverlay) {
             hoveringEQNode = null;
         }
@@ -564,40 +486,10 @@
 
         // Drag activo de nodo EQ
         if (draggingEQNode !== null) {
-            const freq = xToVal(
-                mouseX,
-                containerWidth,
-                false,
-                interactionState,
+            const { freq: clampedFreq, gain: clampedGain } = mouseToEQParams(
+                mouseX, mouseY, containerWidth, containerHeight,
+                interactionState, e.shiftKey, e.ctrlKey,
             );
-            const gain = yToVal(
-                mouseY,
-                containerHeight,
-                "Magnitude",
-                interactionState,
-            );
-            let clampedFreq = Math.max(20, Math.min(20000, Math.round(freq)));
-            let clampedGain = Math.max(
-                -30,
-                Math.min(30, parseFloat(gain.toFixed(1))),
-            );
-
-            // P6c: Snap to ISO 1/3 octave frequencies when Shift is held
-            if (e.shiftKey) {
-                const isoFreqs = [20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000, 20000];
-                let best = isoFreqs[0];
-                let bestDist = Math.abs(Math.log10(clampedFreq) - Math.log10(best));
-                for (const f of isoFreqs) {
-                    const d = Math.abs(Math.log10(clampedFreq) - Math.log10(f));
-                    if (d < bestDist) { bestDist = d; best = f; }
-                }
-                clampedFreq = best;
-            }
-
-            // P6c: Snap gain to 0.5dB steps when Ctrl is held
-            if (e.ctrlKey) {
-                clampedGain = Math.round(clampedGain * 2) / 2;
-            }
 
             // C1 fix: in graphic mode, only allow gain changes (freq is fixed)
             if (eqStore.eqType === 'grafico') {
@@ -687,13 +579,7 @@
     }
 
     function getMetricAlpha(metric: string): number {
-        if (soloMetric) {
-            return soloMetric === metric ? 1.0 : 0.2;
-        }
-        if (hoverMetric) {
-            return hoverMetric === metric ? 1.0 : 0.15;
-        }
-        return 1.0;
+        return _getMetricAlpha(metric, soloMetric, hoverMetric);
     }
 
 
