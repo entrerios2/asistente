@@ -128,3 +128,31 @@ export function computeSpatialConsistency(
         maxStdDev,
     };
 }
+
+/**
+ * Compute the EQ score badge showing before/after deviation.
+ * Extracted from Quadrant.svelte's $derived.by to keep the component lean.
+ */
+export function computeEQScoreBadge(
+    magnitude: Float32Array,
+    coherence: Float32Array,
+    target: Float32Array,
+    bins: number,
+    sampleRate: number,
+    getEQResponse: (f: number) => number,
+): { before: DeviationResult; after: DeviationResult } | null {
+    if (!magnitude || magnitude.length === 0) return null;
+
+    const before = computeDeviation(magnitude, target, coherence, bins, sampleRate);
+
+    // Compute corrected magnitude
+    const binWidth = (sampleRate / 2) / bins;
+    const adjusted = new Float32Array(bins);
+    for (let i = 0; i < bins; i++) {
+        const freq = i * binWidth || 1e-6;
+        adjusted[i] = (magnitude[i] || 0) + getEQResponse(freq);
+    }
+    const after = computeDeviation(adjusted, target, coherence, bins, sampleRate);
+
+    return { before, after };
+}

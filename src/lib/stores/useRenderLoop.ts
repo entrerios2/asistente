@@ -219,3 +219,71 @@ export function executeDraw(p: RenderFrameParams): RenderFrameResult | null {
 
     return { localLastVersion, dirty, cachedCtx: ctx };
 }
+
+/**
+ * Initialize canvas sizing, ResizeObserver, and the FPS-limited rAF render loop.
+ * Returns a cleanup function to disconnect the observer and cancel the animation frame.
+ *
+ * Extracted from Quadrant.svelte's onMount to reduce component complexity.
+ */
+export function initCanvasAndLoop(
+    container: HTMLDivElement,
+    canvas: HTMLCanvasElement,
+    draw: () => void,
+    getTargetFps: () => number,
+    onResize: (width: number, height: number) => void,
+): () => void {
+    // Initialize canvas with correct dimensions before first draw
+    if (container && canvas) {
+        const rect = container.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        onResize(rect.width, rect.height);
+        canvas.width = Math.round(rect.width * dpr);
+        canvas.height = Math.round(rect.height * dpr);
+        canvas.style.width = `${rect.width}px`;
+        canvas.style.height = `${rect.height}px`;
+    }
+
+    // ResizeObserver for physical container dimension changes
+    const observer = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+            const { width, height } = entry.contentRect;
+            onResize(width, height);
+            if (canvas) {
+                const dpr = window.devicePixelRatio || 1;
+                const targetW = Math.round(width * dpr);
+                const targetH = Math.round(height * dpr);
+                if (canvas.width !== targetW || canvas.height !== targetH) {
+                    canvas.width = targetW;
+                    canvas.height = targetH;
+                    canvas.style.width = `${width}px`;
+                    canvas.style.height = `${height}px`;
+                }
+            }
+        }
+    });
+
+    if (container) observer.observe(container);
+
+    // FPS-limited rAF render loop
+    let animationId: number;
+    let lastDrawTime = performance.now();
+    function renderLoop() {
+        animationId = requestAnimationFrame(renderLoop);
+        const now = performance.now();
+        const interval = 1000 / getTargetFps();
+        const elapsed = now - lastDrawTime;
+
+        if (elapsed >= interval) {
+            lastDrawTime = now - (elapsed % interval);
+            draw();
+        }
+    }
+    renderLoop();
+
+    // Cleanup function
+    return () => {
+        observer.disconnect();
+        cancelAnimationFrame(animationId);
+    };
+}

@@ -5,34 +5,16 @@
     import { uiStore } from "$lib/stores/ui.svelte";
     import { meterStore } from "$lib/stores/meterStore.svelte";
     import { mathOrchestrator } from "$lib/stores/mathOrchestrator.svelte";
-
     import { targetTrace } from "$lib/stores/targetTrace.svelte";
     import { palettes, type PaletteType } from "$lib/dsp/colorPalettes";
-    import {
-        allMetrics,
-        defaultMetricStyles,
-        defaultMetricConfigs,
-        type MetricConfig,
-    } from "$lib/dsp/quadrantState";
-
-    import ZoomControls from "./ZoomControls.svelte";
-    import EQNodePopover from "./EQNodePopover.svelte";
-
-    import MetricConfigPopover from "./MetricConfigPopover.svelte";
-    import AddMetricDropdown from "./AddMetricDropdown.svelte";
-    import LayerPanel from "./LayerPanel.svelte";
-
+    import { allMetrics, defaultMetricStyles, defaultMetricConfigs, type MetricConfig } from "$lib/dsp/quadrantState";
     import { InterpolationEngine } from "$lib/dsp/interpolationEngine";
     import { EQ_BADGE_X, EQ_BADGE_Y_OFFSET, EQ_BADGE_W_COMPACT, EQ_BADGE_H_COMPACT, EQ_BADGE_W_EXPANDED, EQ_BADGE_H_EXPANDED } from "$lib/dsp/quadrantDraw";
-    import { computeDeviation } from "$lib/dsp/deviationMetrics";
-    import { executeDraw } from "$lib/stores/useRenderLoop";
-    import {
-        getPPOSmoothedValue as _ppoSmooth,
-        isMetricDisabled as _isMetricDisabled,
-        getMetricAlpha as _getMetricAlpha,
-        hitTestEQNodes,
-        mouseToEQParams,
-    } from "$lib/dsp/quadrantHelpers";
+    import { computeEQScoreBadge } from "$lib/dsp/deviationMetrics";
+    import { executeDraw, initCanvasAndLoop } from "$lib/stores/useRenderLoop";
+    import { getPPOSmoothedValue as _ppoSmooth, isMetricDisabled as _isMetricDisabled, getMetricAlpha as _getMetricAlpha } from "$lib/dsp/quadrantHelpers";
+    import { handleEQWheel, handleEQMouseMove, handleEQMouseDown, handleEQMouseUp, type EQContext } from "$lib/dsp/eqInteractionHandlers";
+    import { SpectrogramManager } from "$lib/dsp/spectrogramManager";
     import {
         handleWheel as interactionHandleWheel,
         handleMouseMove as interactionHandleMouseMove,
@@ -43,10 +25,14 @@
         handleTouchEnd as interactionHandleTouchEnd,
         handleDoubleClick as interactionHandleDoubleClick,
         rebuildFrequencyLUT,
-        valToX,
-        valToY,
         type InteractionState,
     } from "$lib/dsp/canvasInteraction";
+
+    import ZoomControls from "./ZoomControls.svelte";
+    import EQNodePopover from "./EQNodePopover.svelte";
+    import MetricConfigPopover from "./MetricConfigPopover.svelte";
+    import AddMetricDropdown from "./AddMetricDropdown.svelte";
+    import LayerPanel from "./LayerPanel.svelte";
 
 
 
@@ -79,28 +65,16 @@
     let eqScoreHover = $state(false);
 
     // Compute deviation before/after EQ for badge
-    // Only recompute when worker data arrives (version) or EQ bands change (activeBandsVersion)
     const deviationTarget = $derived(traceManager.getTargetCurve(mathOrchestrator.BINS, uiStore.sampleRate));
     const eqScoreBadge = $derived.by(() => {
-        // Pin to version counters — avoids recomputing every reactive frame
-        const _dataVersion = mathOrchestrator.version;
-        const _eqVersion = eqStore.activeBandsVersion;
+        const _v = mathOrchestrator.version;
+        const _e = eqStore.activeBandsVersion;
         if (!showEQOverlay || eqStore.activeBands.length === 0) return null;
-        const mag = mathOrchestrator.outputMagnitude;
-        const coh = mathOrchestrator.outputCoherence;
-        const bins = mathOrchestrator.BINS;
-        const sr = uiStore.sampleRate;
-        if (!mag || mag.length === 0) return null;
-        const before = computeDeviation(mag, deviationTarget, coh, bins, sr);
-        // Compute corrected magnitude
-        const binWidth = (sr / 2) / bins;
-        const adjusted = new Float32Array(bins);
-        for (let i = 0; i < bins; i++) {
-            const freq = i * binWidth || 1e-6;
-            adjusted[i] = (mag[i] || 0) + mathOrchestrator.getEQResponseCached(freq);
-        }
-        const after = computeDeviation(adjusted, deviationTarget, coh, bins, sr);
-        return { before, after };
+        return computeEQScoreBadge(
+            mathOrchestrator.outputMagnitude, mathOrchestrator.outputCoherence,
+            deviationTarget, mathOrchestrator.BINS, uiStore.sampleRate,
+            mathOrchestrator.getEQResponseCached.bind(mathOrchestrator),
+        );
     });
 
     let metricStyles = $state<
@@ -203,45 +177,20 @@
         dirty = true;
     });
 
-    // Caché e historial del espectrograma optimizado
-    const maxHistory = 100;
-    let spectrogramFrameCount = { value: 0 };
-    let offscreenCanvas: HTMLCanvasElement | null = null;
-    let offscreenCtx: CanvasRenderingContext2D | null = null;
+    // Spectrogram state encapsulated in manager
+    const spectroMgr = new SpectrogramManager();
 
-    // Precomputar LUT de colores en formato RGBA numérico para optimización extrema con ImageData
+    // Precomputar LUT de colores para el espectrograma
     const spectrogramLUT_RGBA = $derived.by(() => {
         const paletteName = metricConfigs["Spectrogram"]?.palette || "Magma";
         const paletteData = palettes[paletteName as PaletteType];
         const lut = new Uint8ClampedArray(256 * 3);
-        if (paletteData) {
-            lut.set(paletteData);
-        }
+        if (paletteData) lut.set(paletteData);
         return lut;
     });
 
     const smoothedMagnitude = new Float32Array(interpEngine.BINS);
     const smoothedSpectrum = new Float32Array(interpEngine.BINS);
-    let sharedImageData: ImageData | null = null;
-
-    let spectrogramDbHistory = $state<Float32Array[]>([]);
-
-    function initOffscreenCanvas() {
-        if (typeof document === "undefined") return;
-        offscreenCanvas = document.createElement("canvas");
-        const w = Math.round(containerWidth) || 800;
-        offscreenCanvas.width = w;
-        offscreenCanvas.height = maxHistory;
-        offscreenCtx = offscreenCanvas.getContext("2d");
-        if (offscreenCtx) {
-            offscreenCtx.fillStyle = "#000000";
-            offscreenCtx.fillRect(0, 0, w, maxHistory);
-            sharedImageData = offscreenCtx.createImageData(w, 1);
-        } else {
-            sharedImageData = null;
-        }
-        spectrogramDbHistory = [];
-    }
 
     const BINS = interpEngine.BINS;
 
@@ -306,233 +255,99 @@
         activeMetrics = activeMetrics.filter((m) => m !== name);
     }
 
-    function getPPOSmoothedValue(
-        binIndex: number,
-        dataArray: Float32Array,
-        ppo: number,
-    ): number {
-        return _ppoSmooth(binIndex, dataArray, ppo, uiStore.sampleRate, BINS);
-    }
+    const getPPOSmoothedValue = (bin: number, data: Float32Array, ppo: number) =>
+        _ppoSmooth(bin, data, ppo, uiStore.sampleRate, BINS);
+    const getMetricAlpha = (metric: string) => _getMetricAlpha(metric, soloMetric, hoverMetric);
 
     // CORE DRAW ENGINE
-    // Pre-cached references para evitar crear objetos nuevos en cada frame
     let _cachedCtx: CanvasRenderingContext2D | null = null;
     const _boundGetEQResponse = mathOrchestrator.getEQResponseCached.bind(mathOrchestrator);
     const _boundGetEQPhase = mathOrchestrator.getEQPhaseCached.bind(mathOrchestrator);
 
+    /** Build EQ context snapshot for interaction handlers */
+    function getEQContext(): EQContext {
+        return {
+            showEQOverlay, eqType: eqStore.eqType, activeBands: eqStore.activeBands,
+            hoveringEQNode, draggingEQNode, eqScoreHover, eqScoreBadge,
+            containerWidth, containerHeight, metricConfigs, interactionState,
+            badgeX: EQ_BADGE_X, badgeYOffset: EQ_BADGE_Y_OFFSET,
+            badgeWCompact: EQ_BADGE_W_COMPACT, badgeHCompact: EQ_BADGE_H_COMPACT,
+            badgeWExpanded: EQ_BADGE_W_EXPANDED, badgeHExpanded: EQ_BADGE_H_EXPANDED,
+        };
+    }
+
+    /** Apply EQ interaction result to component state */
+    function applyEQResult(r: ReturnType<typeof handleEQMouseMove>) {
+        if (r.hoveringEQNode !== undefined) hoveringEQNode = r.hoveringEQNode;
+        if (r.draggingEQNode !== undefined) draggingEQNode = r.draggingEQNode;
+        if (r.selectedEQNode !== undefined) selectedEQNode = r.selectedEQNode;
+        if (r.eqScoreHover !== undefined) eqScoreHover = r.eqScoreHover;
+        if (r.popoverPos) popoverPos = r.popoverPos;
+        if (r.bandUpdates) {
+            for (const u of r.bandUpdates) eqStore.updateBand(u.index, u.field, u.value);
+        }
+    }
+
     function draw() {
         const result = executeDraw({
-            canvas,
-            cachedCtx: _cachedCtx,
-            activeMetrics,
-            hasTimeDomainActive,
-            metricConfigs,
-            metricStyles,
-            interactionState,
-            isDarkMode: uiStore.isDarkMode,
-            sampleRate: uiStore.sampleRate,
-            BINS,
-            interpEngine,
-            localLastVersion,
-            dirty,
-            smoothedMagnitude,
-            smoothedSpectrum,
-            getPPOSmoothedValue,
-            getMetricValueInterpolated,
-            getImpulseValueInterpolated,
-            getMetricAlpha,
-            getEQResponseCached: _boundGetEQResponse,
-            getEQPhaseCached: _boundGetEQPhase,
+            canvas, cachedCtx: _cachedCtx,
+            activeMetrics, hasTimeDomainActive, metricConfigs, metricStyles, interactionState,
+            isDarkMode: uiStore.isDarkMode, sampleRate: uiStore.sampleRate, BINS, interpEngine,
+            localLastVersion, dirty, smoothedMagnitude, smoothedSpectrum,
+            getPPOSmoothedValue, getMetricValueInterpolated, getImpulseValueInterpolated, getMetricAlpha,
+            getEQResponseCached: _boundGetEQResponse, getEQPhaseCached: _boundGetEQPhase,
             mathOrchestratorRef: mathOrchestrator,
             showEQOverlay,
             refreshEQCache: () => mathOrchestrator.refreshEQCache(),
             updateCalculatedLayers: () => traceManager.updateCalculatedLayers(),
             orchestratorVersion: mathOrchestrator.version,
-            liveData: traceManager.liveFrequencyData,
-            frequencyLUT,
-            myLayers,
-            quadrantLayers,
-            instantaneas: traceManager.instantaneas,
-            eqBands: eqStore.activeBands,
-            hoveringEQNode,
-            draggingEQNode,
-            selectedEQNode,
-            eqScoreBadge,
-            eqScoreHover,
-            offscreenCanvas,
-            offscreenCtx,
-            spectrogramLUT_RGBA,
-            spectrogramFrameCountRef: spectrogramFrameCount,
-            initOffscreenCanvas,
-            spectrogramDbHistory,
-            sharedImageData,
-            targetTrace,
-            meterStore,
-            hReal: mathOrchestrator.hReal,
-            hImag: mathOrchestrator.hImag,
+            liveData: traceManager.liveFrequencyData, frequencyLUT,
+            myLayers, quadrantLayers, instantaneas: traceManager.instantaneas,
+            eqBands: eqStore.activeBands, hoveringEQNode, draggingEQNode, selectedEQNode,
+            eqScoreBadge, eqScoreHover,
+            offscreenCanvas: spectroMgr.offscreenCanvas, offscreenCtx: spectroMgr.offscreenCtx,
+            spectrogramLUT_RGBA, spectrogramFrameCountRef: spectroMgr.frameCount,
+            initOffscreenCanvas: () => spectroMgr.init(containerWidth),
+            spectrogramDbHistory: spectroMgr.dbHistory, sharedImageData: spectroMgr.sharedImageData,
+            targetTrace, meterStore,
+            hReal: mathOrchestrator.hReal, hImag: mathOrchestrator.hImag,
             outputCrestFactor: mathOrchestrator.outputCrestFactor,
         });
-
-        if (result) {
-            localLastVersion = result.localLastVersion;
-            dirty = result.dirty;
-            _cachedCtx = result.cachedCtx;
-        }
+        if (result) { localLastVersion = result.localLastVersion; dirty = result.dirty; _cachedCtx = result.cachedCtx; }
     }
 
-    // GESTORES DE EVENTOS DELEGADOS (PAN & ZOOM)
+    // ── EVENT HANDLERS ──
     function handleWheel(e: WheelEvent) {
-        // P5: Q control via scroll when hovering an EQ node (parametric only)
-        if (showEQOverlay && hoveringEQNode !== null && eqStore.eqType === 'parametrico') {
-            e.preventDefault();
-            e.stopPropagation();
-            const band = eqStore.activeBands[hoveringEQNode];
-            if (band) {
-                const delta = e.deltaY > 0 ? -0.1 : 0.1;
-                const newQ = Math.max(0.1, Math.min(20, Math.round((band.q + delta) * 10) / 10));
-                eqStore.updateBand(hoveringEQNode, 'q', newQ);
-            }
-            return;
-        }
-        interactionHandleWheel(
-            e,
-            interactionState,
-            canvas,
-            containerWidth,
-            containerHeight,
-            activeMetrics,
-            metricConfigs,
-            hasTimeDomainActive,
-        );
+        const r = handleEQWheel(e.deltaY, getEQContext());
+        if (r?.consumed) { e.preventDefault(); e.stopPropagation(); applyEQResult(r); return; }
+        interactionHandleWheel(e, interactionState, canvas, containerWidth, containerHeight, activeMetrics, metricConfigs, hasTimeDomainActive);
     }
 
     function handleMouseMove(e: MouseEvent) {
         const rect = canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-
-        // Hit-test nodos EQ (solo si overlay visible y hay bandas)
-        if (
-            showEQOverlay &&
-            draggingEQNode === null &&
-            eqStore.activeBands.length > 0
-        ) {
-            hoveringEQNode = hitTestEQNodes(
-                mouseX, mouseY, eqStore.activeBands,
-                containerWidth, containerHeight, metricConfigs, interactionState,
-            );
-        } else if (!showEQOverlay) {
-            hoveringEQNode = null;
-        }
-
-        // Hit-test EQ score badge (bottom-left corner)
-        if (showEQOverlay && eqScoreBadge) {
-            const badgeW = eqScoreHover ? EQ_BADGE_W_EXPANDED : EQ_BADGE_W_COMPACT;
-            const badgeH = eqScoreHover ? EQ_BADGE_H_EXPANDED : EQ_BADGE_H_COMPACT;
-            const badgeX = EQ_BADGE_X;
-            const badgeY = containerHeight - EQ_BADGE_Y_OFFSET - badgeH;
-            eqScoreHover = mouseX >= badgeX && mouseX <= badgeX + badgeW && mouseY >= badgeY && mouseY <= badgeY + badgeH + EQ_BADGE_Y_OFFSET;
-        } else {
-            eqScoreHover = false;
-        }
-
-        // Drag activo de nodo EQ
-        if (draggingEQNode !== null) {
-            const { freq: clampedFreq, gain: clampedGain } = mouseToEQParams(
-                mouseX, mouseY, containerWidth, containerHeight,
-                interactionState, e.shiftKey, e.ctrlKey,
-            );
-
-            // C1 fix: in graphic mode, only allow gain changes (freq is fixed)
-            if (eqStore.eqType === 'grafico') {
-                eqStore.updateBand(draggingEQNode, "gain", clampedGain);
-            } else {
-                eqStore.updateBand(draggingEQNode, "freq", clampedFreq);
-                eqStore.updateBand(draggingEQNode, "gain", clampedGain);
-            }
-        }
-
-        interactionHandleMouseMove(
-            e,
-            interactionState,
-            canvas,
-            containerWidth,
-            containerHeight,
-            hasTimeDomainActive,
-            activeMetrics,
-            metricConfigs,
-        );
+        const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+        applyEQResult(handleEQMouseMove(mx, my, e.shiftKey, e.ctrlKey, getEQContext()));
+        interactionHandleMouseMove(e, interactionState, canvas, containerWidth, containerHeight, hasTimeDomainActive, activeMetrics, metricConfigs);
     }
 
     function handleMouseDown(e: MouseEvent) {
-        // P4b: Click on EQ node → select for popover
-        if (showEQOverlay && hoveringEQNode !== null) {
-            draggingEQNode = hoveringEQNode;
-            // Set selectedEQNode and popover position
-            selectedEQNode = hoveringEQNode;
-            const rect = canvas.getBoundingClientRect();
-            popoverPos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-            e.preventDefault();
-            e.stopPropagation();
-            return;
-        }
-        // Click outside nodes → close popover
-        selectedEQNode = null;
-        interactionHandleMouseDown(
-            e,
-            interactionState,
-        );
+        const rect = canvas.getBoundingClientRect();
+        const r = handleEQMouseDown(e.clientX - rect.left, e.clientY - rect.top, getEQContext());
+        if (r?.consumed) { applyEQResult(r); e.preventDefault(); e.stopPropagation(); return; }
+        if (r) applyEQResult(r); // close popover on click outside
+        interactionHandleMouseDown(e, interactionState);
     }
 
     function handleMouseUp() {
-        if (draggingEQNode !== null) {
-            draggingEQNode = null;
-            return;
-        }
-        interactionHandleMouseUp(
-            interactionState,
-            containerWidth,
-            containerHeight,
-            hasTimeDomainActive,
-            activeMetrics,
-            metricConfigs,
-        );
+        const r = handleEQMouseUp(getEQContext());
+        if (r?.consumed) { applyEQResult(r); return; }
+        interactionHandleMouseUp(interactionState, containerWidth, containerHeight, hasTimeDomainActive, activeMetrics, metricConfigs);
     }
 
-    function handleTouchStart(e: TouchEvent) {
-        e.preventDefault();
-        interactionHandleTouchStart(e, interactionState);
-    }
-
-    function handleTouchMove(e: TouchEvent) {
-        e.preventDefault();
-        interactionHandleTouchMove(
-            e,
-            interactionState,
-            canvas,
-            activeMetrics,
-            metricConfigs,
-        );
-    }
-
-    function handleTouchEnd() {
-        interactionHandleTouchEnd(
-            interactionState,
-            containerWidth,
-            containerHeight,
-            hasTimeDomainActive,
-            activeMetrics,
-            metricConfigs,
-        );
-    }
-
-    function handleDoubleClick() {
-        interactionHandleDoubleClick(interactionState);
-    }
-
-    function getMetricAlpha(metric: string): number {
-        return _getMetricAlpha(metric, soloMetric, hoverMetric);
-    }
+    function handleTouchStart(e: TouchEvent) { e.preventDefault(); interactionHandleTouchStart(e, interactionState); }
+    function handleTouchMove(e: TouchEvent) { e.preventDefault(); interactionHandleTouchMove(e, interactionState, canvas, activeMetrics, metricConfigs); }
+    function handleTouchEnd() { interactionHandleTouchEnd(interactionState, containerWidth, containerHeight, hasTimeDomainActive, activeMetrics, metricConfigs); }
+    function handleDoubleClick() { interactionHandleDoubleClick(interactionState); }
 
 
 
@@ -558,81 +373,21 @@
     }
 
     onMount(() => {
-        // Inicializar con una capa por defecto si no existen capas para este cuadrante
-        if (
-            traceManager.layers.filter((l) => l.quadrantId === id).length === 0
-        ) {
-            traceManager.addLayer(
-                `Capa ${traceManager.layers.length + 1}`,
-                id,
-                "live",
-            );
+        // Inicializar capa por defecto si no existen capas para este cuadrante
+        if (traceManager.layers.filter((l) => l.quadrantId === id).length === 0) {
+            traceManager.addLayer(`Capa ${traceManager.layers.length + 1}`, id, "live");
         }
 
-        // Inicializar canvas con dimensiones correctas ANTES del primer draw
-        if (container && canvas) {
-            const rect = container.getBoundingClientRect();
-            const dpr = window.devicePixelRatio || 1;
-            containerWidth = rect.width;
-            containerHeight = rect.height;
-            canvas.width = Math.round(rect.width * dpr);
-            canvas.height = Math.round(rect.height * dpr);
-            canvas.style.width = `${rect.width}px`;
-            canvas.style.height = `${rect.height}px`;
-        }
+        const cleanupLoop = initCanvasAndLoop(
+            container, canvas, draw,
+            () => uiStore.targetFps,
+            (w, h) => { containerWidth = w; containerHeight = h; },
+        );
 
-        // Observer del redimensionamiento físico del cuadrante
-        const observer = new ResizeObserver((entries) => {
-            for (const entry of entries) {
-                const { width, height } = entry.contentRect;
-                containerWidth = width;
-                containerHeight = height;
-                // Redimensionar canvas buffer inmediatamente (no esperar $effect)
-                if (canvas) {
-                    const dpr = window.devicePixelRatio || 1;
-                    const targetW = Math.round(width * dpr);
-                    const targetH = Math.round(height * dpr);
-                    if (canvas.width !== targetW || canvas.height !== targetH) {
-                        canvas.width = targetW;
-                        canvas.height = targetH;
-                        canvas.style.width = `${width}px`;
-                        canvas.style.height = `${height}px`;
-                    }
-                }
-            }
-        });
-
-        if (container) observer.observe(container);
-
-        // Bucle continuo de animación con límite de FPS
-        let animationId: number;
-        let lastDrawTime = performance.now();
-        function renderLoop() {
-            animationId = requestAnimationFrame(renderLoop);
-            const now = performance.now();
-            const interval = 1000 / uiStore.targetFps;
-            const elapsed = now - lastDrawTime;
-
-            if (elapsed >= interval) {
-                lastDrawTime = now - (elapsed % interval);
-                draw();
-            }
-        }
-        renderLoop();
-
-        return () => {
-            observer.disconnect();
-            cancelAnimationFrame(animationId);
-            mathOrchestrator.unregisterQuadrant(id);
-        };
+        return () => { cleanupLoop(); mathOrchestrator.unregisterQuadrant(id); };
     });
 
-    $effect(() => {
-        mathOrchestrator.registerQuadrantMetrics(id, activeMetrics);
-    });
-
-    // NOTA: El canvas se redimensiona directamente en el ResizeObserver callback (onMount).
-    // NO usar $effect para resize — causa clear implícito del canvas en Chrome Android.
+    $effect(() => { mathOrchestrator.registerQuadrantMetrics(id, activeMetrics); });
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
