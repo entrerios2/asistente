@@ -23,15 +23,15 @@
     import LayerPanel from "./LayerPanel.svelte";
 
     import { InterpolationEngine } from "$lib/dsp/interpolationEngine";
-    import { drawQuadrant, EQ_BADGE_X, EQ_BADGE_Y_OFFSET, EQ_BADGE_W_COMPACT, EQ_BADGE_H_COMPACT, EQ_BADGE_W_EXPANDED, EQ_BADGE_H_EXPANDED } from "$lib/dsp/quadrantDraw";
+    import { EQ_BADGE_X, EQ_BADGE_Y_OFFSET, EQ_BADGE_W_COMPACT, EQ_BADGE_H_COMPACT, EQ_BADGE_W_EXPANDED, EQ_BADGE_H_EXPANDED } from "$lib/dsp/quadrantDraw";
     import { computeDeviation } from "$lib/dsp/deviationMetrics";
+    import { executeDraw } from "$lib/stores/useRenderLoop";
     import {
         getPPOSmoothedValue as _ppoSmooth,
         isMetricDisabled as _isMetricDisabled,
         getMetricAlpha as _getMetricAlpha,
         hitTestEQNodes,
         mouseToEQParams,
-        preSmoothBuffer,
     } from "$lib/dsp/quadrantHelpers";
     import {
         handleWheel as interactionHandleWheel,
@@ -317,114 +317,66 @@
     // CORE DRAW ENGINE
     // Pre-cached references para evitar crear objetos nuevos en cada frame
     let _cachedCtx: CanvasRenderingContext2D | null = null;
-    const _identitySmooth = (idx: number, arr: Float32Array) => arr[idx];
     const _boundGetEQResponse = mathOrchestrator.getEQResponseCached.bind(mathOrchestrator);
     const _boundGetEQPhase = mathOrchestrator.getEQPhaseCached.bind(mathOrchestrator);
 
     function draw() {
-        if (!canvas) return;
-        if (!_cachedCtx) _cachedCtx = canvas.getContext("2d");
-        const ctx = _cachedCtx;
-        if (!ctx) return;
-        if (canvas.width === 0 || canvas.height === 0) return;
+        const result = executeDraw({
+            canvas,
+            cachedCtx: _cachedCtx,
+            activeMetrics,
+            hasTimeDomainActive,
+            metricConfigs,
+            metricStyles,
+            interactionState,
+            isDarkMode: uiStore.isDarkMode,
+            sampleRate: uiStore.sampleRate,
+            BINS,
+            interpEngine,
+            localLastVersion,
+            dirty,
+            smoothedMagnitude,
+            smoothedSpectrum,
+            getPPOSmoothedValue,
+            getMetricValueInterpolated,
+            getImpulseValueInterpolated,
+            getMetricAlpha,
+            getEQResponseCached: _boundGetEQResponse,
+            getEQPhaseCached: _boundGetEQPhase,
+            mathOrchestratorRef: mathOrchestrator,
+            showEQOverlay,
+            refreshEQCache: () => mathOrchestrator.refreshEQCache(),
+            updateCalculatedLayers: () => traceManager.updateCalculatedLayers(),
+            orchestratorVersion: mathOrchestrator.version,
+            liveData: traceManager.liveFrequencyData,
+            frequencyLUT,
+            myLayers,
+            quadrantLayers,
+            instantaneas: traceManager.instantaneas,
+            eqBands: eqStore.activeBands,
+            hoveringEQNode,
+            draggingEQNode,
+            selectedEQNode,
+            eqScoreBadge,
+            eqScoreHover,
+            offscreenCanvas,
+            offscreenCtx,
+            spectrogramLUT_RGBA,
+            spectrogramFrameCountRef: spectrogramFrameCount,
+            initOffscreenCanvas,
+            spectrogramDbHistory,
+            sharedImageData,
+            targetTrace,
+            meterStore,
+            hReal: mathOrchestrator.hReal,
+            hImag: mathOrchestrator.hImag,
+            outputCrestFactor: mathOrchestrator.outputCrestFactor,
+        });
 
-        // Detectar context loss
-        if (typeof ctx.isContextLost === 'function' && ctx.isContextLost()) return;
-
-        const dpr = window.devicePixelRatio || 1;
-        const width = canvas.width / dpr;
-        const height = canvas.height / dpr;
-
-        // Aplicar transformación en cada frame (defensivo contra resets por resize)
-        ctx.resetTransform();
-        ctx.scale(dpr, dpr);
-        ctx.clearRect(0, 0, width, height);
-
-        // Envolver todo en try/catch para evitar que errores transitorios
-        // (ej. buffers con tamaño inesperado durante resize/init) congelen el render loop
-        try {
-            // Refresh EQ cache at render-loop speed (60fps) — decoupled from DSP throttle
-            if (showEQOverlay) {
-                mathOrchestrator.refreshEQCache();
-            }
-
-            // Actualizar capas calculadas antes de dibujar
-            traceManager.updateCalculatedLayers();
-
-            const liveData = traceManager.liveFrequencyData;
-
-            const currentVersion = mathOrchestrator.version;
-            if (currentVersion !== localLastVersion) {
-                localLastVersion = currentVersion;
-                interpEngine.updateHistory();
-            }
-
-            // Interpolación temporal a 60+ FPS (suaviza transiciones entre resultados del worker)
-            interpEngine.interpolateBuffers(dirty, mathOrchestrator);
-            if (dirty) {
-                dirty = false;
-            }
-
-            // Pre-suavizar las curvas para esta animación a 60FPS (incluyendo las transiciones de interpolación)
-            const magPPO = metricConfigs["Magnitude"]?.smoothingPPO || 48;
-            preSmoothBuffer(smoothedMagnitude, interpEngine.interpMagnitude, BINS, magPPO, uiStore.sampleRate);
-
-            const specPPO = metricConfigs["Spectrum"]?.smoothingPPO || 48;
-            const hasLive = liveData && liveData.length > 0;
-            const rawSpec = hasLive ? liveData : interpEngine.interpMagnitude;
-            preSmoothBuffer(smoothedSpectrum, rawSpec, BINS, specPPO, uiStore.sampleRate);
-
-            drawQuadrant({
-                ctx,
-                width,
-                height,
-                activeMetrics,
-                hasTimeDomainActive,
-                metricConfigs,
-                metricStyles,
-                interactionState,
-                isDarkMode: uiStore.isDarkMode,
-                sampleRate: uiStore.sampleRate,
-                BINS,
-                interpEngine,
-                liveData,
-                frequencyLUT,
-                smoothedMagnitude,
-                smoothedSpectrum,
-                getPPOSmoothedValue,
-                getMetricValueInterpolated,
-                getImpulseValueInterpolated,
-                getMetricAlpha,
-                getEQResponseCached: _boundGetEQResponse,
-                getEQPhaseCached: _boundGetEQPhase,
-                myLayers,
-                quadrantLayers,
-                instantaneas: traceManager.instantaneas,
-                showEQOverlay,
-                eqBands: eqStore.activeBands,
-                hoveringEQNode,
-                draggingEQNode,
-                selectedEQNode,
-                eqScoreBadge,
-                eqScoreHover,
-                offscreenCanvas,
-                offscreenCtx,
-                spectrogramLUT_RGBA,
-                spectrogramFrameCountRef: spectrogramFrameCount,
-                initOffscreenCanvas,
-                spectrogramDbHistory,
-                sharedImageData,
-                targetTrace,
-                meterStore,
-                hReal: mathOrchestrator.hReal,
-                hImag: mathOrchestrator.hImag,
-                outputCrestFactor: mathOrchestrator.outputCrestFactor,
-                containerWidth: width,
-                containerHeight: height,
-                customPPOSmooth: _identitySmooth,
-            });
-        } catch {
-            // Error silencioso — evitar crash del render loop
+        if (result) {
+            localLastVersion = result.localLastVersion;
+            dirty = result.dirty;
+            _cachedCtx = result.cachedCtx;
         }
     }
 

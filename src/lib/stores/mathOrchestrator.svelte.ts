@@ -13,6 +13,24 @@ import { calibrationStore } from './calibrationStore.svelte';
 import { getCoeffsForType } from '../dsp/biquad';
 import { getAudioProvider } from '../hal';
 
+/** Typed result from the DSP worker's postMessage */
+interface DSPWorkerResult {
+    type: 'dsp-results';
+    outputMagnitude: ArrayBuffer;
+    outputPhase: ArrayBuffer;
+    outputCoherence: ArrayBuffer;
+    outputGroupDelay: ArrayBuffer;
+    outputImpulse: ArrayBuffer;
+    outputStep: ArrayBuffer;
+    outputCrestFactor?: ArrayBuffer;
+    outputSpectrum?: ArrayBuffer;
+    hReal?: ArrayBuffer;
+    hImag?: ArrayBuffer;
+    refPeakDb?: number;
+    measPeakDb?: number;
+    detectedDelaySamples?: number;
+}
+
 class MathOrchestrator {
     // Reactive version to notify subscribers of new calculations
     version = $state(0);
@@ -188,7 +206,7 @@ class MathOrchestrator {
         }
     }
 
-    private handleWorkerMessage(data: any) {
+    private handleWorkerMessage(data: DSPWorkerResult) {
         if (data.type === 'dsp-results') {
             this.lastMathTime = performance.now();
             // Data arrives as owned ArrayBuffers (sliced in worker), wrap as views (zero-copy)

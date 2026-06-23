@@ -465,6 +465,6 @@ class TraceManager {
 
 export const traceManager = new TraceManager();
 
-if (typeof window !== 'undefined') {
+if (import.meta.env.DEV && typeof window !== 'undefined') {
     (window as any).traceManager = traceManager;
 }
