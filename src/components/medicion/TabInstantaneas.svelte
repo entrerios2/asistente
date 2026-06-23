@@ -1,14 +1,13 @@
 <script lang="ts">
-    import { traceManager, type Instantanea, type InstantaneaTags } from "$lib/stores/traceManager.svelte";
+    import { traceManager, type Instantanea } from "$lib/stores/traceManager.svelte";
     import { uiStore } from "$lib/stores/ui.svelte";
-    import CaptureModal from "./CaptureModal.svelte";
 
     let { statusText = $bindable("Listo para medir") } = $props();
 
     let sortOrder = $state<'desc' | 'asc'>('desc');
     let editingId = $state<string | null>(null);
     let editingName = $state("");
-    let pendingCapture = $derived(traceManager.pendingCaptureForModal);
+
     let expandedId = $state<string | null>(null);
     let collapsedGroups = $state(new Set<string>());
     let confirmDeleteId = $state<string | null>(null);
@@ -95,42 +94,8 @@
 
     async function captureActiveLive() {
         // captureInstantanea sets pendingCaptureForModal automatically
+        // Modal is rendered globally in +page.svelte
         await traceManager.captureInstantanea();
-    }
-
-    async function handleModalSave(tags: InstantaneaTags, name: string) {
-        if (!pendingCapture) return;
-        const ins = traceManager.instantaneas.find(i => i.id === pendingCapture!.id);
-        if (ins) {
-            ins.tags = tags;
-            ins.name = name;
-            ins.color = (await import("$lib/stores/traceManager.svelte")).UBICACION_COLORS[tags.ubicacion || ''] || ins.color;
-            try {
-                const { saveInstantanea } = await import("$lib/utils/db");
-                const serializedData: Record<string, ArrayBufferLike> = {};
-                for (const metric in ins.data) {
-                    serializedData[metric] = ins.data[metric].buffer;
-                }
-                await saveInstantanea({
-                    id: ins.id, name: ins.name, timestamp: ins.timestamp,
-                    data: serializedData, visible: ins.visible, color: ins.color,
-                    source: ins.source, metric: ins.metric, offsetY: ins.offsetY,
-                    tags: ins.tags, sessionId: ins.sessionId, metadata: ins.metadata,
-                });
-            } catch (e) {
-                console.error('[TabInstantaneas] Error guardando tags:', e);
-            }
-        }
-        statusText = "Instantánea capturada con éxito";
-        traceManager.pendingCaptureForModal = null;
-    }
-
-    async function handleModalDiscard() {
-        if (pendingCapture) {
-            await traceManager.deleteInstantanea(pendingCapture.id);
-        }
-        statusText = "Instantánea descartada";
-        traceManager.pendingCaptureForModal = null;
     }
 </script>
 
@@ -355,11 +320,3 @@
         </div>
     {/if}
 </div>
-
-{#if pendingCapture}
-    <CaptureModal
-        instantanea={pendingCapture}
-        onSave={handleModalSave}
-        onDiscard={handleModalDiscard}
-    />
-{/if}

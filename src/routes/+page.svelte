@@ -3,7 +3,8 @@
     import Header from '../components/medicion/Header.svelte';
     import Sidebar from '../components/medicion/Sidebar.svelte';
     import ViewGrid from '../components/medicion/ViewGrid.svelte';
-    import { traceManager } from '$lib/stores/traceManager.svelte';
+    import CaptureModal from '../components/medicion/CaptureModal.svelte';
+    import { traceManager, UBICACION_COLORS, type InstantaneaTags } from '$lib/stores/traceManager.svelte';
     import { uiStore } from '$lib/stores/ui.svelte';
     import { mathOrchestrator } from '$lib/stores/mathOrchestrator.svelte';
     import { loadConfig, saveConfig } from "$lib/utils/configPersistence";
@@ -122,6 +123,42 @@
     });
     // Detectar si estamos en modo Tauri (datos simulados)
     const isTauriMode = typeof window !== 'undefined' && !!(window as any).__TAURI_INTERNALS__;
+
+    // CaptureModal handlers (global, independiente del tab activo)
+    let pendingCapture = $derived(traceManager.pendingCaptureForModal);
+
+    async function handleModalSave(tags: InstantaneaTags, name: string) {
+        if (!pendingCapture) return;
+        const ins = traceManager.instantaneas.find(i => i.id === pendingCapture!.id);
+        if (ins) {
+            ins.tags = tags;
+            ins.name = name;
+            ins.color = UBICACION_COLORS[tags.ubicacion || ''] || ins.color;
+            try {
+                const { saveInstantanea } = await import('$lib/utils/db');
+                const serializedData: Record<string, ArrayBufferLike> = {};
+                for (const metric in ins.data) {
+                    serializedData[metric] = ins.data[metric].buffer;
+                }
+                await saveInstantanea({
+                    id: ins.id, name: ins.name, timestamp: ins.timestamp,
+                    data: serializedData, visible: ins.visible, color: ins.color,
+                    source: ins.source, metric: ins.metric, offsetY: ins.offsetY,
+                    tags: ins.tags, sessionId: ins.sessionId, metadata: ins.metadata,
+                });
+            } catch (e) {
+                console.error('[Page] Error guardando tags:', e);
+            }
+        }
+        traceManager.pendingCaptureForModal = null;
+    }
+
+    async function handleModalDiscard() {
+        if (pendingCapture) {
+            await traceManager.deleteInstantanea(pendingCapture.id);
+        }
+        traceManager.pendingCaptureForModal = null;
+    }
 </script>
 
 <div class="app-layout">
@@ -163,6 +200,14 @@
         </main>
     </div>
 </div>
+
+{#if pendingCapture}
+    <CaptureModal
+        instantanea={pendingCapture}
+        onSave={handleModalSave}
+        onDiscard={handleModalDiscard}
+    />
+{/if}
 
 <style>
     :global(body) {
