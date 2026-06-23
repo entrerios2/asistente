@@ -146,14 +146,21 @@ let overlappedMeasBuf: Float32Array | null = null;
 let overlappedRefBuf: Float32Array | null = null;
 let overlapFftSize: number = 0;
 
+// Pre-allocated buffer for circularShift (avoids allocation per call)
+let tempShiftBuf: Float32Array | null = null;
+
 function circularShift(buffer: Float32Array, samples: number): void {
     const N = buffer.length;
     const shift = ((samples % N) + N) % N;
     if (shift === 0) return;
-    const temp = new Float32Array(shift);
-    temp.set(buffer.subarray(0, shift));
+    // Reuse pre-allocated buffer, grow if needed
+    if (!tempShiftBuf || tempShiftBuf.length < shift) {
+        tempShiftBuf = new Float32Array(shift);
+    }
+    const temp = tempShiftBuf;
+    for (let i = 0; i < shift; i++) temp[i] = buffer[i];
     buffer.copyWithin(0, shift);
-    buffer.set(temp, N - shift);
+    buffer.set(temp.subarray(0, shift), N - shift);
 }
 
 self.onmessage = (event) => {
@@ -236,6 +243,11 @@ self.onmessage = (event) => {
 
         if (averagingProcessor) {
             averagingProcessor.setDepth(averagingDepth || 16);
+        }
+
+        // Reinitialize coherence FIFO if averagingDepth changed at runtime
+        if (averagingDepth && averagingDepth !== cohDepth && currentBins > 0) {
+            initCoherenceFIFO(currentBins, averagingDepth);
         }
 
 
@@ -509,47 +521,26 @@ self.onmessage = (event) => {
         }
 
         // --- ENVIAR RESULTADOS ---
-        const magBuf = outputMagnitude.buffer;
-        const phaseBuf = outputPhase.buffer;
-        const cohBuf = outputCoherence.buffer;
-        const gdBuf = outputGroupDelay.buffer;
-        const impBuf = outputImpulse.buffer;
-        const stepBuf = outputStep.buffer;
-        const cfBuf = outputCrestFactor.buffer;
-        const hRealBuf = hReal.buffer;
-        const hImagBuf = hImag.buffer;
-        const specBuf = outputSpectrum.buffer;
-
+        // Post results without transferring ownership — avoids reallocating
+        // 10 Float32Arrays per frame. Data is structuredClone'd automatically.
         (self as any).postMessage({
             type: 'dsp-results',
-            outputMagnitude: magBuf,
-            outputPhase: phaseBuf,
-            outputCoherence: cohBuf,
-            outputGroupDelay: gdBuf,
-            outputImpulse: impBuf,
-            outputStep: stepBuf,
-            outputCrestFactor: cfBuf,
-            outputSpectrum: specBuf,
-            hReal: hRealBuf,
-            hImag: hImagBuf,
+            outputMagnitude: outputMagnitude.buffer.slice(0),
+            outputPhase: outputPhase.buffer.slice(0),
+            outputCoherence: outputCoherence.buffer.slice(0),
+            outputGroupDelay: outputGroupDelay.buffer.slice(0),
+            outputImpulse: outputImpulse.buffer.slice(0),
+            outputStep: outputStep.buffer.slice(0),
+            outputCrestFactor: outputCrestFactor.buffer.slice(0),
+            outputSpectrum: outputSpectrum.buffer.slice(0),
+            hReal: hReal.buffer.slice(0),
+            hImag: hImag.buffer.slice(0),
             refPeakDb: refLevel.peakDb,
             refRmsDb: refLevel.rmsDb,
             measPeakDb: measLevel.peakDb,
             measRmsDb: measLevel.rmsDb,
             detectedDelaySamples,
-        }, [magBuf, phaseBuf, cohBuf, gdBuf, impBuf, stepBuf, cfBuf, specBuf, hRealBuf, hImagBuf]);
-
-        // Realocar buffers transferidos
-        outputMagnitude = new Float32Array(currentBins);
-        outputPhase = new Float32Array(currentBins);
-        outputCoherence = new Float32Array(currentBins);
-        outputGroupDelay = new Float32Array(currentBins);
-        outputImpulse = new Float32Array(currentFftSize);
-        outputStep = new Float32Array(currentFftSize);
-        outputCrestFactor = new Float32Array(currentBins);
-        outputSpectrum = new Float32Array(currentBins);
-        hReal = new Float32Array(currentBins);
-        hImag = new Float32Array(currentBins);
+        });
 
       } catch (e) {
           console.error('[dspWorker] Error in run-dsp:', e);

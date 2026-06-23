@@ -37,6 +37,29 @@ export interface ParametricFilter {
     showConfig: boolean;
 }
 
+export interface AutoEQResult {
+    algorithm: string;
+    bands: EQBand[];
+    score: number;
+    elapsed: number;
+    iterations?: number;
+}
+
+export interface BenchmarkResults {
+    results: AutoEQResult[];
+    bestIndex: number;
+}
+
+export interface EQConfig {
+    eqType?: 'grafico' | 'parametrico';
+    eqShowEQ?: boolean;
+    eqGraphicBands?: { freq: number; gain: number }[];
+    eqParametricFilters?: Array<{
+        id: number; freq: number; gain: number; q: number;
+        type: string; supportedTypes?: string[];
+    }>;
+}
+
 class EQStore {
     eqType = $state<'grafico' | 'parametrico'>('grafico');
     showEQ = $state(true);
@@ -82,8 +105,8 @@ class EQStore {
 
     // ─── AutoEQ Results ───
     autoEQProgress = $state<{ algorithm: string; progress: number } | null>(null);
-    autoEQLastResult = $state<any | null>(null);
-    autoEQBenchmarkResults = $state<any | null>(null);
+    autoEQLastResult = $state<AutoEQResult | null>(null);
+    autoEQBenchmarkResults = $state<BenchmarkResults | null>(null);
     autoEQPreviewIndex = $state<number>(-1); // -1 = none, 0..N = preview specific result
 
     graphicBands = $state<GraphicBand[]>([
@@ -146,20 +169,25 @@ class EQStore {
         } else {
             const filter = this.parametricFilters[index];
             if (filter) {
-                (filter as any)[field] = value;
+                switch (field) {
+                    case 'freq': filter.freq = value as number; break;
+                    case 'gain': filter.gain = value as number; break;
+                    case 'q': filter.q = value as number; break;
+                    case 'type': filter.type = value as string; break;
+                }
             }
         }
         this.activeBandsVersion++;
     }
 
-    loadFromConfig(config: any) {
+    loadFromConfig(config: EQConfig & Record<string, unknown>) {
         if (config.eqType) this.eqType = config.eqType;
         if (config.eqShowEQ !== undefined) this.showEQ = config.eqShowEQ;
         if (config.eqGraphicBands && Array.isArray(config.eqGraphicBands)) {
             this.graphicBands = config.eqGraphicBands;
         }
         if (config.eqParametricFilters && Array.isArray(config.eqParametricFilters)) {
-            this.parametricFilters = config.eqParametricFilters.map((f: any) => ({
+            this.parametricFilters = config.eqParametricFilters.map((f) => ({
                 ...f,
                 showConfig: false,
                 supportedTypes: f.supportedTypes || ['peaking'],

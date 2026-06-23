@@ -31,18 +31,33 @@ export function generateWhiteNoise(buffer: Float32Array, length: number): void {
  * Energía constante por banda de octava.
  *
  * Ref: §1.2 — Coeficientes exactos b0–b6 del pseudo-código.
+ *
+ * Los coeficientes Voss-McCartney (Paul Kellet) son empíricos y óptimos para
+ * sampleRate ≈ 44100–48000 Hz. A 96kHz la conformancia espectral se degrada
+ * en altas frecuencias (~1dB de desviación sobre 10kHz).
  */
-export function generatePinkNoise(buffer: Float32Array, length: number): void {
+export function generatePinkNoise(buffer: Float32Array, length: number, sampleRate: number = 48000): void {
     let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+
+    // Scale factor for the leak coefficients based on sample rate ratio.
+    // The original coefficients were tuned for 48kHz.
+    // For higher sample rates, we adjust pole positions to maintain -3dB/oct slope.
+    const srRatio = 48000 / sampleRate;
+    const c0 = Math.pow(0.99886, srRatio);
+    const c1 = Math.pow(0.99332, srRatio);
+    const c2 = Math.pow(0.96900, srRatio);
+    const c3 = Math.pow(0.86650, srRatio);
+    const c4 = Math.pow(0.55000, srRatio);
+    const c5 = Math.pow(0.7616, srRatio);  // abs value, sign applied below
 
     for (let i = 0; i < length; i++) {
         const white = Math.random() * 2.0 - 1.0;
-        b0 = 0.99886 * b0 + white * 0.0555179;
-        b1 = 0.99332 * b1 + white * 0.0750759;
-        b2 = 0.96900 * b2 + white * 0.1538520;
-        b3 = 0.86650 * b3 + white * 0.3104856;
-        b4 = 0.55000 * b4 + white * 0.5329522;
-        b5 = -0.7616 * b5 - white * 0.0168980;
+        b0 = c0 * b0 + white * 0.0555179;
+        b1 = c1 * b1 + white * 0.0750759;
+        b2 = c2 * b2 + white * 0.1538520;
+        b3 = c3 * b3 + white * 0.3104856;
+        b4 = c4 * b4 + white * 0.5329522;
+        b5 = -c5 * b5 - white * 0.0168980;
         const pink = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
         b6 = white * 0.115926;
         buffer[i] = pink * 0.11; // Atenuación de seguridad para evitar recortes

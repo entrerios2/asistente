@@ -6,6 +6,7 @@ export class TauriAudioProvider implements AudioProvider {
 	private intervalId: any = null;
 
 	async startCapture(listener: AudioListener): Promise<void> {
+		console.warn('[TauriAudioProvider] ⚠️ Usando datos simulados — backend nativo no implementado');
 		this.intervalId = setInterval(() => {
 			const data: AudioBufferChunk = new Float32Array(512);
 			for (let i = 0; i < data.length; i++) {
@@ -28,7 +29,7 @@ export class TauriAudioProvider implements AudioProvider {
 	}
 
 	playGenerator(type: SignalType, active: boolean, _freq: number, _level: number, _routing: 'L' | 'R' | 'Stereo'): void {
-		console.info(`Tauri Generator [${type}]: ${active ? 'ON (Simulated)' : 'OFF'}`);
+		console.warn(`[TauriAudioProvider] ⚠️ Generador no implementado en modo Tauri [${type}]: ${active ? 'ON' : 'OFF'}`);
 	}
 
     async listDevices(): Promise<AudioDevice[]> {

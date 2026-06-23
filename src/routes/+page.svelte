@@ -120,6 +120,8 @@
             ...eqStore.toConfig(),
         });
     });
+    // Detectar si estamos en modo Tauri (datos simulados)
+    const isTauriMode = typeof window !== 'undefined' && !!(window as any).__TAURI_INTERNALS__;
 </script>
 
 <div class="app-layout">
@@ -127,6 +129,11 @@
     {#if mathOrchestrator.workerError}
         <div style="background: #dc2626; color: white; padding: 8px 16px; font-size: 12px; text-align: center; font-weight: 600;">
             ⚠️ {mathOrchestrator.workerError}
+        </div>
+    {/if}
+    {#if isTauriMode}
+        <div style="background: #d97706; color: white; padding: 6px 16px; font-size: 11px; text-align: center; font-weight: 600;">
+            ⚠️ Modo Tauri: datos de audio simulados — backend nativo no implementado
         </div>
     {/if}
     <div class="app-container" style="position: relative;">

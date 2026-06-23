@@ -19,7 +19,7 @@ export type SignalType = 'white' | 'pink' | 'brown' | 'music-noise' | 'sine' | '
 export interface AudioProvider {
 	startCapture(listener: AudioListener): Promise<void>;
 	stopCapture(): void;
-	playGenerator(type: SignalType, active: boolean, freq: number, level: number, routing: 'L' | 'R' | 'Stereo'): void;
+	playGenerator(type: SignalType, active: boolean, freq: number, level: number, routing: 'L' | 'R' | 'Stereo'): void | Promise<void>;
 	playSample?(url: string): Promise<void>;
 	onMessage?(callback: (message: any) => void): void;
     listDevices?(): Promise<AudioDevice[]>;

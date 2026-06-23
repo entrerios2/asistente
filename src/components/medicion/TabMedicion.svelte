@@ -125,39 +125,18 @@
         // Limpiar resultados anteriores
         activeSegments.forEach((s) => (s.result = undefined));
 
-        for (let i = 0; i < activeSegments.length; i++) {
-            if (!uiStore.isMeasuring) break;
-            const seg = activeSegments[i];
-            statusText = `Midiendo: ${seg.name}...`;
-
-            // Simular adquisición y procesamiento por segmento
-            for (let p = 0; p <= 100; p += 20) {
-                if (!uiStore.isMeasuring) break;
-                progress = Math.round(
-                    ((i + p / 100) / activeSegments.length) * 100,
-                );
-                await new Promise((r) => setTimeout(r, 200));
-            }
-
-            if (uiStore.isMeasuring) {
-                // Resultado simulado para la UI
-                seg.result = `${(Math.random() * 3 - 1.5).toFixed(1)} dB / ${(Math.random() * 10).toFixed(0)} ms`;
-            }
+        // Marcar todos como pendientes — módulo APST no implementado aún
+        for (const seg of activeSegments) {
+            seg.result = "⚠️ Pendiente de implementación";
         }
 
-        if (uiStore.isMeasuring) {
-            uiStore.isMeasuring = false;
-            progress = 100;
-            statusText = "Secuencia completada con éxito";
-        }
+        uiStore.isMeasuring = false;
+        progress = 0;
+        statusText = "Secuencia no implementada — requiere módulo APST";
     }
 
     function calculateDelay() {
-        statusText = "Calculando retardo de canal...";
-        setTimeout(() => {
-            manualDelay = Math.round(10 + Math.random() * 25);
-            statusText = `Retardo calculado: ${manualDelay} ms`;
-        }, 1000);
+        statusText = "⚠️ Cálculo de retardo no implementado — requiere módulo APST";
     }
 
     function useCalculatedDelay() {

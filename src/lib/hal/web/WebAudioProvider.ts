@@ -37,12 +37,22 @@ export class WebAudioProvider implements AudioProvider {
 	private generatorGainNode: GainNode | null = null;
 	private pannerNode: StereoPannerNode | null = null;
 
+	// Pre-allocated buffers for hot path (avoid allocations per frame)
+	private leqTimeData: Float32Array | null = null;
+	private sabRefView: Float32Array | null = null;
+	private sabMeasView: Float32Array | null = null;
+	private sabRefBuf: Float32Array | null = null;
+	private sabMeasBuf: Float32Array | null = null;
+
 	// Generator state tracking (prevent unnecessary recreation)
 	private lastGenType: string | null = null;
 	private lastGenActive: boolean = false;
 	private lastGenFreq: number = 0;
 	private lastGenLevel: number = 0;
 	private lastGenRouting: string = '';
+
+	// Noise worklet loading state
+	private noiseWorkletLoaded: Promise<void> | null = null;
 
 	async startCapture(listener: AudioListener): Promise<void> {
 		if (!this.audioContext) {
@@ -180,12 +190,17 @@ export class WebAudioProvider implements AudioProvider {
 				const bank = Atomics.load(this.flagArray, 0);
 				if (bank >= 0) {
 					const offset = bank * fftSize;
-					const refData = new Float32Array(fftSize);
-					const measData = new Float32Array(fftSize);
-					refData.set(new Float32Array(this.refSab!, offset * Float32Array.BYTES_PER_ELEMENT, fftSize));
-					measData.set(new Float32Array(this.measSab!, offset * Float32Array.BYTES_PER_ELEMENT, fftSize));
+					// Reuse preallocated buffers
+					if (!this.sabRefBuf || this.sabRefBuf.length !== fftSize) {
+						this.sabRefBuf = new Float32Array(fftSize);
+						this.sabMeasBuf = new Float32Array(fftSize);
+					}
+					const refView = new Float32Array(this.refSab!, offset * Float32Array.BYTES_PER_ELEMENT, fftSize);
+					const measView = new Float32Array(this.measSab!, offset * Float32Array.BYTES_PER_ELEMENT, fftSize);
+					this.sabRefBuf!.set(refView);
+					this.sabMeasBuf!.set(measView);
 					Atomics.store(this.flagArray, 0, -1); // marcar como leído
-					listener.onTimeDomainData(measData, refData);
+					listener.onTimeDomainData(this.sabMeasBuf!, this.sabRefBuf!);
 				}
 			// Path 2: postMessage fallback
 			} else if (listener.onTimeDomainData && hasNewData && this.refTimeDomain && this.measTimeDomain) {
@@ -200,9 +215,11 @@ export class WebAudioProvider implements AudioProvider {
 				} else {
 					this.leqCalculator.setWindowSeconds(uiStore.leqWindowSeconds);
 				}
-				const timeData = new Float32Array(this.analyserNode.fftSize);
-				this.analyserNode.getFloatTimeDomainData(timeData);
-				uiStore.leqValue = this.leqCalculator.processBlock(timeData);
+				if (!this.leqTimeData || this.leqTimeData.length !== this.analyserNode.fftSize) {
+					this.leqTimeData = new Float32Array(this.analyserNode.fftSize);
+				}
+				this.analyserNode.getFloatTimeDomainData(this.leqTimeData as Float32Array<ArrayBuffer>);
+				uiStore.leqValue = this.leqCalculator.processBlock(this.leqTimeData);
 			} else {
 				this.leqCalculator = null;
 			}
@@ -260,7 +277,7 @@ export class WebAudioProvider implements AudioProvider {
 		this.generatorNode = source;
 	}
 
-	playGenerator(type: SignalType, active: boolean, freq: number, level: number, routing: 'L' | 'R' | 'Stereo'): void {
+	async playGenerator(type: SignalType, active: boolean, freq: number, level: number, routing: 'L' | 'R' | 'Stereo'): Promise<void> {
 		// Skip if nothing changed — prevents glitch on reactive re-evaluation
 		if (
 			type === this.lastGenType &&
@@ -338,38 +355,50 @@ export class WebAudioProvider implements AudioProvider {
 			source.loop = true;
 			source.start();
 			this.generatorNode = source;
+		} else if (['white', 'pink', 'brown', 'music-noise'].includes(type)) {
+			// Real-time noise generation via AudioWorklet (no buffer loops)
+			if (!this.noiseWorkletLoaded) {
+				this.noiseWorkletLoaded = this.audioContext.audioWorklet.addModule(
+					`${base}/worklets/noise-generator-processor.js`
+				);
+			}
+			try {
+				await this.noiseWorkletLoaded;
+				const noiseNode = new AudioWorkletNode(this.audioContext, 'noise-generator-processor', {
+					outputChannelCount: [1],
+				});
+				noiseNode.port.postMessage({ type, sampleRate });
+				this.generatorNode = noiseNode;
+			} catch (e) {
+				console.warn('[WebAudioProvider] AudioWorklet not available, falling back to buffer loop', e);
+				// Fallback: pre-rendered buffer (2 seconds, will loop)
+				const bufferLength = 2 * sampleRate;
+				const audioBuffer = this.audioContext.createBuffer(1, bufferLength, sampleRate);
+				const data = audioBuffer.getChannelData(0);
+				if (type === 'white') generateWhiteNoise(data, bufferLength);
+				else if (type === 'pink') generatePinkNoise(data, bufferLength, sampleRate);
+				else if (type === 'brown') generateBrownNoise(data, bufferLength);
+				else generateMusicNoise(data, bufferLength, sampleRate);
+				const source = this.audioContext.createBufferSource();
+				source.buffer = audioBuffer;
+				source.loop = true;
+				source.start();
+				this.generatorNode = source;
+			}
 		} else {
-			// Señales basadas en buffer pre-renderizado de 2 segundos
-			// (white, pink, brown, music-noise, burst, sinburst)
+			// Señales periódicas basadas en buffer pre-renderizado
+			// (burst, sinburst)
 			const burstDuration = 0.05;  // 50ms de ráfaga
-			const totalDuration = 0.5;   // 500ms periodo total (burst/sinburst)
-			const isBurstType = type === 'burst' || type === 'sinburst';
-			const bufferLength = isBurstType
-				? Math.round(totalDuration * sampleRate)
-				: 2 * sampleRate;
+			const totalDuration = 0.5;   // 500ms periodo total
+			const bufferLength = Math.round(totalDuration * sampleRate);
 
 			const audioBuffer = this.audioContext.createBuffer(1, bufferLength, sampleRate);
 			const data = audioBuffer.getChannelData(0);
 
-			switch (type) {
-				case 'white':
-					generateWhiteNoise(data, bufferLength);
-					break;
-				case 'pink':
-					generatePinkNoise(data, bufferLength);
-					break;
-				case 'brown':
-					generateBrownNoise(data, bufferLength);
-					break;
-				case 'music-noise':
-					generateMusicNoise(data, bufferLength, sampleRate);
-					break;
-				case 'burst':
-					generateBurst(data, bufferLength, freq, burstDuration, sampleRate);
-					break;
-				case 'sinburst':
-					generateSinBurst(data, bufferLength, freq, burstDuration, sampleRate);
-					break;
+			if (type === 'burst') {
+				generateBurst(data, bufferLength, freq, burstDuration, sampleRate);
+			} else if (type === 'sinburst') {
+				generateSinBurst(data, bufferLength, freq, burstDuration, sampleRate);
 			}
 
 			const source = this.audioContext.createBufferSource();

@@ -18,71 +18,7 @@
         });
     });
 
-    function ensureMockSnapshots() {
-        const existingSnaps = traceManager.instantaneas;
-        if (existingSnaps.length === 0) {
-            const dataLen = 4096;
-            const curve1 = new Float32Array(dataLen);
-            const curve2 = new Float32Array(dataLen);
-            for (let i = 0; i < dataLen; i++) {
-                const f = 20 * Math.pow(1000, i / dataLen);
-                const baseDb = -30 - 10 * Math.log10(f / 100);
-                const ripple1 =
-                    5 *
-                    Math.sin(Math.log2(f) * 2 * Math.PI) *
-                    Math.cos(f / 3000);
-                const ripple2 =
-                    8 * Math.cos(Math.log10(f) * 4 * Math.PI) +
-                    (f > 8000 ? -15 : 0);
-                curve1[i] = Math.max(
-                    -120,
-                    Math.min(
-                        10,
-                        baseDb + ripple1 + (Math.random() * 1.5 - 0.75),
-                    ),
-                );
-                curve2[i] = Math.max(
-                    -120,
-                    Math.min(
-                        10,
-                        baseDb + ripple2 - 5 + (Math.random() * 2 - 1),
-                    ),
-                );
-            }
 
-            traceManager.instantaneas.push({
-                id: "snap-mock-1",
-                name: "Respuesta Sala A - Monitor L",
-                timestamp: Date.now() - 60000 * 5,
-                data: {
-                    "Magnitude": curve1,
-                    "Phase": new Float32Array(dataLen).map((_, i) => -180 + (i / dataLen) * 360),
-                    "Coherence": new Float32Array(dataLen).fill(0.95)
-                },
-                visible: true,
-                color: "#a855f7",
-                source: "manual",
-                metric: "Magnitude",
-                offsetY: 0
-            });
-
-            traceManager.instantaneas.push({
-                id: "snap-mock-2",
-                name: "Respuesta Sala A - Subwoofer",
-                timestamp: Date.now() - 3600000 * 3,
-                data: {
-                    "Magnitude": curve2,
-                    "Phase": new Float32Array(dataLen).map((_, i) => -180 + (i / dataLen) * 360),
-                    "Coherence": new Float32Array(dataLen).fill(0.85)
-                },
-                visible: false,
-                color: "#f59e0b",
-                source: "secuencial",
-                metric: "Magnitude",
-                offsetY: -5
-            });
-        }
-    }
 
     function startEditing(id: string, currentName: string) {
         editingId = id;
@@ -252,19 +188,10 @@
                         Sin instantáneas guardadas
                     </p>
                     <p class="text-[10px] text-gray-500">
-                        Mida una señal y captúrela, o haga clic
-                        abajo para restaurar datos simulados de
-                        referencia.
+                        Inicie una medición y capture una instantánea
+                        para comenzar.
                     </p>
                 </div>
-                {#if uiStore.showAdvanced}
-                    <button
-                        class="min-h-[32px] px-3 bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20 hover:bg-[#3b82f6]/20 rounded-md text-[10px] font-bold cursor-pointer transition-all"
-                        onclick={ensureMockSnapshots}
-                    >
-                        Cargar curvas de prueba
-                    </button>
-                {/if}
             </div>
         {:else}
             <ul class="flex flex-col gap-3">

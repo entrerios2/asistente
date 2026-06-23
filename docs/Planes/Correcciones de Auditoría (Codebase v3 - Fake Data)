@@ -1,0 +1,293 @@
+# Plan: Correcciones de Auditoría (Codebase v3 + Fake Data)
+
+Correcciones consolidadas de ambos audits, organizadas en 5 fases de implementación por prioridad de impacto.
+
+---
+
+## Fase 1 — Datos Falsos y Stubs (F1, F2, F3, S1, S2)
+
+Eliminar datos inventados que el usuario ve como reales.
+
+---
+
+### 1A. Eliminar mock snapshots
+
+#### [MODIFY] [TabInstantaneas.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/components/medicion/TabInstantaneas.svelte)
+
+- Eliminar la función `ensureMockSnapshots()` (L21-L85) completamente
+- Eliminar el botón "Cargar curvas de prueba" (L260-L267)
+- Eliminar la referencia en el texto vacío ("restaurar datos simulados de referencia" L256-L257) — reemplazar con texto limpio como "Capture una medición para comenzar"
+
+---
+
+### 1B. Marcar modo secuencial como stub
+
+#### [MODIFY] [TabMedicion.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/components/medicion/TabMedicion.svelte)
+
+- En `runSequentialSequence()` (L117-L153): reemplazar la simulación de `Math.random()` con un mensaje claro:
+  - `seg.result = "⚠️ Pendiente de implementación"`
+  - `statusText = "Secuencia no implementada — requiere módulo APST"`
+- En `calculateDelay()` (L155-L161): reemplazar el resultado falso con:
+  - `statusText = "⚠️ Cálculo de retardo no implementado aún"`
+  - No asignar `manualDelay` con valor aleatorio
+
+---
+
+### 1C. Clarificar Tauri stub en la UI
+
+#### [MODIFY] [TauriAudioProvider.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/hal/tauri/TauriAudioProvider.ts)
+
+- En `startCapture`: añadir `console.warn('[TauriAudioProvider] ⚠️ Usando datos simulados — backend nativo no implementado')`
+- En `playGenerator`: añadir `console.warn('[TauriAudioProvider] ⚠️ Generador no implementado en modo Tauri')`
+
+#### [MODIFY] [Header.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/components/medicion/Header.svelte) (o componente principal)
+
+- Detectar si el provider activo es Tauri y mostrar un banner `⚠️ Modo Tauri: datos de audio simulados` en la barra superior
+
+---
+
+## Fase 2 — Bugs Críticos (C1, C3, C4)
+
+### 2A. Hash robusto para EQ bands
+
+#### [MODIFY] [mathOrchestrator.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/mathOrchestrator.svelte.ts)
+
+- Reemplazar la suma aritmética de hash (L307-L314 y L333-L340) con un hash multiplicativo robusto:
+  ```typescript
+  bandsHash = bandsHash * 31 + (band.freq * 1e6 + band.gain * 1e3 + band.q * 100 + charCode);
+  ```
+- Unificar `refreshEQCache()` y la parte EQ de `checkDirty()`: hacer que `checkDirty()` llame a `refreshEQCache()` internamente (eliminar duplicación)
+
+---
+
+### 2B. Throttlear el badge scorecard
+
+#### [MODIFY] [Quadrant.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/components/medicion/Quadrant.svelte)
+
+- El `$derived.by` de `eqScoreBadge` (L77-L94) debe depender solo de `mathOrchestrator.version` y `eqStore.activeBandsVersion`, no de cada frame reactivo. Agregar esas dependencias explícitas al inicio del `$derived.by` para que solo recompute cuando haya nuevos datos.
+
+---
+
+## Fase 3 — Performance Hot Path (I1, I2, I3, I7, I8, M7)
+
+### 3A. Cachear `activeBands`
+
+#### [MODIFY] [eqStore.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/eqStore.svelte.ts)
+
+- Convertir el getter `activeBands` (L115-L134) en un `$derived.by()` que cachea el resultado. Solo recalcula cuando `activeBandsVersion` cambia.
+
+---
+
+### 3B. Cachear coeficientes biquad para el render
+
+#### [MODIFY] [mathOrchestrator.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/mathOrchestrator.svelte.ts)
+
+- En `updateEQCache()`, precomputar y almacenar `bandCoeffs: number[][]` junto con el cache de response/phase
+- Exponer como propiedad pública `eqBandCoeffs`
+
+#### [MODIFY] [quadrantDraw.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/quadrantDraw.ts)
+
+- En L599-L606, leer `p.eqBandCoeffs` del cache en vez de recalcular `getCoeffsForType()` cada frame
+- Actualizar `DrawParams` para incluir `eqBandCoeffs?: number[][]`
+
+---
+
+### 3C. Fix coherence FIFO depth
+
+#### [MODIFY] [dspWorker.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/dspWorker.ts)
+
+- Después de L231, agregar detección de cambio de `averagingDepth`:
+  ```typescript
+  if (averagingDepth && averagingDepth !== cohDepth) {
+      initCoherenceFIFO(BINS, averagingDepth);
+  }
+  ```
+
+---
+
+### 3D. Eliminar allocaciones del hot path
+
+#### [MODIFY] [dspWorker.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/dspWorker.ts)
+
+- `circularShift` (L149-L157): preallocar un buffer `tempShift` de tamaño `FFT_SIZE` en vez de `new Float32Array(shift)` cada llamada
+- `calibrationGain` (L430): cachear el `Float32Array` view y solo recrear si el buffer cambia
+
+#### [MODIFY] [WebAudioProvider.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/hal/web/WebAudioProvider.ts)
+
+- Leq calculator (L203): preallocar `timeData` buffer una vez en `startCapture`
+- SAB read (L183-L186): crear views de SAB una vez, reutilizar en cada frame
+
+---
+
+## Fase 4 — Placeholders (P1, P2)
+
+### 4A. Implementar paleta Viridis real
+
+#### [MODIFY] [colorPalettes.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/colorPalettes.ts)
+
+- Reemplazar `Viridis: magma` (L47) con una LUT Viridis real generada por interpolación de los puntos de control canónicos (azul oscuro → teal → verde → amarillo)
+
+---
+
+### 4B. Coeficientes de pink noise dinámicos por sampleRate
+
+#### [MODIFY] [signalGenerators.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/signalGenerators.ts)
+
+- `generatePinkNoise` (L35-L50): los coeficientes Voss-McCartney (b0=0.99886, etc) están hardcodeados para 48kHz. Recalcular los polos según el sampleRate pasado como parámetro.
+- `generateMusicNoise` (L136): ya calcula coeficientes del filtro EIA-426-B dinámicamente con `computeHighPassCoeffs(40, sampleRate)`. OK.
+- Agregar parámetro `sampleRate` a `generatePinkNoise`.
+
+---
+
+### 4C. Generadores de ruido en tiempo real (AudioWorkletNode)
+
+Los generadores de ruido (white, pink, brown, music-noise) actualmente pre-renderizan un buffer de 2 segundos y lo reproducen con `source.loop = true`. Esto causa un patrón periódico audible.
+
+#### [NEW] [noise-generator-processor.js](file:///c:/Users/Abel/Documents/Asistente/asistente/static/worklets/noise-generator-processor.js)
+
+AudioWorkletProcessor que genera ruido en tiempo real, muestra por muestra, sin loops:
+
+```javascript
+class NoiseGeneratorProcessor extends AudioWorkletProcessor {
+    // Recibe: { type: 'white'|'pink'|'brown'|'music-noise' }
+    // Mantiene estado interno (b0-b6 para pink, lastOut para brown)
+    process(inputs, outputs) {
+        const output = outputs[0][0]; // mono
+        // Generar 128 muestras en tiempo real según this.type
+        return true; // keep alive
+    }
+}
+```
+
+- **White**: `Math.random() * 2 - 1` por muestra
+- **Pink**: Voss-McCartney con estado persistente entre bloques (b0-b6)
+- **Brown**: integrador con fuga, estado `lastOut` persistente
+- **Music-noise**: pink + biquad cascada con estados de filtro persistentes
+
+#### [MODIFY] [WebAudioProvider.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/hal/web/WebAudioProvider.ts)
+
+- En `playGenerator()`, para tipos `white`, `pink`, `brown`, `music-noise`:
+  - Reemplazar `createBuffer` + `BufferSourceNode` (L341-L379) con `AudioWorkletNode('noise-generator-processor')`
+  - Enviar tipo de ruido y sampleRate al worklet via `port.postMessage`
+  - Conectar a la cadena de ganancia existente: `workletNode → generatorGainNode → pannerNode → destination`
+- Para `sweep`, `burst`, `sinburst`, `mls`: mantener buffer + loop (son señales periódicas por diseño)
+- Cargar el worklet una sola vez: `audioContext.audioWorklet.addModule()` en la primera invocación, cachear la Promise
+---
+
+## Fase 5 — Limpieza y Type Safety (L1-L6, M1, M3, M4)
+
+### 5A. Fix encoding y cleanup
+
+#### [MODIFY] [traceManager.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/traceManager.svelte.ts)
+
+- Corregir strings con encoding roto: `instantánea` (L126, L187, L202, L285, L291)
+- Envolver `(window as any).traceManager` (L469) en `if (import.meta.env.DEV)`
+
+#### [MODIFY] [mathOrchestrator.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/mathOrchestrator.svelte.ts)
+
+- Eliminar import no usado `biquadResponse` (L13)
+
+#### [MODIFY] [WebAudioProvider.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/hal/web/WebAudioProvider.ts)
+
+- Eliminar `console.info` de `selectDevice` (L460)
+
+---
+
+### 5B. Reducir `any` en stores críticos
+
+#### [MODIFY] [eqStore.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/eqStore.svelte.ts)
+
+- `autoEQLastResult` y `autoEQBenchmarkResults`: crear interfaces `AutoEQResult` y `BenchmarkResult`
+- `(filter as any)[field]` (L149): reemplazar con setter explícito por campo
+- `loadFromConfig(config: any)` (L155): crear interface `EQConfig`
+
+#### [MODIFY] [mathOrchestrator.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/mathOrchestrator.svelte.ts)
+
+- `handleWorkerMessage(data: any)` (L190): crear interface `DSPWorkerResult`
+- `generatorType as any` (L135): usar el union type de `SignalType`
+
+#### [MODIFY] [quadrantDraw.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/quadrantDraw.ts)
+
+- `targetTrace: any` y `meterStore: any` (L102-L103): crear interfaces tipadas
+
+---
+
+## Fase 6 — Worker Buffer Management (C2, I1)
+
+### 6A. Eliminar reallocation post-transfer en el worker
+
+#### [MODIFY] [dspWorker.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/dspWorker.ts)
+
+- Reemplazar `Transferable` buffers (L540) con `structuredClone` (copia) para poder reutilizar los mismos buffers sin realocar 10 `Float32Array` después de cada `postMessage` (L542-L552)
+- Eliminar las líneas L542-L552 que reasignan los output buffers
+- Alternativa más avanzada: migrar resultados del worker a `SharedArrayBuffer` (como ya se hace para la captura), eliminando la copia por completo
+
+### 6B. Reducir allocaciones en el handler de mensajes del main thread
+
+#### [MODIFY] [mathOrchestrator.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/mathOrchestrator.svelte.ts)
+
+- `handleWorkerMessage` (L193-L220): los `new Float32Array(data.outputXxx)` crean 11 typed array views cada frame DSP. Si se usa `structuredClone` en el worker (6A), los datos llegan como ArrayBuffer copiados y solo necesitan un view (sin allocation extra). Si se usa SAB, los views se crean una sola vez.
+- `traceManager.liveFrequencyData.set(specData)` (L219): reasignar la referencia en vez de mutar in-place para garantizar reactividad Svelte 5
+
+---
+
+## Fase 7 — Refactoring Estructural (I4, I5)
+
+### 7A. Split de canvasRenderers.ts (1309 líneas)
+
+#### [NEW] [gridRenderers.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/gridRenderers.ts)
+- Extraer: `drawGrid`, `drawCrosshair`
+
+#### [NEW] [metricRenderers.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/metricRenderers.ts)
+- Extraer: `drawMetricPath`, `drawSpectrumPath`, `drawPhasePath`, `drawNyquistPath`, `drawTimeDomainPath`, `drawSimulatedMagnitudePath`, `drawPhaseDelay`, `drawCrestFactor`
+
+#### [NEW] [eqRenderers.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/eqRenderers.ts)
+- Extraer: `drawEQOverlayPath`, `drawEQPhaseOverlayPath`, `drawIndividualFilterCurve`, constantes `EQ_CURVE_POINTS`, `getEqFreqLUT`
+
+#### [NEW] [overlayRenderers.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/overlayRenderers.ts)
+- Extraer: `drawCoherenceBackground`, `applyCoherenceMask`, `drawLevelOverlay`, `drawNumericOverlay`, `drawSpectrogram`, `drawTargetTrace`, `drawScope`
+
+#### [MODIFY] [canvasRenderers.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/canvasRenderers.ts)
+- Queda como barrel file que re-exporta todo desde los 4 módulos nuevos, manteniendo compatibilidad con los imports existentes
+
+---
+
+### 7B. Extraer lógica de Quadrant.svelte (890 líneas)
+
+#### [NEW] [useEQInteraction.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/useEQInteraction.ts)
+- Extraer: hit testing de nodos EQ, drag handling, hover detection, popover positioning
+- Reducir Quadrant.svelte en ~150-200 líneas
+
+#### [NEW] [useRenderLoop.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/dsp/useRenderLoop.ts)
+- Extraer: lógica de `draw()`, rAF scheduling, interpolación, smoothing pre-draw
+- Reducir Quadrant.svelte en ~200 líneas
+
+#### [MODIFY] [Quadrant.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/components/medicion/Quadrant.svelte)
+- Importar y usar los hooks extraídos
+- Queda con: template HTML, bindings, y coordinación entre hooks (~400-500 líneas)
+
+---
+
+## Verificación
+
+### Compilación
+```bash
+npx tsc --noEmit
+```
+
+### Manual
+- Verificar que modo secuencial muestra "Pendiente de implementación" en vez de resultados falsos
+- Verificar que "Calcular retardo" muestra mensaje de no implementado
+- Verificar que el botón "Cargar curvas de prueba" ya no existe
+- Verificar que la paleta Viridis se ve diferente a Magma
+- Verificar que el render loop sigue a 60fps después de los cambios de buffers (Fase 6)
+- Verificar que todos los imports siguen funcionando después del split (Fase 7)
+
+---
+
+## Exclusiones
+
+> [!IMPORTANT]
+> - **No se toca `src/lib/dsp/apst/`** — es parte de la siguiente fase de desarrollo
+> - **No se toca `src/_deprecated/`** — código archivado
+

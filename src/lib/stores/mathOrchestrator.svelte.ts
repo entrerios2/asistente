@@ -10,7 +10,7 @@ import { eqStore } from './eqStore.svelte';
 import { uiStore } from './ui.svelte';
 import { meterStore } from './meterStore.svelte';
 import { calibrationStore } from './calibrationStore.svelte';
-import { getCoeffsForType, biquadResponse } from '../dsp/biquad';
+import { getCoeffsForType } from '../dsp/biquad';
 import { getAudioProvider } from '../hal';
 
 class MathOrchestrator {
@@ -46,6 +46,7 @@ class MathOrchestrator {
     // Cache for EQ response (magnitude dB + phase radians)
     eqResponseCache = new Float32Array(this.BINS);
     eqPhaseCache = new Float32Array(this.BINS);
+    eqBandCoeffs: number[][] = [];  // Cached biquad coefficients for render
     private lastBandsHash = 0;
     private lastMeasuring = false;
     private lastSimulating = false;
@@ -190,6 +191,7 @@ class MathOrchestrator {
     private handleWorkerMessage(data: any) {
         if (data.type === 'dsp-results') {
             this.lastMathTime = performance.now();
+            // Data arrives as owned ArrayBuffers (sliced in worker), wrap as views (zero-copy)
             this.outputMagnitude = new Float32Array(data.outputMagnitude);
             this.outputPhase = new Float32Array(data.outputPhase);
             this.outputCoherence = new Float32Array(data.outputCoherence);
@@ -213,10 +215,8 @@ class MathOrchestrator {
             // Spectrum del worker → liveFrequencyData para el rendering
             if (data.outputSpectrum) {
                 const specData = new Float32Array(data.outputSpectrum);
-                if (traceManager.liveFrequencyData.length !== specData.length) {
-                    traceManager.liveFrequencyData = new Float32Array(specData.length);
-                }
-                traceManager.liveFrequencyData.set(specData);
+                // Reasignar referencia para reactividad Svelte 5 (trigger $derived)
+                traceManager.liveFrequencyData = specData;
             }
 
             // Auto delay compensation
@@ -301,23 +301,39 @@ class MathOrchestrator {
     }
 
     /**
+     * Compute a robust hash for the current EQ + calibration bands.
+     * Uses multiplicative hash to avoid arithmetic collisions.
+     */
+    private computeBandsHash(): number {
+        const bands = eqStore.activeBands;
+        let hash = 17;
+        for (let b = 0; b < bands.length; b++) {
+            const band = bands[b];
+            hash = (hash * 31 + (band.freq * 1e6)) | 0;
+            hash = (hash * 31 + (band.gain * 1e3)) | 0;
+            hash = (hash * 31 + (band.q * 100)) | 0;
+            hash = (hash * 31 + (band.type ? band.type.charCodeAt(0) : 0)) | 0;
+        }
+        for (const filter of calibrationStore.suggestedFilters) {
+            hash = (hash * 31 + (filter.frequency * 1e6)) | 0;
+            hash = (hash * 31 + (filter.gain * 1e3)) | 0;
+            hash = (hash * 31 + (filter.q * 100)) | 0;
+            hash = (hash * 31 + (filter.enabled ? 1 : 0)) | 0;
+            hash = (hash * 31 + (filter.type ? filter.type.charCodeAt(0) : 0)) | 0;
+        }
+        return hash;
+    }
+
+    /**
      * Fast EQ-only cache refresh. Call from the render loop (60fps) to ensure
      * the EQ response curve updates instantly when dragging nodes, without
      * waiting for the throttled DSP pipeline tick.
      */
     refreshEQCache(): void {
         try {
-            const bands = eqStore.activeBands;
-            let bandsHash = 0;
-            for (let b = 0; b < bands.length; b++) {
-                const band = bands[b];
-                bandsHash += band.freq * 1e6 + band.gain * 1e3 + band.q + (band.type ? band.type.charCodeAt(0) * 100 : 0);
-            }
-            for (const filter of calibrationStore.suggestedFilters) {
-                bandsHash += filter.frequency * 1e6 + filter.gain * 1e3 + filter.q + (filter.enabled ? 1 : 0) + (filter.type ? filter.type.charCodeAt(0) * 100 : 0);
-            }
-            if (bandsHash !== this.lastBandsHash) {
-                this.lastBandsHash = bandsHash;
+            const hash = this.computeBandsHash();
+            if (hash !== this.lastBandsHash) {
+                this.lastBandsHash = hash;
                 this.updateEQCache();
             }
         } catch (e) {
@@ -327,28 +343,11 @@ class MathOrchestrator {
 
     private checkDirty() {
         try {
-            const bands = eqStore.activeBands;
-            let bandsHash = 0;
-            for (let b = 0; b < bands.length; b++) {
-                const band = bands[b];
-                bandsHash += band.freq * 1e6 + band.gain * 1e3 + band.q + (band.type ? band.type.charCodeAt(0) * 100 : 0);
-            }
-            // Incluir sugerencias de calibración para refrescar el caché de EQ
-            for (const filter of calibrationStore.suggestedFilters) {
-                bandsHash += filter.frequency * 1e6 + filter.gain * 1e3 + filter.q + (filter.enabled ? 1 : 0) + (filter.type ? filter.type.charCodeAt(0) * 100 : 0);
-            }
+            // EQ cache — delegates to unified hash logic
+            this.refreshEQCache();
 
             const measuring = uiStore.isMeasuring;
             const simulating = uiStore.isSimulating;
-
-            // EQ-only change: just update cache. The canvas render loop already runs
-            // at 60fps via requestAnimationFrame and reads getEQResponseCached() directly.
-            // Do NOT set dirty=true or version++ — dirty triggers the full DSP pipeline,
-            // and version++ triggers interpolation reset (causing magnitude to "fall from 0dB").
-            if (bandsHash !== this.lastBandsHash) {
-                this.lastBandsHash = bandsHash;
-                this.updateEQCache();
-            }
 
             // State changes that require full DSP reprocessing
             if (measuring !== this.lastMeasuring || simulating !== this.lastSimulating) {
@@ -376,6 +375,8 @@ class MathOrchestrator {
                     bandCoeffs.push(getCoeffsForType(band.type, band.freq, band.gain, band.q, sr));
                 }
             }
+            // Expose for render loop (Phase 3B)
+            this.eqBandCoeffs = bandCoeffs;
 
             // Precompute calibration filter coefficients
             const calCoeffs: number[][] = [];

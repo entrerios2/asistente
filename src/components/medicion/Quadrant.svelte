@@ -73,8 +73,12 @@
     let eqScoreHover = $state(false);
 
     // Compute deviation before/after EQ for badge
+    // Only recompute when worker data arrives (version) or EQ bands change (activeBandsVersion)
     const deviationTarget = $derived(traceManager.getTargetCurve(mathOrchestrator.BINS, uiStore.sampleRate));
     const eqScoreBadge = $derived.by(() => {
+        // Pin to version counters — avoids recomputing every reactive frame
+        const _dataVersion = mathOrchestrator.version;
+        const _eqVersion = eqStore.activeBandsVersion;
         if (!showEQOverlay || eqStore.activeBands.length === 0) return null;
         const mag = mathOrchestrator.outputMagnitude;
         const coh = mathOrchestrator.outputCoherence;
