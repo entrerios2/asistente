@@ -149,11 +149,19 @@
 
     function applyAutoEQResult(result: AutoEQResult) {
         eqStore.eqType = 'parametrico';
-        eqStore.parametricFilters = result.filters.map((f, i) => ({
-            id: i + 1, freq: Math.round(f.fc), gain: Math.round(f.gain * 10) / 10,
-            q: Math.round(f.q * 10) / 10, type: f.type,
-            supportedTypes: ['peaking', 'low_shelf', 'high_shelf', 'notch'], showConfig: false,
-        }));
+        const existing = eqStore.parametricFilters;
+        eqStore.parametricFilters = result.filters.map((f, i) => {
+            // Preserve supportedTypes from existing filter config
+            const prev = existing[i];
+            const types = prev?.supportedTypes || ['peaking', 'low_shelf', 'high_shelf', 'notch'];
+            // Ensure the assigned type is in supportedTypes
+            const assignedType = types.includes(f.type) ? f.type : types[0];
+            return {
+                id: prev?.id || i + 1, freq: Math.round(f.fc), gain: Math.round(f.gain * 10) / 10,
+                q: Math.round(f.q * 10) / 10, type: assignedType,
+                supportedTypes: types, showConfig: false,
+            };
+        });
     }
 
     function applyBenchmarkResult(index: number) {
@@ -165,6 +173,79 @@
 
     function formatTime(ms: number): string { return ms < 1000 ? `${ms.toFixed(0)}ms` : `${(ms / 1000).toFixed(1)}s`; }
     function devColor(rms: number): string { return rms > 6 ? '#ff4444' : rms > 3 ? '#fbbf24' : '#00ff88'; }
+
+    // --- EQ Presets ---
+    const ALL_TYPES = ['peaking', 'lowpass', 'highpass', 'low_shelf', 'high_shelf', 'notch', 'bandpass'];
+    type EQPreset = { label: string; desc: string; filters: Array<{ freq: number; type: string; supportedTypes: string[] }> };
+
+    const eqPresets: EQPreset[] = [
+        {
+            label: 'Genérico 4 bandas',
+            desc: '4 filtros full, todos los tipos',
+            filters: [
+                { freq: 100,  type: 'peaking', supportedTypes: ALL_TYPES },
+                { freq: 500,  type: 'peaking', supportedTypes: ALL_TYPES },
+                { freq: 2000, type: 'peaking', supportedTypes: ALL_TYPES },
+                { freq: 8000, type: 'peaking', supportedTypes: ALL_TYPES },
+            ],
+        },
+        {
+            label: 'Genérico 6 bandas',
+            desc: '6 filtros full, todos los tipos',
+            filters: [
+                { freq: 60,    type: 'peaking', supportedTypes: ALL_TYPES },
+                { freq: 250,   type: 'peaking', supportedTypes: ALL_TYPES },
+                { freq: 1000,  type: 'peaking', supportedTypes: ALL_TYPES },
+                { freq: 3000,  type: 'peaking', supportedTypes: ALL_TYPES },
+                { freq: 8000,  type: 'peaking', supportedTypes: ALL_TYPES },
+                { freq: 14000, type: 'peaking', supportedTypes: ALL_TYPES },
+            ],
+        },
+        {
+            label: 'A&H QU-16',
+            desc: '4 bandas: LF/HF shelf+peak, LM/HM peak',
+            filters: [
+                { freq: 100,  type: 'peaking', supportedTypes: ['peaking', 'low_shelf'] },
+                { freq: 500,  type: 'peaking', supportedTypes: ['peaking'] },
+                { freq: 2500, type: 'peaking', supportedTypes: ['peaking'] },
+                { freq: 8000, type: 'peaking', supportedTypes: ['peaking', 'high_shelf'] },
+            ],
+        },
+        {
+            label: 'Behringer XR18',
+            desc: '4 bandas full + HPF/LPF',
+            filters: [
+                { freq: 80,   type: 'peaking', supportedTypes: ['peaking', 'low_shelf', 'high_shelf', 'lowpass', 'highpass', 'notch'] },
+                { freq: 500,  type: 'peaking', supportedTypes: ['peaking', 'low_shelf', 'high_shelf', 'lowpass', 'highpass', 'notch'] },
+                { freq: 2000, type: 'peaking', supportedTypes: ['peaking', 'low_shelf', 'high_shelf', 'lowpass', 'highpass', 'notch'] },
+                { freq: 8000, type: 'peaking', supportedTypes: ['peaking', 'low_shelf', 'high_shelf', 'lowpass', 'highpass', 'notch'] },
+            ],
+        },
+        {
+            label: 'Control de tono',
+            desc: 'Graves / Medios / Agudos',
+            filters: [
+                { freq: 200,  type: 'low_shelf',  supportedTypes: ['low_shelf'] },
+                { freq: 1000, type: 'peaking',     supportedTypes: ['peaking'] },
+                { freq: 6000, type: 'high_shelf',  supportedTypes: ['high_shelf'] },
+            ],
+        },
+    ];
+
+    function applyPreset(preset: EQPreset) {
+        eqStore.eqType = 'parametrico';
+        eqStore.parametricFilters = preset.filters.map((f, i) => ({
+            id: i + 1,
+            freq: f.freq,
+            gain: 0,
+            q: 1.0,
+            type: f.type,
+            supportedTypes: [...f.supportedTypes],
+            showConfig: false,
+        }));
+    }
+
+    let showPresetMenu = $state(false);
 
 </script>
 
@@ -238,10 +319,42 @@
             </div>
         </div>
 
-        <!-- Paramétrico: agregar filtro -->
+        <!-- Paramétrico: header con preset + agregar -->
         {#if eqStore.eqType === 'parametrico'}
             <div class="flex justify-between items-center">
-                <span class="text-[10px]" style="color: var(--text-secondary)">{eqStore.parametricFilters.length} filtro{eqStore.parametricFilters.length !== 1 ? 's' : ''}</span>
+                <div class="flex items-center gap-2">
+                    <span class="text-[10px]" style="color: var(--text-secondary)">{eqStore.parametricFilters.length} filtro{eqStore.parametricFilters.length !== 1 ? 's' : ''}</span>
+                    <!-- Preset selector -->
+                    <div class="relative">
+                        <button
+                            class="flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-semibold cursor-pointer transition-all"
+                            style="color: var(--text-muted); background: transparent; border: 1px solid var(--border-primary)"
+                            onclick={() => showPresetMenu = !showPresetMenu}
+                            title="Cargar preset de EQ"
+                        >
+                            <span class="material-symbols-outlined text-[10px]">tune</span>
+                            Preset
+                        </button>
+                        {#if showPresetMenu}
+                            <!-- svelte-ignore a11y_click_events_have_key_events -->
+                            <!-- svelte-ignore a11y_no_static_element_interactions -->
+                            <div class="fixed inset-0 z-40" onclick={() => showPresetMenu = false}></div>
+                            <div class="absolute left-0 mt-1 rounded-lg shadow-[0_8px_24px_#000000] z-50 min-w-[200px] p-1.5 flex flex-col gap-0.5"
+                                style="background: var(--bg-surface); border: 1px solid var(--border-primary)">
+                                {#each eqPresets as preset}
+                                    <button
+                                        class="w-full text-left px-2.5 py-2 rounded-md text-[10px] cursor-pointer transition-all flex flex-col gap-0.5 hover:bg-white/5"
+                                        style="color: var(--text-primary); background: transparent; border: none"
+                                        onclick={() => { applyPreset(preset); showPresetMenu = false; }}
+                                    >
+                                        <span class="font-semibold">{preset.label}</span>
+                                        <span class="text-[8px]" style="color: var(--text-muted)">{preset.desc}</span>
+                                    </button>
+                                {/each}
+                            </div>
+                        {/if}
+                    </div>
+                </div>
                 <div class="flex gap-1.5">
                     <button
                         class="flex items-center gap-1 px-2 py-1 rounded text-[9px] font-semibold cursor-pointer"
@@ -337,11 +450,48 @@
                                     <span class="text-[10px] font-bold" style="color: {filterTypeColors[filter.type] || '#888'}">#{filter.id}</span>
                                     <span class="text-[9px]" style="color: var(--text-muted)">{filterTypeName(filter.type)}</span>
                                 </div>
-                                <button class="cursor-pointer" style="color: var(--text-muted)"
-                                    onclick={() => eqStore.parametricFilters = eqStore.parametricFilters.filter(f => f.id !== filter.id)}>
-                                    <span class="material-symbols-outlined text-[13px]">close</span>
-                                </button>
+                                <div class="flex items-center gap-1">
+                                    <button class="cursor-pointer transition-colors" style="color: {filter.showConfig ? '#3b82f6' : 'var(--text-muted)'}"
+                                        onclick={() => filter.showConfig = !filter.showConfig}
+                                        title="Configurar tipos disponibles">
+                                        <span class="material-symbols-outlined text-[13px]">settings</span>
+                                    </button>
+                                    <button class="cursor-pointer" style="color: var(--text-muted)"
+                                        onclick={() => eqStore.parametricFilters = eqStore.parametricFilters.filter(f => f.id !== filter.id)}>
+                                        <span class="material-symbols-outlined text-[13px]">close</span>
+                                    </button>
+                                </div>
                             </div>
+
+                            <!-- Config: supported types editor -->
+                            {#if filter.showConfig}
+                                <div class="flex flex-col gap-1.5 p-2 rounded" style="background: var(--bg-secondary); border: 1px solid var(--border-primary)">
+                                    <span class="text-[8px] font-bold uppercase tracking-wider" style="color: var(--text-muted)">Tipos disponibles</span>
+                                    <div class="flex flex-wrap gap-1">
+                                        {#each ['peaking', 'lowpass', 'highpass', 'low_shelf', 'high_shelf', 'notch', 'bandpass'] as type}
+                                            <label class="flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] cursor-pointer transition-all"
+                                                style="background: {filter.supportedTypes.includes(type) ? (filterTypeColors[type] || '#888') + '15' : 'transparent'}; color: {filter.supportedTypes.includes(type) ? filterTypeColors[type] || '#888' : 'var(--text-muted)'}; border: 1px solid {filter.supportedTypes.includes(type) ? (filterTypeColors[type] || '#888') + '30' : 'var(--border-primary)'}">
+                                                <input type="checkbox"
+                                                    checked={filter.supportedTypes.includes(type)}
+                                                    class="accent-[#3b82f6] scale-75"
+                                                    onchange={() => {
+                                                        if (filter.supportedTypes.includes(type)) {
+                                                            if (filter.supportedTypes.length > 1) {
+                                                                filter.supportedTypes = filter.supportedTypes.filter((t: string) => t !== type);
+                                                                if (filter.type === type) filter.type = filter.supportedTypes[0];
+                                                            }
+                                                        } else {
+                                                            filter.supportedTypes = [...filter.supportedTypes, type];
+                                                        }
+                                                    }}
+                                                />
+                                                <span class="w-3 h-2 inline-flex items-center">{@html filterSvgIcons[type] || ''}</span>
+                                                {filterTypeName(type)}
+                                            </label>
+                                        {/each}
+                                    </div>
+                                </div>
+                            {/if}
 
                             <!-- Type toggle -->
                             <div class="flex flex-wrap gap-0.5">
