@@ -3,7 +3,7 @@
     import { uiStore } from "$lib/stores/ui.svelte";
     import { traceManager } from "$lib/stores/traceManager.svelte";
     import { eqStore } from "$lib/stores/eqStore.svelte";
-    import eqIconSvg from "$lib/assets/favicon.svg";
+
 
     // Inline EQ icon paths (from images/eq.svg) for currentColor support
 
@@ -95,7 +95,15 @@
 <header class="global-header">
     <!-- ESTRUCTURA IZQUIERDA (TÍTULO) -->
     <div class="header-left">
-        <img src={eqIconSvg} alt="" class="header-app-icon" />
+        <svg class="header-app-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 97348 102870" fill="currentColor" style="color: var(--accent);">
+            <path d="M0 64050l0-9303 5435 0c3462 0 6691-851 9670-2534 2980-1701 5396-4023 7253-7020 2747-4584 6403-8182 11005-10812 4585-2611 9593-3927 14991-3927 5396 0 10404 1316 14989 3927 4603 2630 8258 6228 11005 10812 1857 2998 4274 5319 7253 7020 2979 1683 6208 2534 9670 2534l5435 0 0 9303-5318 0c-5087 0-9846-1238-14333-3733-4467-2495-7987-5937-10560-10289-1857-3211-4411-5725-7620-7542-3231-1819-6732-2728-10521-2728-3715 0-7177 909-10406 2728-3212 1817-5745 4331-7602 7542-2592 4352-6112 7795-10580 10289-4467 2495-9245 3733-14331 3733l-5435 0z"/>
+            <rect x="82568" y="79041" width="9303" height="9322"/>
+            <rect x="4834" y="79041" width="9304" height="9322"/>
+            <rect x="63226" y="64419" width="9188" height="30305"/>
+            <rect x="24292" y="64419" width="9188" height="30305"/>
+            <rect x="43769" y="49912" width="9168" height="52957"/>
+            <path stroke="currentColor" stroke-width="359" d="M76617 810l2160 9518c955 4204 4039 7288 8243 8243l9518 2160-9518 2161c-4204 954-7288 4039-8243 8243l-2160 9518-2161-9518c-954-4204-4039-7289-8243-8243l-9518-2161 9518-2160c4204-955 7289-4039 8243-8243l2161-9518z"/>
+        </svg>
         <h1 class="header-title select-none">
             Herramienta para calibración de audio
         </h1>

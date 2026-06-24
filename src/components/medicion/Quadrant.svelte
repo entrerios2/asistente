@@ -506,8 +506,8 @@
     <!-- WATERMARK ID DEL CUADRANTE -->
     <span
         class="absolute bottom-2 right-3 text-[108px] font-black pointer-events-none select-none leading-none"
-        style="color: var(--canvas-watermark);
-                 -webkit-text-stroke: 1.5px var(--canvas-watermark-stroke);"
+        style="color: color-mix(in srgb, var(--accent) 12%, transparent);
+                 -webkit-text-stroke: 1.5px color-mix(in srgb, var(--accent) 20%, transparent);"
     >
         {id.replace(/[qQ]-?/g, "")}
     </span>

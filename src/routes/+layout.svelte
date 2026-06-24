@@ -1,9 +1,36 @@
 <script lang="ts">
 	import './layout.css';
-	import favicon from '$lib/assets/favicon.svg';
+	import { onMount } from 'svelte';
 
 	let { children } = $props();
+
+	// Dynamic favicon that follows --accent color
+	let faviconHref = $state('');
+
+	function updateFavicon() {
+		if (typeof document === 'undefined') return;
+		const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#3b82f6';
+		const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 97348 102870"><g fill="${accent}" stroke="${accent}"><path d="M0 64050l0-9303 5435 0c3462 0 6691-851 9670-2534 2980-1701 5396-4023 7253-7020 2747-4584 6403-8182 11005-10812 4585-2611 9593-3927 14991-3927 5396 0 10404 1316 14989 3927 4603 2630 8258 6228 11005 10812 1857 2998 4274 5319 7253 7020 2979 1683 6208 2534 9670 2534l5435 0 0 9303-5318 0c-5087 0-9846-1238-14333-3733-4467-2495-7987-5937-10560-10289-1857-3211-4411-5725-7620-7542-3231-1819-6732-2728-10521-2728-3715 0-7177 909-10406 2728-3212 1817-5745 4331-7602 7542-2592 4352-6112 7795-10580 10289-4467 2495-9245 3733-14331 3733l-5435 0z"/><rect x="82568" y="79041" width="9303" height="9322"/><rect x="4834" y="79041" width="9304" height="9322"/><rect x="63226" y="64419" width="9188" height="30305"/><rect x="24292" y="64419" width="9188" height="30305"/><rect x="43769" y="49912" width="9168" height="52957"/><path stroke-width="359" d="M76617 810l2160 9518c955 4204 4039 7288 8243 8243l9518 2160-9518 2161c-4204 954-7288 4039-8243 8243l-2160 9518-2161-9518c-954-4204-4039-7289-8243-8243l-9518-2161 9518-2160c4204-955 7289-4039 8243-8243l2161-9518z"/></g></svg>`;
+		faviconHref = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+	}
+
+	onMount(() => {
+		updateFavicon();
+		// Re-generate favicon when palette or theme changes
+		const observer = new MutationObserver(() => {
+			requestAnimationFrame(updateFavicon);
+		});
+		observer.observe(document.documentElement, {
+			attributes: true,
+			attributeFilter: ['data-palette', 'class', 'data-canvas-theme'],
+		});
+		return () => observer.disconnect();
+	});
 </script>
 
-<svelte:head><link rel="icon" href={favicon} /></svelte:head>
+<svelte:head>
+	{#if faviconHref}
+		<link rel="icon" href={faviconHref} />
+	{/if}
+</svelte:head>
 {@render children()}
