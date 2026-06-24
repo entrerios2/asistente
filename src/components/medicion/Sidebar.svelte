@@ -1,6 +1,7 @@
 <script lang="ts">
     import { uiStore } from "$lib/stores/ui.svelte";
     import { traceManager } from "$lib/stores/traceManager.svelte";
+    import { eqStore } from "$lib/stores/eqStore.svelte";
 
     import TabMedicion from "./TabMedicion.svelte";
     import TabEcualizar from "./TabEcualizar.svelte";
@@ -10,6 +11,10 @@
     let statusText = $state("Listo para medir");
 
     const snapCount = $derived(traceManager.instantaneas.length);
+
+    function toggleMeasurement() {
+        uiStore.isMeasuring = !uiStore.isMeasuring;
+    }
 </script>
 
 <aside
@@ -57,6 +62,38 @@
             <TabConfig />
         {/if}
     </div>
+
+    <!-- FOOTER DE ACCIÓN UNIFICADO -->
+    {#if uiStore.activeTab !== 'config'}
+        <div class="sidebar-action-footer">
+            {#if uiStore.activeTab === 'medicion'}
+                <button
+                    class="sidebar-action-btn {uiStore.isMeasuring ? 'action-stop' : 'action-primary'}"
+                    onclick={toggleMeasurement}
+                >
+                    <span class="material-symbols-outlined">{uiStore.isMeasuring ? 'stop' : 'podcasts'}</span>
+                    {uiStore.isMeasuring ? 'Detener' : 'Medir'}
+                </button>
+            {:else if uiStore.activeTab === 'eq'}
+                <button
+                    class="sidebar-action-btn action-primary {eqStore.isCalculatingAutoEQ ? 'action-disabled' : ''}"
+                    disabled={eqStore.isCalculatingAutoEQ}
+                    onclick={() => { eqStore.showEQ = true; }}
+                >
+                    <span class="material-symbols-outlined">{eqStore.isCalculatingAutoEQ ? 'hourglass_top' : 'auto_fix_high'}</span>
+                    {eqStore.isCalculatingAutoEQ ? 'Calculando...' : 'Calcular ecualización'}
+                </button>
+            {:else if uiStore.activeTab === 'snaps'}
+                <button
+                    class="sidebar-action-btn action-primary"
+                    onclick={() => traceManager.captureInstantanea()}
+                >
+                    <span class="material-symbols-outlined">photo_camera</span>
+                    Capturar
+                </button>
+            {/if}
+        </div>
+    {/if}
 </aside>
 
 <style>
@@ -105,5 +142,48 @@
     }
     aside :global(.text-gray-500) {
         color: var(--text-muted) !important;
+    }
+
+    .sidebar-action-footer {
+        padding: 12px 16px;
+        border-top: 1px solid var(--border-primary);
+        flex-shrink: 0;
+        background: var(--bg-secondary);
+    }
+
+    .sidebar-action-btn {
+        width: 100%;
+        min-height: 48px;
+        border-radius: 8px;
+        font-weight: 700;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        cursor: pointer;
+        border: none;
+        color: white;
+        transition: all 0.3s;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    }
+
+    .sidebar-action-btn.action-primary {
+        background: linear-gradient(to right, #3b82f6, #2563eb);
+    }
+    .sidebar-action-btn.action-primary:hover {
+        background: linear-gradient(to right, #2563eb, #1d4ed8);
+    }
+
+    .sidebar-action-btn.action-stop {
+        background: linear-gradient(to right, #ef4444, #dc2626);
+    }
+    .sidebar-action-btn.action-stop:hover {
+        opacity: 0.9;
+    }
+
+    .sidebar-action-btn.action-disabled {
+        opacity: 0.7;
+        pointer-events: none;
     }
 </style>

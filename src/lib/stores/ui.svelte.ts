@@ -6,7 +6,7 @@ class UIStore {
     layout = $state('1x1'); // '1x1' | '1x2' | '2x1' | '2x2' | '3x1' | '3x2'
     themeMode = $state<'system' | 'light' | 'dark'>('dark');
     showSidebar = $state(true);
-    showAdvanced = $state(false);
+    showAdvanced = $state(true);
     showMinorGrid = $state(true);
     
     // Configuración de Audio

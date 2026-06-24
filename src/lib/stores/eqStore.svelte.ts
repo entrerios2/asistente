@@ -53,7 +53,7 @@ export interface EQConfig {
 
 class EQStore {
     eqType = $state<'grafico' | 'parametrico'>('grafico');
-    showEQ = $state(true);
+    showEQ = $state(false);
     numGraphicBands = $state(10);
     customBandCount = $state(false);
     isCalculatingAutoEQ = $state(false);

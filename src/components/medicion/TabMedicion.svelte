@@ -3,7 +3,7 @@
 
 
     let { statusText = $bindable("Listo para medir") } = $props();
-    let progress = $state(0);
+
 
     // Opciones del Sweep
     let sweepF1 = $state(20);
@@ -361,23 +361,17 @@
                     />
                 </div>
 
-                <!-- Botones generar/detener -->
-                <div class="flex gap-2">
-                    <button
-                        class="flex-1 min-h-[44px] bg-[#10b981]/15 text-[#10b981] hover:bg-[#10b981]/25 border border-[#10b981]/30 rounded-lg flex items-center justify-center gap-2 text-xs font-bold transition-all cursor-pointer"
-                        onclick={() => (uiStore.genActive = true)}
-                    >
-                        <span class="material-symbols-outlined text-sm">volume_up</span>
-                        Generar
-                    </button>
-                    <button
-                        class="flex-1 min-h-[44px] bg-[#ef4444]/15 text-[#ef4444] hover:bg-[#ef4444]/25 border border-[#ef4444]/30 rounded-lg flex items-center justify-center gap-2 text-xs font-bold transition-all cursor-pointer"
-                        onclick={() => (uiStore.genActive = false)}
-                    >
-                        <span class="material-symbols-outlined text-sm">volume_mute</span>
-                        Detener
-                    </button>
-                </div>
+                <!-- Botón generar/detener toggle -->
+                <button
+                    class="w-full min-h-[44px] rounded-lg flex items-center justify-center gap-2 text-xs font-bold transition-all cursor-pointer border
+                           {uiStore.genActive
+                        ? 'bg-[#ef4444]/15 text-[#ef4444] hover:bg-[#ef4444]/25 border-[#ef4444]/30'
+                        : 'bg-[#10b981]/15 text-[#10b981] hover:bg-[#10b981]/25 border-[#10b981]/30'}"
+                    onclick={() => uiStore.genActive = !uiStore.genActive}
+                >
+                    <span class="material-symbols-outlined text-sm">{uiStore.genActive ? 'volume_mute' : 'volume_up'}</span>
+                    {uiStore.genActive ? 'Detener generador' : 'Generar'}
+                </button>
 
                 <div class="border-t border-[#1a1a24]/30 my-2"></div>
 
@@ -551,47 +545,5 @@
         </div>
     {/if}
 
-    <!-- FOOTER ANCLADO GLOBAL A LA PESTAÑA -->
-    <div
-        class="mt-auto pt-4 border-t border-[#1a1a24]/50 flex flex-col gap-2"
-    >
-        {#if uiStore.measurementMode === "secuencial" && uiStore.isMeasuring}
-            <!-- Barra de Progreso en Modo Secuencial -->
-            <div
-                class="w-full bg-[#121216] rounded-full h-2.5 overflow-hidden border border-white/5"
-            >
-                <div
-                    class="bg-gradient-to-r from-[#3b82f6] to-[#00ff88] h-full transition-all duration-300"
-                    style="width: {progress}%"
-                ></div>
-            </div>
-            <div
-                class="flex justify-between text-[10px] font-mono text-gray-500"
-            >
-                <span>PROGRESO SECUENCIA</span>
-                <span class="text-[#3b82f6] font-bold"
-                    >{progress}%</span
-                >
-            </div>
-        {/if}
-
-        <button
-            class="w-full min-h-[48px] bg-gradient-to-r transition-all duration-300 text-white rounded-lg font-bold flex items-center justify-center gap-2 cursor-pointer shadow-lg
-                   {uiStore.isMeasuring
-                ? 'from-[#ef4444] to-[#dc2626] hover:opacity-90'
-                : 'from-[#3b82f6] to-[#2563eb] hover:from-[#2563eb] hover:to-[#1d4ed8]'}"
-            onclick={toggleMeasurement}
-        >
-            <span class="material-symbols-outlined"
-                >{uiStore.isMeasuring ? "stop" : "podcasts"}</span
-            >
-            {uiStore.isMeasuring ? "Detener Medición" : "Medir / Iniciar"}
-        </button>
-
-        <span
-            class="text-center text-[10px] text-gray-500 font-mono italic"
-        >
-            {statusText}
-        </span>
-    </div>
 </div>
+

@@ -225,12 +225,6 @@
         }
     }
 
-    async function captureActiveLive() {
-        // captureInstantanea sets pendingCaptureForModal automatically
-        // Modal is rendered globally in +page.svelte
-        await traceManager.captureInstantanea();
-    }
-
     async function handleOpenFile(e: Event) {
         const input = e.currentTarget as HTMLInputElement;
         const file = input.files?.[0];
@@ -270,23 +264,11 @@
 </script>
 
 <div
-    class="flex-1 p-4 overflow-y-auto flex flex-col gap-3"
+    class="flex-1 p-4 flex flex-col gap-3 overflow-hidden"
     id="panel-snaps"
 >
-    <!-- Toolbar compacto -->
-    <div class="flex flex-col gap-2.5">
-        <!-- Botón capturar -->
-        <button
-            class="w-full min-h-[40px] bg-gradient-to-r from-[#3b82f6] to-[#2563eb] hover:from-[#2563eb] hover:to-[#1d4ed8] text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shadow-lg transition-all duration-300 border border-[#3b82f6]/20"
-            onclick={captureActiveLive}
-        >
-            <span class="material-symbols-outlined text-sm">photo_camera</span>
-            Capturar
-        </button>
-    </div>
-
     <!-- Filtros + Sort/Group -->
-    <div class="flex flex-wrap gap-1.5 items-center">
+    <div class="flex flex-wrap gap-1.5 items-center flex-shrink-0">
         {#if availableUbicaciones.length > 0}
             <select class="bg-[#0d0d14] border border-[#2a2a3a] rounded-md px-2 py-1 text-[9px] text-gray-300 focus:outline-none focus:border-[#3b82f6] cursor-pointer min-h-[24px]"
                 style="color-scheme: dark;"
