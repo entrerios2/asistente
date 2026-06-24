@@ -14,7 +14,7 @@
     } = $props();
 
     const band = $derived(eqStore.activeBands[nodeIndex]);
-    const color = $derived(filterTypeColors[band?.type] || '#fbbf24');
+    const color = $derived(filterTypeColors[band?.type] || 'var(--accent-yellow)');
 
     const filterTypes = ['peaking', 'low_shelf', 'high_shelf', 'lowpass', 'highpass', 'notch', 'bandpass'] as const;
 
@@ -156,7 +156,7 @@
             <div class="knob-group">
                 <div
                     class="knob"
-                    style="--angle: {knobAngle(band.gain, -30, 30)}deg; --knob-color: {band.gain > 0 ? '#00ff88' : band.gain < 0 ? '#ff4444' : '#888'}"
+                    style="--angle: {knobAngle(band.gain, -30, 30)}deg; --knob-color: {band.gain > 0 ? 'var(--accent-green)' : band.gain < 0 ? 'var(--accent-red)' : '#888'}"
                     onmousedown={handleKnobDown('gain', band.gain)}
                     role="slider"
                     tabindex="0"
@@ -181,7 +181,7 @@
             <div class="knob-group">
                 <div
                     class="knob"
-                    style="--angle: {knobAngle(band.q, 0.1, 20)}deg; --knob-color: #3b82f6"
+                    style="--angle: {knobAngle(band.q, 0.1, 20)}deg; --knob-color: var(--accent)"
                     onmousedown={handleKnobDown('q', band.q)}
                     role="slider"
                     tabindex="0"

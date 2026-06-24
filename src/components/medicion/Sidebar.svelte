@@ -33,15 +33,15 @@
                 <button
                     class="relative flex-1 h-[48px] rounded-lg flex flex-col items-center justify-center transition-all duration-200 cursor-pointer gap-0.5
                            {uiStore.activeTab === tab.id
-                        ? 'bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20'
-                        : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}"
+                        ? 'tab-active'
+                        : 'tab-inactive'}"
                     onclick={() => (uiStore.activeTab = tab.id)}
                     title={tab.label}
                 >
                     <span class="material-symbols-outlined text-[20px]">{tab.icon}</span>
                     <span class="text-[7px] font-bold uppercase tracking-wider leading-none">{tab.label}</span>
                     {#if tab.id === 'snaps' && snapCount > 0}
-                        <span class="absolute top-1 right-1 min-w-[16px] h-[16px] flex items-center justify-center bg-[#3b82f6] text-white text-[8px] font-bold rounded-full px-1">
+                        <span class="absolute top-1 right-1 min-w-[16px] h-[16px] flex items-center justify-center text-white text-[8px] font-bold rounded-full px-1" style="background: var(--accent)">
                             {snapCount}
                         </span>
                     {/if}
@@ -110,51 +110,18 @@
 </aside>
 
 <style>
-    /* Theme overrides for Sidebar */
-    aside :global(.bg-\[\#121216\]) {
-        background-color: var(--bg-tertiary) !important;
+    /* Tab states */
+    .tab-active {
+        background: color-mix(in srgb, var(--accent) 10%, transparent);
+        color: var(--accent);
+        border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
     }
-    aside :global(.bg-\[\#121216\]\/5) {
-        background-color: color-mix(in srgb, var(--bg-tertiary) 5%, transparent) !important;
+    .tab-inactive {
+        color: var(--text-muted);
     }
-    aside :global(.bg-\[\#121216\]\/20) {
-        background-color: color-mix(in srgb, var(--bg-tertiary) 20%, transparent) !important;
-    }
-    aside :global(.bg-\[\#121216\]\/30) {
-        background-color: color-mix(in srgb, var(--bg-tertiary) 30%, transparent) !important;
-    }
-    aside :global(.bg-\[\#121216\]\/40) {
-        background-color: color-mix(in srgb, var(--bg-tertiary) 40%, transparent) !important;
-    }
-    aside :global(.bg-\[\#0c0c0e\]) {
-        background-color: var(--bg-surface) !important;
-    }
-    aside :global(.border-\[\#1a1a24\]) {
-        border-color: var(--border-primary) !important;
-    }
-    aside :global(.border-\[\#1a1a24\]\/20) {
-        border-color: color-mix(in srgb, var(--border-primary) 20%, transparent) !important;
-    }
-    aside :global(.border-\[\#1a1a24\]\/30) {
-        border-color: color-mix(in srgb, var(--border-primary) 30%, transparent) !important;
-    }
-    aside :global(.border-\[\#1a1a24\]\/40) {
-        border-color: color-mix(in srgb, var(--border-primary) 40%, transparent) !important;
-    }
-    aside :global(.border-\[\#1a1a24\]\/50) {
-        border-color: color-mix(in srgb, var(--border-primary) 50%, transparent) !important;
-    }
-    aside :global(.border-t) {
-        border-top-color: var(--border-primary) !important;
-    }
-    aside :global(.border-b) {
-        border-bottom-color: var(--border-primary) !important;
-    }
-    aside :global(.text-gray-200) {
-        color: var(--text-primary) !important;
-    }
-    aside :global(.text-gray-500) {
-        color: var(--text-muted) !important;
+    .tab-inactive:hover {
+        color: var(--text-secondary);
+        background: color-mix(in srgb, var(--text-primary) 5%, transparent);
     }
 
     .sidebar-action-footer {
@@ -167,9 +134,9 @@
     .sidebar-action-btn {
         width: 100%;
         min-height: 48px;
-        border-radius: 8px;
+        border-radius: var(--radius-lg);
         font-weight: 700;
-        font-size: 14px;
+        font-size: var(--text-lg);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -177,19 +144,19 @@
         cursor: pointer;
         border: none;
         color: white;
-        transition: all 0.3s;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        transition: all var(--transition-slow);
+        box-shadow: var(--shadow-md);
     }
 
     .sidebar-action-btn.action-primary {
-        background: linear-gradient(to right, #3b82f6, #2563eb);
+        background: linear-gradient(to right, var(--accent), var(--accent-hover));
     }
     .sidebar-action-btn.action-primary:hover {
-        background: linear-gradient(to right, #2563eb, #1d4ed8);
+        filter: brightness(1.1);
     }
 
     .sidebar-action-btn.action-stop {
-        background: linear-gradient(to right, #ef4444, #dc2626);
+        background: linear-gradient(to right, var(--accent-red), color-mix(in srgb, var(--accent-red) 85%, black));
     }
     .sidebar-action-btn.action-stop:hover {
         opacity: 0.9;

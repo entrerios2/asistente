@@ -13,6 +13,7 @@
  */
 
 import { drawQuadrant, type DrawParams } from '../dsp/quadrantDraw';
+import { getCanvasTheme } from '../dsp/canvasTheme';
 import { preSmoothBuffer } from '../dsp/quadrantHelpers';
 import type { InterpolationEngine } from '../dsp/interpolationEngine';
 import type { MetricConfig } from '../dsp/quadrantState';
@@ -128,6 +129,11 @@ export function executeDraw(p: RenderFrameParams): RenderFrameResult | null {
     ctx.resetTransform();
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, width, height);
+    // Fill with canvas theme background — ensures bg matches grid colors
+    // even when canvas theme differs from UI theme
+    const canvasTheme = getCanvasTheme();
+    ctx.fillStyle = canvasTheme.bg;
+    ctx.fillRect(0, 0, width, height);
 
     let localLastVersion = p.localLastVersion;
     let dirty = p.dirty;

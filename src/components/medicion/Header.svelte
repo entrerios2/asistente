@@ -106,7 +106,7 @@
         <!-- Generador -->
         <button
             class="header-btn"
-            style="color: {uiStore.genActive ? '#00ff88' : 'var(--text-muted)'};"
+            style="color: {uiStore.genActive ? 'var(--accent-green)' : 'var(--text-muted)'};"
             onclick={toggleGenerator}
             title={uiStore.genActive
                 ? `Generador: ${signalNames[uiStore.generatorType]} (activo)`
@@ -131,7 +131,7 @@
         <!-- EQ -->
         <button
             class="header-btn"
-            style="color: {eqStore.showEQ ? '#3b82f6' : 'var(--text-muted)'};"
+            style="color: {eqStore.showEQ ? 'var(--accent)' : 'var(--text-muted)'};"
             onclick={handleEQClick}
             title="Ecualización"
         >
@@ -178,7 +178,7 @@
                     class="absolute right-0 mt-2 rounded-xl p-3 shadow-[0_10px_30px_#000000] z-50 min-w-[140px] flex flex-col gap-2"
                     style="background: var(--bg-surface); border: 1px solid var(--border-primary);"
                 >
-                    <div class="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1 select-none">
+                    <div class="text-[9px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1 select-none">
                         Configurar Rejilla
                     </div>
 
@@ -201,7 +201,7 @@
                         {/each}
                     </div>
 
-                    <div class="text-[9px] font-mono text-center font-bold text-[#00ff88] mt-1 bg-[#001a0e] py-1.5 rounded border border-[#004d29] tracking-wide select-none">
+                    <div class="text-[9px] font-mono text-center font-bold text-[var(--accent-green)] mt-1 bg-[#001a0e] py-1.5 rounded border border-[#004d29] tracking-wide select-none">
                         {getLayoutLabel()}
                     </div>
                 </div>
@@ -249,7 +249,7 @@
         justify-content: space-between;
         align-items: center;
         padding: 0 20px;
-        color: #fff;
+        color: var(--text-primary);
         flex-shrink: 0;
         z-index: 1000;
     }
@@ -267,7 +267,7 @@
     }
 
     .header-title {
-        font-family: "Outfit", "Inter", sans-serif;
+        font-family: var(--font-ui);
         font-size: 0.85rem;
         font-weight: 700;
         color: var(--text-primary);
@@ -304,12 +304,12 @@
     }
 
     .header-btn.measuring {
-        color: #ef4444;
+        color: var(--accent-red);
         animation: pulse-measure 1.5s infinite;
     }
 
     .header-btn-sub {
-        font-family: "Inter Tight", "Outfit", "Inter", sans-serif;
+        font-family: var(--font-ui);
         font-size: 7px;
         font-weight: 700;
         font-stretch: condensed;
@@ -361,10 +361,10 @@
     }
 
     .vu-label {
-        font-family: "Outfit", "Inter", sans-serif;
+        font-family: var(--font-ui);
         font-size: 7px;
         font-weight: 900;
-        color: #4b5563;
+        color: var(--text-muted);
         width: 16px;
         text-align: right;
         line-height: 1;
@@ -373,7 +373,7 @@
     .vu-track {
         width: 80px;
         height: 3px;
-        background: #09090b;
+        background: var(--bg-deep);
         border-radius: 1px;
         overflow: hidden;
     }
@@ -397,7 +397,7 @@
     .vu-fill.out {
         background: linear-gradient(90deg, 
             #0a1628 0%, 
-            #3b82f6 85.7%, 
+            var(--accent) 85.7%, 
             #facc15 87%, 
             #ef4444 100%
         );
@@ -405,25 +405,25 @@
     }
 
     .vu-fill.inactive {
-        background: #1f1f26;
+        background: var(--bg-elevated);
     }
 
     .led-indicator {
         width: 6px;
         height: 6px;
         border-radius: 50%;
-        background: #1f1f26;
-        border: 1px solid #2e2e38;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-primary);
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         flex-shrink: 0;
     }
 
     .led-indicator.active {
-        background: #00ff88;
-        border-color: #00ff88;
+        background: var(--accent-green);
+        border-color: var(--accent-green);
         box-shadow:
-            0 0 10px #00ff88,
-            0 0 4px #00ff88;
+            0 0 10px var(--accent-green),
+            0 0 4px var(--accent-green);
         transform: scale(1.1);
     }
 </style>

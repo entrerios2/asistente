@@ -25,19 +25,19 @@
                     { mode: 'Y' as const, label: 'Solo Eje Y', icon: 'swap_vert' },
                 ] as opt}
                     <button class="px-3 py-1.5 text-[10px] font-bold rounded transition-all cursor-pointer text-left flex items-center gap-1.5
-                                   {interactionState.zoomMode === opt.mode ? 'text-[#00ff88] bg-[#00ff88]/10' : 'text-gray-300 hover:text-white hover:bg-[#121216]'}"
+                                   {interactionState.zoomMode === opt.mode ? 'text-[var(--accent-green)] bg-[#00ff88]/10' : 'text-[var(--text-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]'}"
                         onclick={() => { interactionState.zoomMode = opt.mode; showZoomMenu = false; }}>
                         <span class="material-symbols-outlined text-[14px]">{opt.icon}</span>
                         {opt.label}
                     </button>
                 {/each}
                 <div class="border-t my-0.5" style="border-color: var(--border-primary)"></div>
-                <button class="px-3 py-1.5 text-[10px] font-bold text-[#00ff88] hover:bg-[#00ff88]/10 rounded transition-all cursor-pointer text-left"
+                <button class="px-3 py-1.5 text-[10px] font-bold text-[var(--accent-green)] hover:bg-[#00ff88]/10 rounded transition-all cursor-pointer text-left"
                     onclick={() => { onDoubleClick(); showZoomMenu = false; }}>Restaurar</button>
             </div>
         {/if}
         <button
-            class="flex items-center justify-center w-8 h-8 rounded-lg bg-[#0c0c0e] border border-[#1a1a24] text-gray-400 hover:text-white hover:border-[#00ff88] transition-all cursor-pointer shadow-lg opacity-40 hover:opacity-100"
+            class="flex items-center justify-center w-8 h-8 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[#00ff88] transition-all cursor-pointer shadow-lg opacity-40 hover:opacity-100"
             onclick={() => showZoomMenu = !showZoomMenu}
             title="Opciones de Zoom"
         >

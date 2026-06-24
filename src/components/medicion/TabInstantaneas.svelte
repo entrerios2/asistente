@@ -270,7 +270,7 @@
     <!-- Filtros + Sort/Group -->
     <div class="flex flex-wrap gap-1.5 items-center flex-shrink-0">
         {#if availableUbicaciones.length > 0}
-            <select class="bg-[#0d0d14] border border-[#2a2a3a] rounded-md px-2 py-1 text-[9px] text-gray-300 focus:outline-none focus:border-[#3b82f6] cursor-pointer min-h-[24px]"
+            <select class="bg-[var(--bg-deep)] border border-[var(--bg-elevated)] rounded-md px-2 py-1 text-[9px] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)] cursor-pointer min-h-[24px]"
                 style="color-scheme: dark;"
                 bind:value={filterUbicacion}>
                 <option value="">Ubicación</option>
@@ -278,7 +278,7 @@
             </select>
         {/if}
         {#if availablePosiciones.length > 0}
-            <select class="bg-[#0d0d14] border border-[#2a2a3a] rounded-md px-2 py-1 text-[9px] text-gray-300 focus:outline-none focus:border-[#3b82f6] cursor-pointer min-h-[24px]"
+            <select class="bg-[var(--bg-deep)] border border-[var(--bg-elevated)] rounded-md px-2 py-1 text-[9px] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)] cursor-pointer min-h-[24px]"
                 style="color-scheme: dark;"
                 bind:value={filterPosicion}>
                 <option value="">Posición</option>
@@ -286,7 +286,7 @@
             </select>
         {/if}
         {#if availableCustomTags.length > 0}
-            <select class="bg-[#0d0d14] border border-[#2a2a3a] rounded-md px-2 py-1 text-[9px] text-gray-300 focus:outline-none focus:border-[#3b82f6] cursor-pointer min-h-[24px]"
+            <select class="bg-[var(--bg-deep)] border border-[var(--bg-elevated)] rounded-md px-2 py-1 text-[9px] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)] cursor-pointer min-h-[24px]"
                 style="color-scheme: dark;"
                 bind:value={filterCustom}>
                 <option value="">Etiqueta</option>
@@ -294,14 +294,14 @@
             </select>
         {/if}
         {#if filterUbicacion || filterPosicion || filterCustom}
-            <button class="text-[9px] text-gray-500 hover:text-gray-300 cursor-pointer transition-colors px-1"
+            <button class="text-[9px] text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer transition-colors px-1"
                 onclick={() => { filterUbicacion = ''; filterPosicion = ''; filterCustom = ''; }}>Limpiar</button>
         {/if}
         <!-- Spacer -->
         <div class="flex-1"></div>
         <!-- Sort icon-only -->
         <div class="relative flex items-center justify-center w-6 h-6 rounded hover:bg-white/5 transition-all" title="Ordenar">
-            <span class="material-symbols-outlined text-[14px] text-gray-500 pointer-events-none">sort</span>
+            <span class="material-symbols-outlined text-[14px] text-[var(--text-muted)] pointer-events-none">sort</span>
             <select class="absolute inset-0 opacity-0 cursor-pointer text-[9px]"
                 style="color-scheme: dark;"
                 bind:value={sortOrder}>
@@ -313,7 +313,7 @@
         </div>
         <!-- Group icon-only -->
         <div class="relative flex items-center justify-center w-6 h-6 rounded hover:bg-white/5 transition-all" title="Agrupar">
-            <span class="material-symbols-outlined text-[14px] text-gray-500 pointer-events-none">workspaces</span>
+            <span class="material-symbols-outlined text-[14px] text-[var(--text-muted)] pointer-events-none">workspaces</span>
             <select class="absolute inset-0 opacity-0 cursor-pointer text-[9px]"
                 style="color-scheme: dark;"
                 bind:value={groupBy}>
@@ -328,15 +328,15 @@
     <!-- Lista agrupada por ubicación -->
     <div class="flex-1 flex flex-col gap-0.5 min-h-0 overflow-y-auto pr-0.5">
         {#if sortedSnapshots.length === 0}
-            <div class="flex-1 flex flex-col items-center justify-center p-6 text-center border border-dashed border-[#2a2a3a] rounded-xl gap-2">
-                <span class="material-symbols-outlined text-gray-600 text-2xl">add_photo_alternate</span>
-                <p class="text-[10px] text-gray-500">{traceManager.instantaneas.length === 0 ? 'Capture una instantánea para comenzar' : 'No hay resultados para estos filtros'}</p>
+            <div class="flex-1 flex flex-col items-center justify-center p-6 text-center border border-dashed border-[var(--bg-elevated)] rounded-xl gap-2">
+                <span class="material-symbols-outlined text-[var(--text-muted)] text-2xl">add_photo_alternate</span>
+                <p class="text-[10px] text-[var(--text-muted)]">{traceManager.instantaneas.length === 0 ? 'Capture una instantánea para comenzar' : 'No hay resultados para estos filtros'}</p>
             </div>
         {:else}
             {#each [...groupedSnapshots.entries()] as [groupName, snaps]}
                 <!-- Group header -->
                 <button
-                    class="flex items-center justify-between px-2 py-1.5 rounded-md text-[10px] font-bold text-gray-400
+                    class="flex items-center justify-between px-2 py-1.5 rounded-md text-[10px] font-bold text-[var(--text-secondary)]
                            hover:bg-white/5 cursor-pointer transition-all min-h-[26px] mt-1 first:mt-0"
                     onclick={() => toggleGroup(groupName)}
                 >
@@ -346,13 +346,13 @@
                         </span>
                         {groupName}
                     </span>
-                    <span class="text-[9px] text-gray-600 font-mono">{snaps.length}</span>
+                    <span class="text-[9px] text-[var(--text-muted)] font-mono">{snaps.length}</span>
                 </button>
 
                 {#if !collapsedGroups.has(groupName)}
                     {#each snaps as snap (snap.id)}
                         <!-- Card -->
-                        <div class="bg-[#0d0d14]/50 border border-[#2a2a3a]/40 rounded-lg ml-2 transition-all
+                        <div class="bg-[color-mix(in_srgb,var(--bg-deep)_50%,transparent)] border border-[var(--bg-elevated)]/40 rounded-lg ml-2 transition-all
                                     {expandedId === snap.id ? 'border-gray-600/50' : 'hover:border-gray-600/40'}"
                         >
                             <!-- Main row - clickable to expand -->
@@ -363,11 +363,11 @@
 
                                 <!-- Name + inline tags -->
                                 <div class="flex-1 min-w-0 flex flex-col gap-0.5">
-                                    <span class="text-[10px] font-semibold text-gray-200 truncate">{snap.name}</span>
+                                    <span class="text-[10px] font-semibold text-[var(--text-primary)] truncate">{snap.name}</span>
                                     {#if snap.tags?.posicion || (snap.tags?.custom && snap.tags.custom.length > 0)}
                                         <div class="flex gap-1 flex-wrap">
                                             {#if snap.tags?.posicion}
-                                                <span class="text-[8px] font-semibold px-1.5 py-0.5 rounded-sm bg-white/5 text-gray-400">{snap.tags.posicion}</span>
+                                                <span class="text-[8px] font-semibold px-1.5 py-0.5 rounded-sm bg-white/5 text-[var(--text-secondary)]">{snap.tags.posicion}</span>
                                             {/if}
                                             {#each snap.tags?.custom || [] as tag}
                                                 <span class="text-[8px] px-1.5 py-0.5 rounded-sm bg-[#a855f7]/10 text-[#a855f7]/70 italic">{tag}</span>
@@ -377,37 +377,37 @@
                                 </div>
 
                                 <!-- Time -->
-                                <span class="text-[9px] font-mono text-gray-600 flex-shrink-0">
+                                <span class="text-[9px] font-mono text-[var(--text-muted)] flex-shrink-0">
                                     {new Date(snap.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                                 </span>
 
                                 <!-- Visibility toggle -->
                                 <span class="w-6 h-6 rounded flex items-center justify-center transition-all cursor-pointer
-                                               {snap.visible ? 'text-gray-400 hover:text-white' : 'text-gray-700 hover:text-gray-400'}"
+                                               {snap.visible ? 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]' : 'text-[var(--text-disabled)] hover:text-[var(--text-secondary)]'}"
                                     onclick={(e) => { e.stopPropagation(); traceManager.toggleVisibility(snap.id); }}>
                                     <span class="material-symbols-outlined text-[14px]">{snap.visible ? "visibility" : "visibility_off"}</span>
                                 </span>
 
                                 <!-- Expand indicator -->
-                                <span class="material-symbols-outlined text-[12px] text-gray-600 transition-transform
+                                <span class="material-symbols-outlined text-[12px] text-[var(--text-muted)] transition-transform
                                              {expandedId === snap.id ? 'rotate-180' : ''}">expand_more</span>
                             </button>
 
                             <!-- Expanded section -->
                             {#if expandedId === snap.id}
-                                <div class="px-3 pb-3 pt-1 flex flex-col gap-2 border-t border-[#2a2a3a]/30">
+                                <div class="px-3 pb-3 pt-1 flex flex-col gap-2 border-t border-[var(--bg-elevated)]/30">
                                     <!-- Editable name -->
                                     <div class="flex items-center gap-1.5">
                                         {#if editingId === snap.id}
                                             <input type="text" bind:value={editingName}
                                                 onblur={() => finishEditing(snap.id)}
                                                 onkeydown={(e) => handleKeyPress(e, snap.id)}
-                                                class="flex-1 bg-[#0d0d14] border border-[#3b82f6] rounded px-2 py-1 text-[10px] text-gray-200 focus:outline-none focus:ring-1 focus:ring-[#3b82f6] font-semibold"
+                                                class="flex-1 bg-[var(--bg-deep)] border border-[var(--accent)] rounded px-2 py-1 text-[10px] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] font-semibold"
                                                 autofocus />
                                         {:else}
-                                            <button class="flex-1 text-[10px] font-semibold text-gray-200 hover:text-white text-left cursor-pointer bg-transparent border-none p-0 truncate"
+                                            <button class="flex-1 text-[10px] font-semibold text-[var(--text-primary)] hover:text-[var(--text-primary)] text-left cursor-pointer bg-transparent border-none p-0 truncate"
                                                 onclick={() => startEditing(snap.id, snap.name)} title="Clic para renombrar">
-                                                <span class="material-symbols-outlined text-[10px] text-gray-600 mr-1">edit</span>
+                                                <span class="material-symbols-outlined text-[10px] text-[var(--text-muted)] mr-1">edit</span>
                                                 {snap.name}
                                             </button>
                                         {/if}
@@ -415,9 +415,9 @@
 
                                     <!-- Y-Offset slider -->
                                     <div class="flex items-center gap-2">
-                                        <span class="text-[9px] text-gray-500 flex-shrink-0">Y-Offset</span>
+                                        <span class="text-[9px] text-[var(--text-muted)] flex-shrink-0">Y-Offset</span>
                                         <input type="range" min="-50" max="50" step="1" bind:value={snap.offsetY}
-                                            class="flex-1 h-1 bg-[#121216] rounded-lg appearance-none cursor-pointer accent-[#a855f7]" />
+                                            class="flex-1 h-1 bg-[var(--bg-tertiary)] rounded-lg appearance-none cursor-pointer accent-[#a855f7]" />
                                         <span class="text-[9px] font-mono font-bold text-[#a855f7] cursor-pointer w-10 text-right"
                                             ondblclick={() => (snap.offsetY = 0)} title="Doble clic para resetear">
                                             {snap.offsetY !== undefined && snap.offsetY > 0 ? `+${snap.offsetY}` : snap.offsetY} dB
@@ -426,52 +426,52 @@
 
                                     <!-- Editable Tags -->
                                     <div class="flex flex-col gap-1.5">
-                                        <span class="text-[9px] text-gray-500 font-semibold">Ubicación</span>
+                                        <span class="text-[9px] text-[var(--text-muted)] font-semibold">Ubicación</span>
                                         <div class="flex gap-1 flex-wrap">
                                             {#each traceManager.tagPresets.ubicacion as ub}
                                                 <button
                                                     class="px-1.5 py-0.5 rounded-sm text-[8px] font-semibold cursor-pointer transition-all border
                                                            {snap.tags?.ubicacion === ub
-                                                                ? 'border-transparent text-white'
-                                                                : 'bg-transparent border-[#2a2a3a] text-gray-600 hover:text-gray-400'}"
-                                                    style={snap.tags?.ubicacion === ub ? `background-color: ${UBICACION_COLORS[ub] || '#3b82f6'}` : ''}
+                                                                ? 'border-transparent text-[var(--text-primary)]'
+                                                                : 'bg-transparent border-[var(--bg-elevated)] text-[var(--text-muted)] hover:text-[var(--text-secondary)]'}"
+                                                    style={snap.tags?.ubicacion === ub ? `background-color: ${UBICACION_COLORS[ub] || 'var(--accent)'}` : ''}
                                                     onclick={() => setSnapTag(snap, 'ubicacion', ub)}
                                                 >{ub}</button>
                                             {/each}
                                         </div>
-                                        <span class="text-[9px] text-gray-500 font-semibold">Posición</span>
+                                        <span class="text-[9px] text-[var(--text-muted)] font-semibold">Posición</span>
                                         <div class="flex gap-1 flex-wrap">
                                             {#each traceManager.tagPresets.posicion as pos}
                                                 <button
                                                     class="px-1.5 py-0.5 rounded-sm text-[8px] font-semibold cursor-pointer transition-all border
                                                            {snap.tags?.posicion === pos
-                                                                ? 'bg-[#3b82f6] border-transparent text-white'
-                                                                : 'bg-transparent border-[#2a2a3a] text-gray-600 hover:text-gray-400'}"
+                                                                ? 'bg-[var(--accent)] border-transparent text-[var(--text-primary)]'
+                                                                : 'bg-transparent border-[var(--bg-elevated)] text-[var(--text-muted)] hover:text-[var(--text-secondary)]'}"
                                                     onclick={() => setSnapTag(snap, 'posicion', pos)}
                                                 >{pos}</button>
                                             {/each}
                                         </div>
-                                        <span class="text-[9px] text-gray-500 font-semibold">Etiquetas</span>
+                                        <span class="text-[9px] text-[var(--text-muted)] font-semibold">Etiquetas</span>
                                         <div class="flex gap-1 flex-wrap">
                                             {#each snap.tags?.custom || [] as tag}
                                                 <span class="flex items-center gap-0.5 px-1.5 py-0.5 rounded-sm text-[8px] font-semibold bg-[#a855f7]/10 text-[#a855f7]">
                                                     {tag}
-                                                    <button class="text-[#a855f7]/40 hover:text-white cursor-pointer text-[9px] leading-none"
+                                                    <button class="text-[#a855f7]/40 hover:text-[var(--text-primary)] cursor-pointer text-[9px] leading-none"
                                                         onclick={() => removeSnapCustomTag(snap, tag)}>×</button>
                                                 </span>
                                             {/each}
                                             <input type="text" placeholder="+"
-                                                class="w-14 bg-transparent border border-dashed border-[#2a2a3a] rounded-sm px-1 py-0.5 text-[8px] text-gray-500 placeholder:text-gray-700 focus:outline-none focus:border-[#a855f7]"
+                                                class="w-14 bg-transparent border border-dashed border-[var(--bg-elevated)] rounded-sm px-1 py-0.5 text-[8px] text-[var(--text-muted)] placeholder:text-[var(--text-disabled)] focus:outline-none focus:border-[#a855f7]"
                                                 onkeydown={(e) => { if (e.key === 'Enter') { addSnapCustomTag(snap, (e.currentTarget as HTMLInputElement).value); (e.currentTarget as HTMLInputElement).value = ''; } }} />
                                         </div>
                                     </div>
 
                                     <!-- Notes -->
                                     <div class="flex flex-col gap-1">
-                                        <span class="text-[9px] text-gray-500 font-semibold">Notas</span>
+                                        <span class="text-[9px] text-[var(--text-muted)] font-semibold">Notas</span>
                                         <textarea
-                                            class="bg-[#0d0d14] border border-[#2a2a3a] rounded-md px-2 py-1.5 text-[9px] text-gray-300 placeholder:text-gray-700
-                                                   focus:outline-none focus:border-[#3b82f6] resize-none min-h-[40px]"
+                                            class="bg-[var(--bg-deep)] border border-[var(--bg-elevated)] rounded-md px-2 py-1.5 text-[9px] text-[var(--text-primary)] placeholder:text-[var(--text-disabled)]
+                                                   focus:outline-none focus:border-[var(--accent)] resize-none min-h-[40px]"
                                             placeholder="Agregar nota..."
                                             value={snap.notes || ''}
                                             onblur={(e) => setSnapNotes(snap, (e.currentTarget as HTMLTextAreaElement).value)}
@@ -480,16 +480,16 @@
 
                                     <!-- Metrics pills -->
                                     <div class="flex flex-col gap-1">
-                                        <span class="text-[9px] text-gray-500 font-semibold">Métricas</span>
+                                        <span class="text-[9px] text-[var(--text-muted)] font-semibold">Métricas</span>
                                         <div class="flex gap-1 flex-wrap">
                                             {#each Object.keys(snap.data) as metric}
-                                                <span class="text-[8px] font-mono px-1.5 py-0.5 rounded-sm bg-[#0d0d14] border border-[#2a2a3a] text-gray-400">{metric}</span>
+                                                <span class="text-[8px] font-mono px-1.5 py-0.5 rounded-sm bg-[var(--bg-deep)] border border-[var(--bg-elevated)] text-[var(--text-secondary)]">{metric}</span>
                                             {/each}
                                         </div>
                                     </div>
 
                                     <!-- Metadata -->
-                                    <div class="flex items-center gap-2 text-[9px] text-gray-600 font-mono">
+                                    <div class="flex items-center gap-2 text-[9px] text-[var(--text-muted)] font-mono">
                                         <span>{new Date(snap.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
                                         <span>·</span>
                                         <span>{snap.source === "manual" ? "Manual" : "Secuencial"}</span>
@@ -500,7 +500,7 @@
                                         <button class="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-[10px] font-semibold cursor-pointer transition-all min-h-[28px]
                                                        {confirmDeleteId === snap.id
                                                             ? 'bg-red-500/20 border border-red-500/40 text-red-400'
-                                                            : 'bg-[#0d0d14] border border-[#2a2a3a] text-gray-500 hover:text-red-400 hover:border-red-500/30'}"
+                                                            : 'bg-[var(--bg-deep)] border border-[var(--bg-elevated)] text-[var(--text-muted)] hover:text-red-400 hover:border-red-500/30'}"
                                             onclick={() => requestDelete(snap.id)}>
                                             <span class="material-symbols-outlined text-[12px]">delete</span>
                                             {confirmDeleteId === snap.id ? '¿Seguro?' : 'Eliminar'}
@@ -516,8 +516,8 @@
     </div>
 
     <!-- Footer -->
-    <div class="flex items-center justify-between pt-2 border-t border-[#2a2a3a]/30 flex-shrink-0 gap-1">
-        <span class="text-[9px] text-gray-500 flex-shrink-0">
+    <div class="flex items-center justify-between pt-2 border-t border-[var(--bg-elevated)]/30 flex-shrink-0 gap-1">
+        <span class="text-[9px] text-[var(--text-muted)] flex-shrink-0">
             {sortedSnapshots.length}{sortedSnapshots.length !== traceManager.instantaneas.length ? `/${traceManager.instantaneas.length}` : ''}
             · {visibleCount} vis
         </span>
@@ -526,7 +526,7 @@
                 onchange={handleOpenFile}
             />
             <button
-                class="flex items-center justify-center w-6 h-6 rounded text-gray-600 hover:text-white hover:bg-white/5 cursor-pointer transition-all"
+                class="flex items-center justify-center w-6 h-6 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-white/5 cursor-pointer transition-all"
                 title="Guardar"
                 onclick={() => {
                     const hasActiveFilters = filterUbicacion || filterPosicion || filterCustom;
@@ -541,7 +541,7 @@
                 <span class="material-symbols-outlined text-[14px]">save</span>
             </button>
             <label for="open-snap-input"
-                class="flex items-center justify-center w-6 h-6 rounded text-gray-600 hover:text-white hover:bg-white/5 cursor-pointer transition-all"
+                class="flex items-center justify-center w-6 h-6 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-white/5 cursor-pointer transition-all"
                 title="Abrir">
                 <span class="material-symbols-outlined text-[14px]">folder_open</span>
             </label>
@@ -549,7 +549,7 @@
                 class="flex items-center justify-center w-6 h-6 rounded cursor-pointer transition-all
                        {confirmDeleteAll
                             ? 'text-red-400 bg-red-500/20'
-                            : 'text-gray-600 hover:text-red-400 hover:bg-white/5'}"
+                            : 'text-[var(--text-muted)] hover:text-red-400 hover:bg-white/5'}"
                 title={confirmDeleteAll ? '¿Seguro? Clic para confirmar' : 'Borrar todo'}
                 onclick={requestDeleteAll}
                 disabled={traceManager.instantaneas.length === 0}
@@ -557,7 +557,7 @@
                 <span class="material-symbols-outlined text-[14px]">delete_sweep</span>
             </button>
             <button
-                class="flex items-center justify-center w-6 h-6 rounded text-gray-600 hover:text-[#3b82f6] hover:bg-white/5 cursor-pointer transition-all"
+                class="flex items-center justify-center w-6 h-6 rounded text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-white/5 cursor-pointer transition-all"
                 title="Compartir"
                 onclick={async () => {
                     if (traceManager.instantaneas.length === 0) return;
@@ -594,25 +594,25 @@
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
-        class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center"
+        class="fixed inset-0 bg-[var(--bg-deep)]/60 backdrop-blur-sm flex items-center justify-center"
         style="z-index: 100;"
         role="dialog"
         aria-modal="true"
         aria-label="Importar instantáneas"
         onclick={(e) => { if (e.target === e.currentTarget) pendingImportSnapshots = null; }}
     >
-        <div class="bg-[#16161e] border border-[#2a2a3a] rounded-2xl shadow-2xl w-[340px] max-w-[90vw] p-5 flex flex-col gap-4">
+        <div class="bg-[var(--bg-tertiary)] border border-[var(--bg-elevated)] rounded-2xl shadow-2xl w-[340px] max-w-[90vw] p-5 flex flex-col gap-4">
             <div class="flex items-center gap-2">
-                <span class="material-symbols-outlined text-[#3b82f6] text-xl">folder_open</span>
-                <h2 class="text-sm font-bold text-gray-200">Abrir instantáneas</h2>
+                <span class="material-symbols-outlined text-[var(--accent)] text-xl">folder_open</span>
+                <h2 class="text-sm font-bold text-[var(--text-primary)]">Abrir instantáneas</h2>
             </div>
-            <p class="text-xs text-gray-400">
-                El archivo contiene <strong class="text-gray-200">{pendingImportSnapshots.length}</strong> instantánea{pendingImportSnapshots.length !== 1 ? 's' : ''}.
-                Ya tenés <strong class="text-gray-200">{traceManager.instantaneas.length}</strong> en memoria.
+            <p class="text-xs text-[var(--text-secondary)]">
+                El archivo contiene <strong class="text-[var(--text-primary)]">{pendingImportSnapshots.length}</strong> instantánea{pendingImportSnapshots.length !== 1 ? 's' : ''}.
+                Ya tenés <strong class="text-[var(--text-primary)]">{traceManager.instantaneas.length}</strong> en memoria.
             </p>
             <div class="flex flex-col gap-2">
                 <button
-                    class="w-full bg-gradient-to-r from-[#3b82f6] to-[#2563eb] hover:from-[#2563eb] hover:to-[#1d4ed8]
+                    class="w-full bg-gradient-to-r from-[var(--accent)] to-[var(--accent-hover)] hover:from-[var(--accent-hover)] hover:to-[var(--accent-hover)]
                            text-white rounded-lg py-2.5 text-xs font-bold cursor-pointer transition-all shadow-lg min-h-[36px]
                            flex items-center justify-center gap-1.5"
                     onclick={() => confirmImport(false)}
@@ -621,8 +621,8 @@
                     Agregar a las existentes
                 </button>
                 <button
-                    class="w-full bg-[#0d0d14] border border-[#2a2a3a] hover:border-orange-500/40
-                           text-gray-400 hover:text-orange-400 rounded-lg py-2.5 text-xs font-semibold cursor-pointer
+                    class="w-full bg-[var(--bg-deep)] border border-[var(--bg-elevated)] hover:border-orange-500/40
+                           text-[var(--text-secondary)] hover:text-orange-400 rounded-lg py-2.5 text-xs font-semibold cursor-pointer
                            transition-all min-h-[36px] flex items-center justify-center gap-1.5"
                     onclick={() => confirmImport(true)}
                 >
@@ -631,7 +631,7 @@
                 </button>
             </div>
             <button
-                class="text-[10px] text-gray-500 hover:text-gray-300 cursor-pointer transition-colors text-center"
+                class="text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer transition-colors text-center"
                 onclick={() => pendingImportSnapshots = null}
             >
                 Cancelar
@@ -645,23 +645,23 @@
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
-        class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center"
+        class="fixed inset-0 bg-[var(--bg-deep)]/60 backdrop-blur-sm flex items-center justify-center"
         style="z-index: 100;"
         onclick={(e) => { if (e.target === e.currentTarget) showExportDialog = false; }}
         role="dialog"
         aria-modal="true"
     >
-        <div class="bg-[#16161e] border border-[#2a2a3a] rounded-2xl shadow-2xl w-[340px] max-w-[90vw] p-5 flex flex-col gap-4">
+        <div class="bg-[var(--bg-tertiary)] border border-[var(--bg-elevated)] rounded-2xl shadow-2xl w-[340px] max-w-[90vw] p-5 flex flex-col gap-4">
             <div class="flex items-center gap-2">
-                <span class="material-symbols-outlined text-[#3b82f6] text-xl">save</span>
-                <h2 class="text-sm font-bold text-gray-200">Guardar instantáneas</h2>
+                <span class="material-symbols-outlined text-[var(--accent)] text-xl">save</span>
+                <h2 class="text-sm font-bold text-[var(--text-primary)]">Guardar instantáneas</h2>
             </div>
-            <p class="text-xs text-gray-400">
+            <p class="text-xs text-[var(--text-secondary)]">
                 Tenés filtros activos. ¿Qué querés guardar?
             </p>
             <div class="flex flex-col gap-2">
                 <button
-                    class="w-full bg-gradient-to-r from-[#3b82f6] to-[#2563eb] hover:from-[#2563eb] hover:to-[#1d4ed8]
+                    class="w-full bg-gradient-to-r from-[var(--accent)] to-[var(--accent-hover)] hover:from-[var(--accent-hover)] hover:to-[var(--accent-hover)]
                            text-white rounded-lg py-2.5 text-xs font-bold cursor-pointer transition-all shadow-lg min-h-[36px]
                            flex items-center justify-center gap-1.5"
                     onclick={() => { traceManager.exportInstantaneas(sortedSnapshots); showExportDialog = false; }}
@@ -670,8 +670,8 @@
                     Selección ({sortedSnapshots.length})
                 </button>
                 <button
-                    class="w-full bg-[#0d0d14] border border-[#2a2a3a] hover:border-gray-500
-                           text-gray-400 hover:text-white rounded-lg py-2.5 text-xs font-semibold cursor-pointer
+                    class="w-full bg-[var(--bg-deep)] border border-[var(--bg-elevated)] hover:border-gray-500
+                           text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-lg py-2.5 text-xs font-semibold cursor-pointer
                            transition-all min-h-[36px] flex items-center justify-center gap-1.5"
                     onclick={() => { traceManager.exportAllInstantaneas(); showExportDialog = false; }}
                 >
@@ -680,7 +680,7 @@
                 </button>
             </div>
             <button
-                class="text-[10px] text-gray-500 hover:text-gray-300 cursor-pointer transition-colors text-center"
+                class="text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer transition-colors text-center"
                 onclick={() => showExportDialog = false}
             >
                 Cancelar
@@ -694,18 +694,18 @@
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
-        class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center"
+        class="fixed inset-0 bg-[var(--bg-deep)]/60 backdrop-blur-sm flex items-center justify-center"
         style="z-index: 100;"
         onclick={(e) => { if (e.target === e.currentTarget) showDeleteDialog = false; }}
         role="dialog"
         aria-modal="true"
     >
-        <div class="bg-[#16161e] border border-[#2a2a3a] rounded-2xl shadow-2xl w-[340px] max-w-[90vw] p-5 flex flex-col gap-4">
+        <div class="bg-[var(--bg-tertiary)] border border-[var(--bg-elevated)] rounded-2xl shadow-2xl w-[340px] max-w-[90vw] p-5 flex flex-col gap-4">
             <div class="flex items-center gap-2">
                 <span class="material-symbols-outlined text-red-400 text-xl">delete_sweep</span>
-                <h2 class="text-sm font-bold text-gray-200">Borrar instantáneas</h2>
+                <h2 class="text-sm font-bold text-[var(--text-primary)]">Borrar instantáneas</h2>
             </div>
-            <p class="text-xs text-gray-400">
+            <p class="text-xs text-[var(--text-secondary)]">
                 Tenés filtros activos. ¿Qué querés borrar?
             </p>
             <div class="flex flex-col gap-2">
@@ -719,8 +719,8 @@
                     Selección ({sortedSnapshots.length})
                 </button>
                 <button
-                    class="w-full bg-[#0d0d14] border border-[#2a2a3a] hover:border-red-500/40
-                           text-gray-400 hover:text-red-400 rounded-lg py-2.5 text-xs font-semibold cursor-pointer
+                    class="w-full bg-[var(--bg-deep)] border border-[var(--bg-elevated)] hover:border-red-500/40
+                           text-[var(--text-secondary)] hover:text-red-400 rounded-lg py-2.5 text-xs font-semibold cursor-pointer
                            transition-all min-h-[36px] flex items-center justify-center gap-1.5"
                     onclick={deleteAll}
                 >
@@ -729,7 +729,7 @@
                 </button>
             </div>
             <button
-                class="text-[10px] text-gray-500 hover:text-gray-300 cursor-pointer transition-colors text-center"
+                class="text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer transition-colors text-center"
                 onclick={() => showDeleteDialog = false}
             >
                 Cancelar

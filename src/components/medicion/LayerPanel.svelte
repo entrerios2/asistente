@@ -36,7 +36,7 @@
 <div class="flex items-center gap-1.5">
     <!-- Etiqueta de capa activa (siempre visible) -->
     {#if activeLayer}
-        <span class="text-[9px] text-gray-400 truncate max-w-[80px]" title={activeLayer.name}>
+        <span class="text-[9px] text-[var(--text-secondary)] truncate max-w-[80px]" title={activeLayer.name}>
             {#if activeLayer.isCalculated}<span class="text-[#a855f7] font-mono">∑</span>{/if}
             {activeLayer.name}
         </span>
@@ -44,7 +44,7 @@
 
     <div class="relative">
         <button
-            class="flex items-center justify-center w-8 h-8 rounded-lg border border-[#1a1a24] text-gray-400 hover:text-gray-200 transition-all cursor-pointer hover:bg-[#121216] relative"
+            class="flex items-center justify-center w-8 h-8 rounded-lg border border-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all cursor-pointer hover:bg-[var(--bg-tertiary)] relative"
             onclick={(e) => { e.stopPropagation(); showLayerDropdown = !showLayerDropdown; }}
             title="Gestionar Capas"
         >
@@ -66,8 +66,8 @@
                   onclick={(e) => e.stopPropagation()}
                   onwheel={(e) => e.stopPropagation()}>
                 <div class="flex items-center justify-between border-b pb-1.5 mb-1" style="border-color: var(--border-primary)">
-                    <span class="font-bold text-gray-300 text-[10px] uppercase tracking-wider">Capas</span>
-                    <button onclick={() => showLayerDropdown = false} class="text-gray-500 hover:text-gray-300">
+                    <span class="font-bold text-[var(--text-primary)] text-[10px] uppercase tracking-wider">Capas</span>
+                    <button onclick={() => showLayerDropdown = false} class="text-[var(--text-muted)] hover:text-[var(--text-primary)]">
                         <span class="material-symbols-outlined text-xs">close</span>
                     </button>
                 </div>
@@ -79,29 +79,29 @@
                         class="w-4 h-4 flex items-center justify-center cursor-pointer"
                         onclick={toggleEQ}
                         title={showEQOverlay ? 'Ocultar ecualizador' : 'Mostrar ecualizador'}>
-                        <span class="material-symbols-outlined text-[12px]" style="color: {showEQOverlay ? '#fbbf24' : 'var(--text-muted)'}">
+                        <span class="material-symbols-outlined text-[12px]" style="color: {showEQOverlay ? 'var(--accent-yellow)' : 'var(--text-muted)'}">
                             {showEQOverlay ? 'visibility' : 'visibility_off'}
                         </span>
                     </button>
                     <span class="material-symbols-outlined text-[12px]" style="color: #fbbf24">equalizer</span>
-                    <span class="font-semibold" style="color: {showEQOverlay ? '#fbbf24' : 'var(--text-muted)'}">Ecualizador</span>
+                    <span class="font-semibold" style="color: {showEQOverlay ? 'var(--accent-yellow)' : 'var(--text-muted)'}">Ecualizador</span>
                 </div>
                 <div class="border-t my-0.5" style="border-color: var(--border-primary)"></div>
 
                 {#each quadrantLayers as layer}
-                    <div class="flex items-center justify-between gap-2 py-1 px-1 rounded hover:bg-[#121216] group"
+                    <div class="flex items-center justify-between gap-2 py-1 px-1 rounded hover:bg-[var(--bg-tertiary)] group"
                          draggable="true"
                          ondragstart={(e) => onLayerDragStart(e, layer.id)}>
-                        <span class="text-[10px] truncate flex-1 cursor-pointer {layer.id === uiStore.activeLayerId ? 'text-[#00ff88] font-bold' : 'text-gray-300'}"
+                        <span class="text-[10px] truncate flex-1 cursor-pointer {layer.id === uiStore.activeLayerId ? 'text-[var(--accent-green)] font-bold' : 'text-[var(--text-primary)]'}"
                               onclick={() => uiStore.activeLayerId = layer.id}>
                             {#if layer.isCalculated}<span class="text-[#a855f7] font-mono mr-1">∑</span>{/if}
                             {layer.name}
                         </span>
                         <div class="flex items-center gap-0.5">
-                            <button class="p-0.5 text-gray-500 hover:text-white" onclick={() => layer.visible = !layer.visible}>
+                            <button class="p-0.5 text-[var(--text-muted)] hover:text-[var(--text-primary)]" onclick={() => layer.visible = !layer.visible}>
                                 <span class="material-symbols-outlined text-[13px]">{layer.visible ? 'visibility' : 'visibility_off'}</span>
                             </button>
-                            <button class="p-0.5 text-gray-500 hover:text-red-400" onclick={() => traceManager.deleteLayer(layer.id)}>
+                            <button class="p-0.5 text-[var(--text-muted)] hover:text-red-400" onclick={() => traceManager.deleteLayer(layer.id)}>
                                 <span class="material-symbols-outlined text-[13px]">delete</span>
                             </button>
                         </div>
@@ -111,7 +111,7 @@
                 <!-- Botón único "Agregar" con sub-menú desplegable -->
                 <div class="border-t pt-1.5 mt-1 relative" style="border-color: var(--border-primary)">
                     <button
-                        class="w-full text-left px-2 py-1.5 rounded text-[10px] text-[#00ff88] hover:bg-[#00ff88]/5 font-semibold flex items-center gap-1 cursor-pointer"
+                        class="w-full text-left px-2 py-1.5 rounded text-[10px] text-[var(--accent-green)] hover:bg-[#00ff88]/5 font-semibold flex items-center gap-1 cursor-pointer"
                         onclick={(e) => { e.stopPropagation(); showAddLayerMenu = !showAddLayerMenu; }}>
                         <span class="material-symbols-outlined text-[12px]">add</span>
                         Agregar capa
@@ -121,14 +121,14 @@
                         <div class="absolute left-0 bottom-full mb-1 rounded-lg shadow-lg z-50 min-w-[180px] py-1"
                              style="background: var(--bg-surface); border: 1px solid var(--border-primary)">
                             <button
-                                class="w-full text-left px-3 py-1.5 text-[10px] text-[#00ff88] hover:bg-[#00ff88]/5 flex items-center gap-1.5 cursor-pointer"
+                                class="w-full text-left px-3 py-1.5 text-[10px] text-[var(--accent-green)] hover:bg-[#00ff88]/5 flex items-center gap-1.5 cursor-pointer"
                                 onclick={() => { traceManager.addLayer(`Capa ${traceManager.layers.length + 1}`, quadrantId, 'live'); showAddLayerMenu = false; showLayerDropdown = false; }}>
                                 <span class="material-symbols-outlined text-[12px]">podcasts</span>
                                 Medición
                             </button>
                             <div class="relative">
                                 <button
-                                    class="w-full text-left px-3 py-1.5 text-[10px] text-[#3b82f6] hover:bg-[#3b82f6]/5 flex items-center gap-1.5 cursor-pointer"
+                                    class="w-full text-left px-3 py-1.5 text-[10px] text-[var(--accent)] hover:bg-[color-mix(in_srgb,var(--accent)_5%,transparent)] flex items-center gap-1.5 cursor-pointer"
                                     onclick={(e) => { e.stopPropagation(); showSnapshotPicker = !showSnapshotPicker; }}>
                                     <span class="material-symbols-outlined text-[12px]">photo_camera</span>
                                     Instantánea

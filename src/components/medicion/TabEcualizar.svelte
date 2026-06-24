@@ -172,7 +172,7 @@
     }
 
     function formatTime(ms: number): string { return ms < 1000 ? `${ms.toFixed(0)}ms` : `${(ms / 1000).toFixed(1)}s`; }
-    function devColor(rms: number): string { return rms > 6 ? '#ff4444' : rms > 3 ? '#fbbf24' : '#00ff88'; }
+    function devColor(rms: number): string { return rms > 6 ? 'var(--accent-red)' : rms > 3 ? 'var(--accent-yellow)' : 'var(--accent-green)'; }
 
     // --- EQ Presets ---
     const ALL_TYPES = ['peaking', 'lowpass', 'highpass', 'low_shelf', 'high_shelf', 'notch', 'bandpass'];
@@ -257,7 +257,7 @@
             <!-- Toggle: Capa ecualizador visible -->
             <button
                 class="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[9px] font-semibold transition-all cursor-pointer"
-                style="background: {eqStore.showEQ ? '#fbbf2412' : 'transparent'}; color: {eqStore.showEQ ? '#fbbf24' : 'var(--text-muted)'}; border: 1px solid {eqStore.showEQ ? '#fbbf2430' : 'var(--border-primary)'}"
+                style="background: {eqStore.showEQ ? '#fbbf2412' : 'transparent'}; color: {eqStore.showEQ ? 'var(--accent-yellow)' : 'var(--text-muted)'}; border: 1px solid {eqStore.showEQ ? '#fbbf2430' : 'var(--border-primary)'}"
                 onclick={() => eqStore.showEQ = !eqStore.showEQ}
             >
                 <span class="material-symbols-outlined text-[12px]">{eqStore.showEQ ? 'visibility' : 'visibility_off'}</span>
@@ -266,7 +266,7 @@
             <!-- Toggle: Simular respuesta -->
             <button
                 class="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[9px] font-semibold transition-all cursor-pointer"
-                style="background: {eqStore.showSimulatedResponse ? '#00ffff12' : 'transparent'}; color: {eqStore.showSimulatedResponse ? '#00ffff' : 'var(--text-muted)'}; border: 1px solid {eqStore.showSimulatedResponse ? '#00ffff30' : 'var(--border-primary)'}; opacity: {eqStore.showEQ ? 1 : 0.4}"
+                style="background: {eqStore.showSimulatedResponse ? '#00ffff12' : 'transparent'}; color: {eqStore.showSimulatedResponse ? 'var(--accent-cyan)' : 'var(--text-muted)'}; border: 1px solid {eqStore.showSimulatedResponse ? '#00ffff30' : 'var(--border-primary)'}; opacity: {eqStore.showEQ ? 1 : 0.4}"
                 onclick={() => { if (eqStore.showEQ) eqStore.showSimulatedResponse = !eqStore.showSimulatedResponse; }}
                 disabled={!eqStore.showEQ}
                 title={eqStore.showEQ ? (eqStore.showSimulatedResponse ? 'Ocultar respuesta simulada' : 'Mostrar respuesta simulada') : 'Activar capa EQ primero'}
@@ -302,12 +302,12 @@
             <div class="flex p-0.5 rounded-lg gap-0.5" style="background: var(--bg-tertiary); border: 1px solid var(--border-primary)">
                 <button
                     class="flex-1 px-3 py-2 rounded-md text-[10px] font-semibold transition-all cursor-pointer"
-                    style="background: {eqStore.eqType === 'grafico' ? '#3b82f610' : 'transparent'}; color: {eqStore.eqType === 'grafico' ? '#3b82f6' : 'var(--text-muted)'}"
+                    style="background: {eqStore.eqType === 'grafico' ? 'color-mix(in srgb, var(--accent) 6%, transparent)' : 'transparent'}; color: {eqStore.eqType === 'grafico' ? 'var(--accent)' : 'var(--text-muted)'}"
                     onclick={() => eqStore.eqType = 'grafico'}
                 >Gráfico</button>
                 <button
                     class="flex-1 px-3 py-2 rounded-md text-[10px] font-semibold transition-all cursor-pointer"
-                    style="background: {eqStore.eqType === 'parametrico' ? '#3b82f610' : 'transparent'}; color: {eqStore.eqType === 'parametrico' ? '#3b82f6' : 'var(--text-muted)'}"
+                    style="background: {eqStore.eqType === 'parametrico' ? 'color-mix(in srgb, var(--accent) 6%, transparent)' : 'transparent'}; color: {eqStore.eqType === 'parametrico' ? 'var(--accent)' : 'var(--text-muted)'}"
                     onclick={() => eqStore.eqType = 'parametrico'}
                 >Paramétrico</button>
             </div>
@@ -352,7 +352,7 @@
                 <div class="flex gap-1.5">
                     <button
                         class="flex items-center gap-1 px-2 py-1 rounded text-[9px] font-semibold cursor-pointer"
-                        style="color: #3b82f6; background: #3b82f610; border: 1px solid #3b82f620"
+                        style="color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 12%, transparent)"
                         onclick={() => {
                             const newId = eqStore.parametricFilters.length > 0 ? Math.max(...eqStore.parametricFilters.map(f => f.id)) + 1 : 1;
                             eqStore.parametricFilters = [...eqStore.parametricFilters, {
@@ -381,10 +381,10 @@
                 <div class="flex items-center gap-1.5">
                     {#if eqStore.customBandCount}
                         <input type="number" min="3" max="31" bind:value={eqStore.numGraphicBands}
-                            class="w-14 bg-[#121216] border border-[#1a1a24] rounded px-2 py-1 text-xs text-gray-200 text-center" />
+                            class="w-14 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded px-2 py-1 text-xs text-[var(--text-primary)] text-center" />
                         <button class="text-[9px] cursor-pointer" style="color: var(--text-muted)" onclick={() => eqStore.customBandCount = false}>Presets</button>
                     {:else}
-                        <select bind:value={eqStore.numGraphicBands} class="bg-[#121216] border border-[#1a1a24] rounded px-2 py-1 text-xs text-gray-200">
+                        <select bind:value={eqStore.numGraphicBands} class="bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded px-2 py-1 text-xs text-[var(--text-primary)]">
                             <option value={10}>1 oct (10)</option>
                             <option value={15}>2/3 oct (15)</option>
                             <option value={20}>1/2 oct (20)</option>
@@ -424,9 +424,9 @@
                             </span>
                             <input type="range" min="-12" max="12" step="0.5" bind:value={band.gain}
                                 ondblclick={() => band.gain = 0} title="Doble clic para 0dB"
-                                class="flex-1 h-1 bg-[#121216] rounded-lg appearance-none cursor-pointer accent-[#00ff88]" />
+                                class="flex-1 h-1 bg-[var(--bg-tertiary)] rounded-lg appearance-none cursor-pointer accent-[#00ff88]" />
                             <input type="number" bind:value={band.gain} min="-12" max="12" step="0.5"
-                                class="w-11 bg-[#121216] border border-[#1a1a24] rounded text-center text-[10px] font-mono text-gray-200 py-0.5" />
+                                class="w-11 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded text-center text-[10px] font-mono text-[var(--text-primary)] py-0.5" />
                         </div>
                     {/each}
                 </div>
@@ -445,7 +445,7 @@
                                     <span class="text-[9px]" style="color: var(--text-muted)">{filterTypeName(filter.type)}</span>
                                 </div>
                                 <div class="flex items-center gap-1">
-                                    <button class="cursor-pointer transition-colors" style="color: {filter.showConfig ? '#3b82f6' : 'var(--text-muted)'}"
+                                    <button class="cursor-pointer transition-colors" style="color: {filter.showConfig ? 'var(--accent)' : 'var(--text-muted)'}"
                                         onclick={() => filter.showConfig = !filter.showConfig}
                                         title="Configurar tipos disponibles">
                                         <span class="material-symbols-outlined text-[13px]">settings</span>
@@ -467,7 +467,7 @@
                                                 style="background: {filter.supportedTypes.includes(type) ? (filterTypeColors[type] || '#888') + '15' : 'transparent'}; color: {filter.supportedTypes.includes(type) ? filterTypeColors[type] || '#888' : 'var(--text-muted)'}; border: 1px solid {filter.supportedTypes.includes(type) ? (filterTypeColors[type] || '#888') + '30' : 'var(--border-primary)'}">
                                                 <input type="checkbox"
                                                     checked={filter.supportedTypes.includes(type)}
-                                                    class="accent-[#3b82f6] scale-75"
+                                                    class="accent-[var(--accent)] scale-75"
                                                     onchange={() => {
                                                         if (filter.supportedTypes.includes(type)) {
                                                             if (filter.supportedTypes.length > 1) {
@@ -503,12 +503,12 @@
                             <div class="flex gap-1 items-center">
                                 <span class="text-[8px] w-6 font-bold uppercase" style="color: var(--text-muted)">Hz</span>
                                 <input type="number" bind:value={filter.freq} min="20" max="20000"
-                                    class="w-16 bg-[#121216] border border-[#1a1a24] rounded px-1.5 py-0.5 text-[10px] font-mono text-white" />
+                                    class="w-16 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded px-1.5 py-0.5 text-[10px] font-mono text-[var(--text-primary)]" />
                                 <input type="range" min="0" max="1" step="0.001"
                                     value={(Math.log10(filter.freq || 20) - Math.log10(20)) / (Math.log10(20000) - Math.log10(20))}
                                     oninput={(e) => { const v = parseFloat(e.currentTarget.value); filter.freq = Math.round(Math.pow(10, Math.log10(20) + v * (Math.log10(20000) - Math.log10(20)))); }}
                                     ondblclick={() => filter.freq = 1000}
-                                    class="flex-1 h-1 bg-[#121216] rounded-lg appearance-none cursor-pointer accent-[#3b82f6]" />
+                                    class="flex-1 h-1 bg-[var(--bg-tertiary)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]" />
                             </div>
 
                             <!-- Gain (only for types with gain) -->
@@ -516,10 +516,10 @@
                                 <div class="flex gap-1 items-center">
                                     <span class="text-[8px] w-6 font-bold uppercase" style="color: var(--text-muted)">dB</span>
                                     <input type="number" bind:value={filter.gain} min="-15" max="15" step="0.5"
-                                        class="w-16 bg-[#121216] border border-[#1a1a24] rounded px-1.5 py-0.5 text-[10px] font-mono text-white" />
+                                        class="w-16 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded px-1.5 py-0.5 text-[10px] font-mono text-[var(--text-primary)]" />
                                     <input type="range" min="-15" max="15" step="0.5" bind:value={filter.gain}
                                         ondblclick={() => filter.gain = 0}
-                                        class="flex-1 h-1 bg-[#121216] rounded-lg appearance-none cursor-pointer accent-[#00ff88]" />
+                                        class="flex-1 h-1 bg-[var(--bg-tertiary)] rounded-lg appearance-none cursor-pointer accent-[#00ff88]" />
                                 </div>
                             {/if}
 
@@ -528,11 +528,11 @@
                                 <span class="text-[8px] w-6 font-bold uppercase" style="color: var(--text-muted)">Q</span>
                                 <input type="number" bind:value={filter.q} min="0.1" max="10" step="0.1"
                                     disabled={['lowpass', 'highpass'].includes(filter.type)}
-                                    class="w-16 bg-[#121216] border border-[#1a1a24] rounded px-1.5 py-0.5 text-[10px] font-mono text-white disabled:opacity-30" />
+                                    class="w-16 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded px-1.5 py-0.5 text-[10px] font-mono text-[var(--text-primary)] disabled:opacity-30" />
                                 <input type="range" min="0.1" max="10" step="0.1" bind:value={filter.q}
                                     disabled={['lowpass', 'highpass'].includes(filter.type)}
                                     ondblclick={() => filter.q = 1.0}
-                                    class="flex-1 h-1 bg-[#121216] rounded-lg appearance-none cursor-pointer accent-[#3b82f6] disabled:opacity-30" />
+                                    class="flex-1 h-1 bg-[var(--bg-tertiary)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)] disabled:opacity-30" />
                             </div>
                         </div>
                     {/each}
@@ -556,7 +556,7 @@
             <div class="flex gap-1">
                 {#each [{ value: 'live', label: 'Medición', icon: 'mic' }, { value: 'snapshot', label: 'Instantáneas', icon: 'camera' }, { value: 'calculated', label: 'Capas', icon: 'layers' }] as source}
                     <button class="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded text-[9px] font-semibold transition-all cursor-pointer"
-                        style="background: {eqStore.autoEQSourceType === source.value ? '#3b82f610' : 'transparent'}; color: {eqStore.autoEQSourceType === source.value ? '#3b82f6' : 'var(--text-muted)'}; border: 1px solid {eqStore.autoEQSourceType === source.value ? '#3b82f630' : 'var(--border-primary)'}"
+                        style="background: {eqStore.autoEQSourceType === source.value ? 'color-mix(in srgb, var(--accent) 6%, transparent)' : 'transparent'}; color: {eqStore.autoEQSourceType === source.value ? 'var(--accent)' : 'var(--text-muted)'}; border: 1px solid {eqStore.autoEQSourceType === source.value ? 'color-mix(in srgb, var(--accent) 19%, transparent)' : 'var(--border-primary)'}"
                         onclick={() => eqStore.autoEQSourceType = source.value as any}>
                         <span class="material-symbols-outlined text-[11px]">{source.icon}</span>
                         {source.label}
@@ -616,7 +616,7 @@
             <div class="flex gap-2">
                 <div class="flex-1 flex flex-col gap-0.5">
                     <label class="text-[8px] font-bold uppercase" style="color: var(--text-muted)">Dominio</label>
-                    <select bind:value={eqStore.autoEQCostDomain} class="w-full bg-[#121216] border border-[#1a1a24] rounded px-2 py-1 text-xs text-gray-200">
+                    <select bind:value={eqStore.autoEQCostDomain} class="w-full bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded px-2 py-1 text-xs text-[var(--text-primary)]">
                         <option value="dB">dB</option>
                         <option value="energy">Energía</option>
                     </select>
@@ -640,35 +640,35 @@
                     <div class="grid grid-cols-2 gap-2">
                         <div class="flex flex-col gap-0.5">
                             <label class="text-[8px]" style="color: var(--text-muted)">Max boost (dB)</label>
-                            <input type="number" min="0" max="18" step="1" bind:value={eqStore.autoEQMaxBoost} class="bg-[#121216] border border-[#1a1a24] rounded px-2 py-0.5 text-[10px] text-gray-200" />
+                            <input type="number" min="0" max="18" step="1" bind:value={eqStore.autoEQMaxBoost} class="bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded px-2 py-0.5 text-[10px] text-[var(--text-primary)]" />
                         </div>
                         <div class="flex flex-col gap-0.5">
                             <label class="text-[8px]" style="color: var(--text-muted)">Max cut (dB)</label>
-                            <input type="number" min="-30" max="0" step="1" bind:value={eqStore.autoEQMaxCut} class="bg-[#121216] border border-[#1a1a24] rounded px-2 py-0.5 text-[10px] text-gray-200" />
+                            <input type="number" min="-30" max="0" step="1" bind:value={eqStore.autoEQMaxCut} class="bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded px-2 py-0.5 text-[10px] text-[var(--text-primary)]" />
                         </div>
                         <div class="flex flex-col gap-0.5">
                             <label class="text-[8px]" style="color: var(--text-muted)">Min Q</label>
-                            <input type="number" min="0.1" max="2" step="0.1" bind:value={eqStore.autoEQMinQ} class="bg-[#121216] border border-[#1a1a24] rounded px-2 py-0.5 text-[10px] text-gray-200" />
+                            <input type="number" min="0.1" max="2" step="0.1" bind:value={eqStore.autoEQMinQ} class="bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded px-2 py-0.5 text-[10px] text-[var(--text-primary)]" />
                         </div>
                         <div class="flex flex-col gap-0.5">
                             <label class="text-[8px]" style="color: var(--text-muted)">Max Q</label>
-                            <input type="number" min="1" max="20" step="0.5" bind:value={eqStore.autoEQMaxQ} class="bg-[#121216] border border-[#1a1a24] rounded px-2 py-0.5 text-[10px] text-gray-200" />
+                            <input type="number" min="1" max="20" step="0.5" bind:value={eqStore.autoEQMaxQ} class="bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded px-2 py-0.5 text-[10px] text-[var(--text-primary)]" />
                         </div>
                         <div class="flex flex-col gap-0.5">
                             <label class="text-[8px]" style="color: var(--text-muted)">Coherencia mín</label>
-                            <input type="number" min="0" max="1" step="0.05" bind:value={eqStore.autoEQCoherenceThreshold} class="bg-[#121216] border border-[#1a1a24] rounded px-2 py-0.5 text-[10px] text-gray-200" />
+                            <input type="number" min="0" max="1" step="0.05" bind:value={eqStore.autoEQCoherenceThreshold} class="bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded px-2 py-0.5 text-[10px] text-[var(--text-primary)]" />
                         </div>
                         <div class="flex flex-col gap-0.5">
                             <label class="text-[8px]" style="color: var(--text-muted)">Iteraciones</label>
-                            <input type="number" min="50" max="1000" step="50" bind:value={eqStore.autoEQMaxIterations} class="bg-[#121216] border border-[#1a1a24] rounded px-2 py-0.5 text-[10px] text-gray-200" />
+                            <input type="number" min="50" max="1000" step="50" bind:value={eqStore.autoEQMaxIterations} class="bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded px-2 py-0.5 text-[10px] text-[var(--text-primary)]" />
                         </div>
                     </div>
                     <label class="flex items-center gap-2 text-[9px] cursor-pointer" style="color: var(--text-secondary)">
-                        <input type="checkbox" bind:checked={eqStore.autoEQTrebleAveraging} class="accent-[#3b82f6] w-3 h-3" />
+                        <input type="checkbox" bind:checked={eqStore.autoEQTrebleAveraging} class="accent-[var(--accent)] w-3 h-3" />
                         Treble averaging (>{eqStore.autoEQTrebleFreq}Hz)
                     </label>
                     <label class="flex items-center gap-2 text-[9px] cursor-pointer" style="color: var(--text-secondary)">
-                        <input type="checkbox" bind:checked={eqStore.autoEQOnlyCorrectPeaks} class="accent-[#3b82f6] w-3 h-3" />
+                        <input type="checkbox" bind:checked={eqStore.autoEQOnlyCorrectPeaks} class="accent-[var(--accent)] w-3 h-3" />
                         Solo corregir picos (no boost)
                     </label>
                 </div>
@@ -683,7 +683,7 @@
                     <span>{Math.round(eqStore.autoEQProgress.progress * 100)}%</span>
                 </div>
                 <div class="w-full h-1 rounded-full overflow-hidden" style="background: var(--bg-secondary)">
-                    <div class="h-full rounded-full transition-all" style="width: {eqStore.autoEQProgress.progress * 100}%; background: #3b82f6"></div>
+                    <div class="h-full rounded-full transition-all" style="width: {eqStore.autoEQProgress.progress * 100}%; background: var(--accent)"></div>
                 </div>
             </div>
         {/if}
@@ -720,7 +720,7 @@
                     <tbody>
                         {#each benchResults.results as entry, idx}
                             <tr class="border-b cursor-pointer hover:bg-white/5 transition-all"
-                                style="border-color: var(--border-primary); {eqStore.autoEQPreviewIndex === idx ? 'background: #3b82f610' : ''}"
+                                style="border-color: var(--border-primary); {eqStore.autoEQPreviewIndex === idx ? 'background: color-mix(in srgb, var(--accent) 6%, transparent)' : ''}"
                                 onclick={() => eqStore.autoEQPreviewIndex = idx}>
                                 <td class="py-1.5 font-semibold">
                                     {#if idx === 0}<span title="Recomendado">⭐</span>{/if}
@@ -728,7 +728,7 @@
                                 </td>
                                 <td class="text-right py-1.5 font-mono" style="color: {devColor(entry.metrics.rms)}">{entry.metrics.rms.toFixed(1)}</td>
                                 <td class="text-right py-1.5 font-mono">{entry.metrics.percentWithin3dB.toFixed(0)}%</td>
-                                <td class="text-right py-1.5 font-mono" style="color: {entry.improvement > 0 ? '#00ff88' : '#ff4444'}">
+                                <td class="text-right py-1.5 font-mono" style="color: {entry.improvement > 0 ? 'var(--accent-green)' : 'var(--accent-red)'}">
                                     {entry.improvement > 0 ? '+' : ''}{entry.improvement.toFixed(0)}%
                                 </td>
                                 <td class="text-right py-1.5 font-mono" style="color: var(--text-muted)">{formatTime(entry.result.timeMs)}</td>

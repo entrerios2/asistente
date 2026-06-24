@@ -480,7 +480,7 @@
                     >
                         {m}
                         {#if metricConfigs[m]?.smoothingPPO || metricConfigs[m]?.modeY || metricConfigs[m]?.invertY || metricConfigs[m]?.enableCoherence || metricConfigs[m]?.yShift}
-                            <span class="absolute -top-0.5 -right-0.5 w-[5px] h-[5px] rounded-full bg-[#3b82f6]" title="Tiene configuración personalizada"></span>
+                            <span class="absolute -top-0.5 -right-0.5 w-[5px] h-[5px] rounded-full bg-[var(--accent)]" title="Tiene configuración personalizada"></span>
                         {/if}
                     </button>
                 {/each}
@@ -499,12 +499,8 @@
     <!-- WATERMARK ID DEL CUADRANTE -->
     <span
         class="absolute bottom-2 right-3 text-[108px] font-black pointer-events-none select-none leading-none"
-        style="color: {uiStore.isDarkMode
-            ? 'rgba(255,255,255,0.08)'
-            : 'rgba(0,0,0,0.08)'};
-                 -webkit-text-stroke: 1.5px {uiStore.isDarkMode
-            ? 'rgba(255,255,255,0.15)'
-            : 'rgba(0,0,0,0.15)'};"
+        style="color: var(--canvas-watermark);
+                 -webkit-text-stroke: 1.5px var(--canvas-watermark-stroke);"
     >
         {id.replace(/[qQ]-?/g, "")}
     </span>
@@ -537,8 +533,8 @@
 <style>
     .quadrant-container {
         position: relative;
-        background: #060608;
-        border: 1px solid rgba(255, 255, 255, 0.04);
+        background: var(--canvas-bg);
+        border: 1px solid var(--canvas-grid);
         overflow: hidden;
         cursor: crosshair;
         width: 100%;
@@ -563,8 +559,8 @@
         left: 0;
         width: 100%;
         height: 38px;
-        background: #0c0c10;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        background: var(--bg-deep, #0c0c10);
+        border-bottom: 1px solid var(--canvas-grid);
         display: flex;
         align-items: center;
         justify-content: space-between;

@@ -60,6 +60,9 @@
             // UI preferences (v4)
             if (config.showAdvanced !== undefined) uiStore.showAdvanced = config.showAdvanced;
             if (config.showMinorGrid !== undefined) uiStore.showMinorGrid = config.showMinorGrid;
+            // Theme (v6)
+            if (config.palette) uiStore.setPalette(config.palette);
+            if (config.canvasTheme) uiStore.setCanvasTheme(config.canvasTheme);
             eqStore.loadFromConfig(config);
             targetTrace.loadFromConfig(config);
             calibrationStore.loadFromConfig(config);
@@ -135,6 +138,9 @@
             // UI preferences
             showAdvanced: uiStore.showAdvanced,
             showMinorGrid: uiStore.showMinorGrid,
+            // Theme (v6)
+            palette: uiStore.palette,
+            canvasTheme: uiStore.canvasTheme,
             ...eqStore.toConfig(),
             ...targetTrace.toConfig(),
             ...calibrationStore.toConfig(),

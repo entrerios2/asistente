@@ -52,6 +52,10 @@ export interface PersistedConfig {
     showMinorGrid?: boolean;
     globalMetricDefaults?: Record<string, unknown>;
 
+    // Theme (v6)
+    palette?: string;
+    canvasTheme?: 'auto' | 'dark' | 'light';
+
     // ─── v5: Nuevos campos ───
 
     // uiStore faltantes

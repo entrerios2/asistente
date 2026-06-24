@@ -9,6 +9,7 @@ import {
     type InteractionState
 } from '../canvasInteraction';
 import { type MetricConfig } from '../quadrantState';
+import { getCanvasTheme, CANVAS_FONT } from '../canvasTheme';
 
 export function drawGrid(
     ctx: CanvasRenderingContext2D,
@@ -18,28 +19,14 @@ export function drawGrid(
     activeMetrics: string[],
     metricConfigs: Record<string, MetricConfig>,
     state: InteractionState,
-    isDarkMode: boolean,
+    _isDarkMode: boolean,
     showMinorGrid: boolean = true
 ) {
-    const theme = isDarkMode ? {
-        gridLine: 'rgba(255, 255, 255, 0.04)',
-        gridLineMajor: 'rgba(255, 255, 255, 0.08)',
-        gridLineMinor: 'rgba(255, 255, 255, 0.025)',
-        axisLabel: 'rgba(255, 255, 255, 0.35)',
-        axisLine: '#333',
-        background: '#060608',
-    } : {
-        gridLine: 'rgba(0, 0, 0, 0.06)',
-        gridLineMajor: 'rgba(0, 0, 0, 0.12)',
-        gridLineMinor: 'rgba(0, 0, 0, 0.04)',
-        axisLabel: 'rgba(0, 0, 0, 0.55)',
-        axisLine: '#999',
-        background: '#f8f8fa',
-    };
+    const theme = getCanvasTheme();
 
-    ctx.strokeStyle = theme.gridLineMajor;
-    ctx.fillStyle = theme.axisLabel;
-    ctx.font = "9px monospace";
+    ctx.strokeStyle = theme.gridMajor;
+    ctx.fillStyle = theme.label;
+    ctx.font = CANVAS_FONT.label;
 
     // Vertical ticks (X axis)
     if (hasTimeDomainActive) {
@@ -56,7 +43,7 @@ export function drawGrid(
     } else {
         // Major decades: 100, 1k, 10k — prominent lines
         const majorFreqs = [100, 1000, 10000];
-        ctx.strokeStyle = theme.gridLineMajor;
+        ctx.strokeStyle = theme.gridMajor;
         majorFreqs.forEach((f) => {
             const x = valToX(f, width, hasTimeDomainActive, state);
             if (x >= 0 && x <= width) {
@@ -70,7 +57,7 @@ export function drawGrid(
         // Labels at standard positions
         const labelFreqs = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
         const majorSet = new Set([100, 1000, 10000]);
-        ctx.fillStyle = theme.axisLabel;
+        ctx.fillStyle = theme.label;
         labelFreqs.forEach((f) => {
             const x = valToX(f, width, hasTimeDomainActive, state);
             if (x >= 0 && x <= width) {
@@ -88,7 +75,7 @@ export function drawGrid(
         // Minor grid lines: all other frequencies — solid 1px
         if (showMinorGrid) {
             ctx.save();
-            ctx.strokeStyle = theme.gridLineMinor;
+            ctx.strokeStyle = theme.gridMinor;
             ctx.lineWidth = 1;
             const minorFreqs = [
                 20, 30, 40, 50, 60, 70, 80, 90,
@@ -164,7 +151,7 @@ export function drawGrid(
 
     // Grid radial para Nyquist
     if (mainMetric === "Nyquist") {
-        ctx.strokeStyle = theme.gridLineMajor;
+        ctx.strokeStyle = theme.gridMajor;
         const centerX = width / 2;
         const centerY = height / 2;
         const maxRad = Math.min(width, height) / 2 * 0.9;
@@ -218,7 +205,7 @@ export function drawGrid(
     // Eje Y Secundario (Historial de Tiempo para Espectrograma)
     if (activeMetrics.includes("Spectrogram") && !hasTimeDomainActive) {
         ctx.fillStyle = "#888";
-        ctx.font = "9px monospace";
+        ctx.font = CANVAS_FONT.label;
         const timeLabels = [
             { yPct: 1.0, text: "0s" },
             { yPct: 0.75, text: "-2.5s" },
@@ -252,7 +239,8 @@ export function drawCrosshair(
     getMetricValueInterpolated: (freq: number, dataArray: Float32Array) => number,
     getImpulseValueInterpolated: (timeMs: number, impulseArray: Float32Array) => number
 ) {
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+    const theme = getCanvasTheme();
+    ctx.strokeStyle = theme.crosshair;
     ctx.setLineDash([3, 3]);
     ctx.beginPath();
     ctx.moveTo(state.mouseX, 0);
@@ -288,8 +276,8 @@ export function drawCrosshair(
         }
     }
 
-    ctx.fillStyle = "rgba(8, 8, 12, 0.95)";
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+    ctx.fillStyle = theme.tooltipBg;
+    ctx.strokeStyle = theme.tooltipBorder;
 
     const labelWidth = 145;
     const labelHeight = 22 + numRows * 12;
@@ -304,13 +292,13 @@ export function drawCrosshair(
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = "#fff";
-    ctx.font = 'bold 8px "Outfit", sans-serif';
+    ctx.fillStyle = theme.tooltipText;
+    ctx.font = CANVAS_FONT.tooltipBold;
 
     if (hasTimeDomainActive) {
         ctx.fillText(`Tiempo: ${xVal.toFixed(2)} ms`, lx + 8, ly + 14);
-        ctx.fillStyle = "#9ca3af";
-        ctx.font = "8px monospace";
+        ctx.fillStyle = theme.tooltipText;
+        ctx.font = CANVAS_FONT.tooltip;
 
         let rowIdx = 0;
         if (activeMetrics.includes("Impulse")) {
@@ -332,7 +320,7 @@ export function drawCrosshair(
         }
     } else {
         ctx.fillText(`Frec: ${xVal.toFixed(1)} Hz`, lx + 8, ly + 14);
-        ctx.font = "8px monospace";
+        ctx.font = CANVAS_FONT.tooltip;
 
         let rowIdx = 0;
         if (activeMetrics.includes("Magnitude")) {

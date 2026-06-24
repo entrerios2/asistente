@@ -19,7 +19,7 @@
 <!-- Botón "+ Métrica" -->
 <div class="relative inline-block">
     <button
-        class="w-6 h-6 flex items-center justify-center rounded bg-[#3b82f6] border border-[#3b82f6] text-white hover:bg-[#2563eb] transition-all cursor-pointer text-sm font-bold"
+        class="w-6 h-6 flex items-center justify-center rounded bg-[var(--accent)] border border-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-all cursor-pointer text-sm font-bold"
         onclick={(e) => { e.stopPropagation(); showAddDropdown = !showAddDropdown; }}
         title="Agregar Métrica"
     >
@@ -40,7 +40,7 @@
                 {@const disabled = isMetricDisabled(m.name)}
                 <button
                     class="w-full text-left px-2 py-1 rounded-md text-[11px] font-medium flex items-center justify-between transition-colors
-                           {active ? 'bg-[#3b82f6]/10 text-[#3b82f6] cursor-default' : disabled ? 'text-gray-600 cursor-not-allowed opacity-50' : 'text-gray-300 hover:bg-[#161622] hover:text-[#fff]'}"
+                           {active ? 'bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] text-[var(--accent)] cursor-default' : disabled ? 'text-[var(--text-muted)] cursor-not-allowed opacity-50' : 'text-[var(--text-primary)] hover:bg-[#161622] hover:text-[#fff]'}"
                     onclick={() => {
                         if (!active && !disabled) {
                             onToggleMetric(m.name);

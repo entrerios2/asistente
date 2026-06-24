@@ -2,9 +2,13 @@
  * UI Store: Estado reactivo para la interfaz de usuario y configuración global.
  */
 
+import { setCanvasDarkMode } from '$lib/dsp/canvasTheme';
+
 class UIStore {
     layout = $state('1x1'); // '1x1' | '1x2' | '2x1' | '2x2' | '3x1' | '3x2'
     themeMode = $state<'system' | 'light' | 'dark'>('dark');
+    palette = $state<string>('default');
+    canvasTheme = $state<'auto' | 'dark' | 'light'>('auto');
     showSidebar = $state(true);
     showAdvanced = $state(true);
     showMinorGrid = $state(true);
@@ -81,6 +85,8 @@ class UIStore {
             // Esperar a que se cargue la configuración de localStorage si existe
             setTimeout(() => {
                 this.applyTheme();
+                this.applyPalette();
+                this.applyCanvasTheme();
             }, 0);
         }
     }
@@ -98,6 +104,13 @@ class UIStore {
         return this.themeMode === 'dark';
     }
 
+    /** Resolved dark mode for the canvas (considering canvasTheme override) */
+    get isCanvasDark(): boolean {
+        if (this.canvasTheme === 'dark') return true;
+        if (this.canvasTheme === 'light') return false;
+        return this.isDarkMode; // auto → follow UI theme
+    }
+
     setThemeMode(mode: 'system' | 'light' | 'dark') {
         this.themeMode = mode;
         this.applyTheme();
@@ -106,7 +119,44 @@ class UIStore {
     applyTheme() {
         if (typeof document !== 'undefined') {
             document.documentElement.classList.toggle('dark', this.isDarkMode);
+            this._syncCanvasDarkMode();
         }
+    }
+
+    setPalette(name: string) {
+        this.palette = name;
+        this.applyPalette();
+    }
+
+    applyPalette() {
+        if (typeof document !== 'undefined') {
+            if (this.palette === 'default') {
+                document.documentElement.removeAttribute('data-palette');
+            } else {
+                document.documentElement.setAttribute('data-palette', this.palette);
+            }
+        }
+    }
+
+    setCanvasTheme(mode: 'auto' | 'dark' | 'light') {
+        this.canvasTheme = mode;
+        this.applyCanvasTheme();
+    }
+
+    applyCanvasTheme() {
+        if (typeof document !== 'undefined') {
+            if (this.canvasTheme === 'auto') {
+                document.documentElement.removeAttribute('data-canvas-theme');
+            } else {
+                document.documentElement.setAttribute('data-canvas-theme', this.canvasTheme);
+            }
+            this._syncCanvasDarkMode();
+        }
+    }
+
+    /** Sync the canvas 2D rendering theme with the resolved dark mode */
+    private _syncCanvasDarkMode() {
+        setCanvasDarkMode(this.isCanvasDark);
     }
 
     simulatedMagnitudeRequest = $state(0);

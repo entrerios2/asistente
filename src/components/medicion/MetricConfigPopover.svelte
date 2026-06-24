@@ -25,7 +25,7 @@
     <div class="fixed inset-0 z-[9998]" onclick={onClose}></div>
     
     <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-    <div class="fixed rounded-xl p-4 shadow-[0_10px_30px_#000000] z-[9999] min-w-[240px] max-w-[300px] max-h-[70vh] overflow-y-auto flex flex-col gap-3 select-none text-[11px] text-gray-200"
+    <div class="fixed rounded-xl p-4 shadow-[0_10px_30px_#000000] z-[9999] min-w-[240px] max-w-[300px] max-h-[70vh] overflow-y-auto flex flex-col gap-3 select-none text-[11px] text-[var(--text-primary)]"
          style="background: var(--bg-surface); border: 1px solid var(--border-primary);
                 top: {anchorRect ? anchorRect.top + 'px' : '60px'};
                 left: {anchorRect ? anchorRect.left + 'px' : '16px'};"
@@ -35,8 +35,8 @@
          onclick={(e) => e.stopPropagation()}
          onwheel={(e) => e.stopPropagation()}>
         <div class="flex items-center justify-between border-b pb-1.5 mb-1" style="border-color: var(--border-primary)">
-            <span class="font-bold text-[#3b82f6] uppercase tracking-wide">Config. {activeConfigMetric}</span>
-            <button onclick={onClose} class="text-gray-500 hover:text-gray-300">
+            <span class="font-bold text-[var(--accent)] uppercase tracking-wide">Config. {activeConfigMetric}</span>
+            <button onclick={onClose} class="text-[var(--text-muted)] hover:text-[var(--text-primary)]">
                 <span class="material-symbols-outlined text-xs">close</span>
             </button>
         </div>
@@ -44,8 +44,8 @@
         {#if activeConfigMetric === "Magnitude" || activeConfigMetric === "Spectrum" || activeConfigMetric === "Simulated Magnitude"}
             <!-- Modo Y -->
             <div class="flex flex-col gap-1">
-                <span class="text-gray-400 font-medium">Modo eje Y</span>
-                <select class="bg-[#121216] border border-[#222] rounded px-2 py-1 text-xs text-white focus:outline-none"
+                <span class="text-[var(--text-secondary)] font-medium">Modo eje Y</span>
+                <select class="bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded px-2 py-1 text-xs text-[var(--text-primary)] focus:outline-none"
                         bind:value={metricConfigs[activeConfigMetric].modeY}>
                     <option value="dB">dB</option>
                     <option value="Linear">Lineal</option>
@@ -55,16 +55,16 @@
             
             {#if metricConfigs[activeConfigMetric].modeY === "Impedance"}
                 <div class="flex flex-col gap-1">
-                    <span class="text-gray-400 font-medium">Resistencia sensor (Ω)</span>
-                    <input type="number" class="bg-[#121216] border border-[#222] rounded px-2 py-1 text-xs text-white"
+                    <span class="text-[var(--text-secondary)] font-medium">Resistencia sensor (Ω)</span>
+                    <input type="number" class="bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded px-2 py-1 text-xs text-[var(--text-primary)]"
                            bind:value={metricConfigs[activeConfigMetric].sensorResistance} />
                 </div>
             {/if}
             
             <!-- Suavizado PPO -->
             <div class="flex flex-col gap-1">
-                <span class="text-gray-400 font-medium">Suavizado PPO (1/oct)</span>
-                <select class="bg-[#121216] border border-[#222] rounded px-2 py-1 text-xs text-white focus:outline-none"
+                <span class="text-[var(--text-secondary)] font-medium">Suavizado PPO (1/oct)</span>
+                <select class="bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded px-2 py-1 text-xs text-[var(--text-primary)] focus:outline-none"
                         bind:value={metricConfigs[activeConfigMetric].smoothingPPO}>
                     <option value="1">1/1 octava</option>
                     <option value="3">1/3 octava</option>
@@ -78,11 +78,11 @@
             <!-- 🔧 AVANZADO: Invertir Y / Activar coherencia -->
             {#if uiStore.showAdvanced}
                 <div class="flex flex-col gap-1.5 py-1">
-                    <label class="flex items-center gap-2 cursor-pointer text-gray-300">
+                    <label class="flex items-center gap-2 cursor-pointer text-[var(--text-primary)]">
                         <input type="checkbox" bind:checked={metricConfigs[activeConfigMetric].invertY} />
                         <span>Invertir eje Y</span>
                     </label>
-                    <label class="flex items-center gap-2 cursor-pointer text-gray-300">
+                    <label class="flex items-center gap-2 cursor-pointer text-[var(--text-primary)]">
                         <input type="checkbox" bind:checked={metricConfigs[activeConfigMetric].enableCoherence} />
                         <span>Activar coherencia</span>
                     </label>
@@ -92,8 +92,8 @@
             {#if metricConfigs[activeConfigMetric].enableCoherence}
                 <div class="flex flex-col gap-2">
                     <div class="flex flex-col gap-1">
-                        <span class="text-gray-400 font-medium">Modo coherencia</span>
-                        <select class="bg-[#121216] border border-[#222] rounded px-2 py-1 text-xs text-white focus:outline-none"
+                        <span class="text-[var(--text-secondary)] font-medium">Modo coherencia</span>
+                        <select class="bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded px-2 py-1 text-xs text-[var(--text-primary)] focus:outline-none"
                                 bind:value={metricConfigs[activeConfigMetric].coherenceMode}>
                             <option value="attenuate">Atenuar (transparente)</option>
                             <option value="color">Cambiar color</option>
@@ -101,13 +101,13 @@
                     </div>
                     {#if metricConfigs[activeConfigMetric].coherenceMode === 'color'}
                         <div class="flex items-center justify-between">
-                            <span class="text-gray-400">Color bajo umbral</span>
+                            <span class="text-[var(--text-secondary)]">Color bajo umbral</span>
                             <input type="color" bind:value={metricConfigs[activeConfigMetric].coherenceColor} class="w-6 h-6 border-none cursor-pointer rounded bg-transparent" />
                         </div>
                     {/if}
                     <div class="flex flex-col gap-1">
-                        <span class="text-gray-400 font-medium">Umbral coherencia ({metricConfigs[activeConfigMetric].coherenceThreshold})</span>
-                        <input type="range" min="0" max="1" step="0.05" class="accent-[#3b82f6]"
+                        <span class="text-[var(--text-secondary)] font-medium">Umbral coherencia ({metricConfigs[activeConfigMetric].coherenceThreshold})</span>
+                        <input type="range" min="0" max="1" step="0.05" class="accent-[var(--accent)]"
                                bind:value={metricConfigs[activeConfigMetric].coherenceThreshold} />
                     </div>
                 </div>
@@ -116,8 +116,8 @@
             <!-- 🔧 AVANZADO: Desplazamiento Y -->
             {#if uiStore.showAdvanced}
                 <div class="flex flex-col gap-1">
-                    <span class="text-gray-400 font-medium">Desplazamiento eje Y ({metricConfigs[activeConfigMetric].yShift}px)</span>
-                    <input type="range" min="-300" max="300" step="5" class="accent-[#3b82f6]"
+                    <span class="text-[var(--text-secondary)] font-medium">Desplazamiento eje Y ({metricConfigs[activeConfigMetric].yShift}px)</span>
+                    <input type="range" min="-300" max="300" step="5" class="accent-[var(--accent)]"
                            bind:value={metricConfigs[activeConfigMetric].yShift} />
                 </div>
             {/if}
@@ -126,8 +126,8 @@
         {#if activeConfigMetric === "Phase"}
             <!-- Envoltura -->
             <div class="flex flex-col gap-1">
-                <span class="text-gray-400 font-medium">Rango / envoltura</span>
-                <select class="bg-[#121216] border border-[#222] rounded px-2 py-1 text-xs text-white focus:outline-none"
+                <span class="text-[var(--text-secondary)] font-medium">Rango / envoltura</span>
+                <select class="bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded px-2 py-1 text-xs text-[var(--text-primary)] focus:outline-none"
                         bind:value={metricConfigs["Phase"].unwrapMode}>
                     <option value="±180">±180º</option>
                     <option value="360">0..360º</option>
@@ -138,20 +138,20 @@
             <!-- 🔧 AVANZADO: Rotación de fase -->
             {#if uiStore.showAdvanced}
                 <div class="flex flex-col gap-1">
-                    <span class="text-gray-400 font-medium">Ángulo de rotación ({metricConfigs["Phase"].rotate}º)</span>
-                    <input type="range" min="-360" max="360" step="5" class="accent-[#3b82f6]"
+                    <span class="text-[var(--text-secondary)] font-medium">Ángulo de rotación ({metricConfigs["Phase"].rotate}º)</span>
+                    <input type="range" min="-360" max="360" step="5" class="accent-[var(--accent)]"
                            bind:value={metricConfigs["Phase"].rotate} />
                 </div>
                 
                 <div class="flex flex-col gap-1">
-                    <span class="text-gray-400 font-medium">Rango angular ({metricConfigs["Phase"].range}º)</span>
-                    <input type="range" min="90" max="720" step="30" class="accent-[#3b82f6]"
+                    <span class="text-[var(--text-secondary)] font-medium">Rango angular ({metricConfigs["Phase"].range}º)</span>
+                    <input type="range" min="90" max="720" step="30" class="accent-[var(--accent)]"
                            bind:value={metricConfigs["Phase"].range} />
                 </div>
                 
                 <div class="flex flex-col gap-1">
-                    <span class="text-gray-400 font-medium">Desplazamiento eje Y ({metricConfigs["Phase"].yShift}px)</span>
-                    <input type="range" min="-300" max="300" step="5" class="accent-[#3b82f6]"
+                    <span class="text-[var(--text-secondary)] font-medium">Desplazamiento eje Y ({metricConfigs["Phase"].yShift}px)</span>
+                    <input type="range" min="-300" max="300" step="5" class="accent-[var(--accent)]"
                            bind:value={metricConfigs["Phase"].yShift} />
                 </div>
             {/if}
@@ -160,8 +160,8 @@
         {#if activeConfigMetric === "Coherence"}
             <!-- Tipo de coherencia -->
             <div class="flex flex-col gap-1">
-                <span class="text-gray-400 font-medium">Tipo de coherencia</span>
-                <select class="bg-[#121216] border border-[#222] rounded px-2 py-1 text-xs text-white focus:outline-none"
+                <span class="text-[var(--text-secondary)] font-medium">Tipo de coherencia</span>
+                <select class="bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded px-2 py-1 text-xs text-[var(--text-primary)] focus:outline-none"
                         bind:value={metricConfigs["Coherence"].cohType}>
                     <option value="normal">Normal</option>
                     <option value="squared">Al cuadrado (r²)</option>
@@ -171,11 +171,11 @@
             
             <!-- Mostrar curva y fondo -->
             <div class="flex flex-col gap-1.5 py-1">
-                <label class="flex items-center gap-2 cursor-pointer text-gray-300">
+                <label class="flex items-center gap-2 cursor-pointer text-[var(--text-primary)]">
                     <input type="checkbox" bind:checked={metricConfigs["Coherence"].showLine} />
                     <span>Mostrar curva</span>
                 </label>
-                <label class="flex items-center gap-2 cursor-pointer text-gray-300">
+                <label class="flex items-center gap-2 cursor-pointer text-[var(--text-primary)]">
                     <input type="checkbox" bind:checked={metricConfigs["Coherence"].showBackground} />
                     <span>Mostrar fondo</span>
                 </label>
@@ -183,8 +183,8 @@
             
             {#if metricConfigs["Coherence"].showBackground}
                 <div class="flex flex-col gap-1">
-                    <span class="text-gray-400 font-medium">Paleta de fondo</span>
-                    <select class="bg-[#121216] border border-[#222] rounded px-2 py-1 text-xs text-white focus:outline-none"
+                    <span class="text-[var(--text-secondary)] font-medium">Paleta de fondo</span>
+                    <select class="bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded px-2 py-1 text-xs text-[var(--text-primary)] focus:outline-none"
                             bind:value={metricConfigs["Coherence"].bgPalette}>
                         <option value="RedTransparent">Rojo → Transparente</option>
                         <option value="Magma">Magma</option>
@@ -197,7 +197,7 @@
             
             <!-- Línea de umbral -->
             <div class="flex flex-col gap-1.5 py-1">
-                <label class="flex items-center gap-2 cursor-pointer text-gray-300">
+                <label class="flex items-center gap-2 cursor-pointer text-[var(--text-primary)]">
                     <input type="checkbox" bind:checked={metricConfigs["Coherence"].showThresholdLine} />
                     <span>Mostrar línea de umbral</span>
                 </label>
@@ -206,11 +206,11 @@
             {#if metricConfigs["Coherence"].showThresholdLine}
                 <div class="flex flex-col gap-2">
                     <div class="flex items-center justify-between">
-                        <span class="text-gray-400">Color umbral</span>
+                        <span class="text-[var(--text-secondary)]">Color umbral</span>
                         <input type="color" bind:value={metricConfigs["Coherence"].thresholdColor} class="w-6 h-6 border-none cursor-pointer rounded bg-transparent" />
                     </div>
                     <div class="flex flex-col gap-1">
-                        <span class="text-gray-400 font-medium">Valor umbral ({metricConfigs["Coherence"].thresholdValue})</span>
+                        <span class="text-[var(--text-secondary)] font-medium">Valor umbral ({metricConfigs["Coherence"].thresholdValue})</span>
                         <input type="range" min="0.05" max="0.95" step="0.05" class="accent-[#eab308]"
                                bind:value={metricConfigs["Coherence"].thresholdValue} />
                     </div>
@@ -220,8 +220,8 @@
             <!-- 🔧 AVANZADO: Desplazamiento Y -->
             {#if uiStore.showAdvanced}
                 <div class="flex flex-col gap-1">
-                    <span class="text-gray-400 font-medium">Desplazamiento eje Y ({metricConfigs["Coherence"].yShift}px)</span>
-                    <input type="range" min="-300" max="300" step="5" class="accent-[#3b82f6]"
+                    <span class="text-[var(--text-secondary)] font-medium">Desplazamiento eje Y ({metricConfigs["Coherence"].yShift}px)</span>
+                    <input type="range" min="-300" max="300" step="5" class="accent-[var(--accent)]"
                            bind:value={metricConfigs["Coherence"].yShift} />
                 </div>
             {/if}
@@ -229,8 +229,8 @@
         
         {#if activeConfigMetric === "Spectrogram"}
             <div class="flex flex-col gap-1">
-                <span class="text-gray-400 font-medium">Paleta de colores</span>
-                <select class="bg-[#121216] border border-[#222] rounded px-2 py-1 text-xs text-white focus:outline-none"
+                <span class="text-[var(--text-secondary)] font-medium">Paleta de colores</span>
+                <select class="bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded px-2 py-1 text-xs text-[var(--text-primary)] focus:outline-none"
                         bind:value={metricConfigs["Spectrogram"].palette}>
                     <option value="Magma">Magma</option>
                     <option value="Jet">Jet (arcoíris)</option>
@@ -242,8 +242,8 @@
 
         {#if activeConfigMetric === "Impulse"}
             <div class="flex flex-col gap-1">
-                <span class="text-gray-400 font-medium">Configuración de impulso</span>
-                <label class="flex items-center gap-2 cursor-pointer text-gray-300 py-1">
+                <span class="text-[var(--text-secondary)] font-medium">Configuración de impulso</span>
+                <label class="flex items-center gap-2 cursor-pointer text-[var(--text-primary)] py-1">
                     <input type="checkbox" 
                            checked={metricConfigs["Impulse"]?.modeY === 'ETC'}
                            onchange={(e) => {
@@ -260,7 +260,7 @@
         <!-- Editor de estilos de curva -->
         {#if activeConfigMetric && metricStyles[activeConfigMetric]}
             <div class="border-t pt-2 mt-1 flex flex-col gap-2" style="border-color: var(--border-primary)">
-                <span class="text-gray-400 font-bold uppercase tracking-wider text-[8px]">Estilo de curva</span>
+                <span class="text-[var(--text-secondary)] font-bold uppercase tracking-wider text-[8px]">Estilo de curva</span>
                 
                 <!-- Color -->
                 <div class="flex items-center justify-between">
@@ -275,22 +275,22 @@
                             <span>Grosor</span>
                             <span class="font-mono">{metricStyles[activeConfigMetric].lineWidth}px</span>
                         </div>
-                        <input type="range" min="1" max="5" step="0.2" class="accent-[#3b82f6]"
+                        <input type="range" min="1" max="5" step="0.2" class="accent-[var(--accent)]"
                                bind:value={metricStyles[activeConfigMetric].lineWidth} />
                     </div>
 
                     <div class="flex flex-col gap-1">
                         <span>Estilo de línea</span>
                         <div class="flex gap-1">
-                            <button class="flex-1 py-1 text-center border rounded text-[9px] cursor-pointer {metricStyles[activeConfigMetric].lineDash.length === 0 ? 'bg-[#3b82f6]/10 border-[#3b82f6] text-[#3b82f6]' : 'bg-[#121216] border-[#222]'}"
+                            <button class="flex-1 py-1 text-center border rounded text-[9px] cursor-pointer {metricStyles[activeConfigMetric].lineDash.length === 0 ? 'bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] border-[var(--accent)] text-[var(--accent)]' : 'bg-[var(--bg-tertiary)] border-[var(--border-primary)]'}"
                                     onclick={() => metricStyles[activeConfigMetric!].lineDash = []}>
                                 Sólido
                             </button>
-                            <button class="flex-1 py-1 text-center border rounded text-[9px] cursor-pointer {metricStyles[activeConfigMetric].lineDash.join(',') === '8,4' ? 'bg-[#3b82f6]/10 border-[#3b82f6] text-[#3b82f6]' : 'bg-[#121216] border-[#222]'}"
+                            <button class="flex-1 py-1 text-center border rounded text-[9px] cursor-pointer {metricStyles[activeConfigMetric].lineDash.join(',') === '8,4' ? 'bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] border-[var(--accent)] text-[var(--accent)]' : 'bg-[var(--bg-tertiary)] border-[var(--border-primary)]'}"
                                     onclick={() => metricStyles[activeConfigMetric!].lineDash = [8, 4]}>
                                 Dashed
                             </button>
-                            <button class="flex-1 py-1 text-center border rounded text-[9px] cursor-pointer {metricStyles[activeConfigMetric].lineDash.join(',') === '2,3' ? 'bg-[#3b82f6]/10 border-[#3b82f6] text-[#3b82f6]' : 'bg-[#121216] border-[#222]'}"
+                            <button class="flex-1 py-1 text-center border rounded text-[9px] cursor-pointer {metricStyles[activeConfigMetric].lineDash.join(',') === '2,3' ? 'bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] border-[var(--accent)] text-[var(--accent)]' : 'bg-[var(--bg-tertiary)] border-[var(--border-primary)]'}"
                                     onclick={() => metricStyles[activeConfigMetric!].lineDash = [2, 3]}>
                                 Dotted
                             </button>
@@ -302,9 +302,9 @@
 
         <!-- Toggle visibilidad -->
         <div class="flex items-center justify-between mt-2 pt-2 border-t" style="border-color: var(--border-primary)">
-            <span class="text-[10px] text-gray-400">Visible en gráfico</span>
+            <span class="text-[10px] text-[var(--text-secondary)]">Visible en gráfico</span>
             <button
-                class="w-8 h-4 rounded-full transition-all cursor-pointer {metricConfigs[activeConfigMetric!]?.hidden ? 'bg-gray-700' : 'bg-[#3b82f6]'}"
+                class="w-8 h-4 rounded-full transition-all cursor-pointer {metricConfigs[activeConfigMetric!]?.hidden ? 'bg-[var(--bg-elevated)]' : 'bg-[var(--accent)]'}"
                 onclick={() => {
                     if (!metricConfigs[activeConfigMetric!]) metricConfigs[activeConfigMetric!] = {};
                     metricConfigs[activeConfigMetric!].hidden = !metricConfigs[activeConfigMetric!].hidden;
