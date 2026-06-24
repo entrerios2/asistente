@@ -142,7 +142,9 @@ export function valToY(
     const range = max - min;
     const normalized = (val - min) / range;
     const base = height - normalized * height;
-    return base * state.zoomY + state.offsetY;
+    // Scale around vertical center so 0dB stays centered
+    const center = height / 2;
+    return (base - center) * state.zoomY + center + state.offsetY;
 }
 
 export function yToVal(
@@ -151,7 +153,7 @@ export function yToVal(
     metricType: string,
     state: InteractionState
 ): number {
-    const adjustedY = (y - state.offsetY) / state.zoomY;
+    const adjustedY = (y - state.offsetY - height / 2) / state.zoomY + height / 2;
     let min = dbMin,
         max = dbMax;
     if (metricType === "Spectrum") {
