@@ -1,10 +1,10 @@
 <script lang="ts">
     import { traceManager, UBICACION_COLORS, type Instantanea } from "$lib/stores/traceManager.svelte";
-    import { uiStore } from "$lib/stores/ui.svelte";
 
     let { statusText = $bindable("Listo para medir") } = $props();
 
-    let sortOrder = $state<'desc' | 'asc'>('desc');
+    let sortOrder = $state<'newest' | 'oldest' | 'name-az' | 'name-za'>('newest');
+    let groupBy = $state<'ubicacion' | 'posicion' | 'etiqueta' | 'none'>('none');
     let editingId = $state<string | null>(null);
     let editingName = $state("");
 
@@ -12,6 +12,9 @@
     let collapsedGroups = $state(new Set<string>());
     let confirmDeleteId = $state<string | null>(null);
     let confirmDeleteAll = $state(false);
+
+    // Delete dialog
+    let showDeleteDialog = $state(false);
 
     // Import dialog
     let pendingImportSnapshots = $state<Instantanea[] | null>(null);
@@ -45,21 +48,45 @@
         if (filterUbicacion) list = list.filter(s => s.tags?.ubicacion === filterUbicacion);
         if (filterPosicion) list = list.filter(s => s.tags?.posicion === filterPosicion);
         if (filterCustom) list = list.filter(s => s.tags?.custom?.includes(filterCustom));
-        return list.sort((a, b) => sortOrder === 'desc' ? b.timestamp - a.timestamp : a.timestamp - b.timestamp);
+        switch (sortOrder) {
+            case 'newest': return list.sort((a, b) => b.timestamp - a.timestamp);
+            case 'oldest': return list.sort((a, b) => a.timestamp - b.timestamp);
+            case 'name-az': return list.sort((a, b) => a.name.localeCompare(b.name));
+            case 'name-za': return list.sort((a, b) => b.name.localeCompare(a.name));
+            default: return list;
+        }
     });
 
-    // Group by ubicación
+    // Group by selected criterion
     let groupedSnapshots = $derived.by(() => {
         const groups = new Map<string, Instantanea[]>();
-        sortedSnapshots.forEach(s => {
-            const key = s.tags?.ubicacion || 'Sin clasificar';
-            if (!groups.has(key)) groups.set(key, []);
-            groups.get(key)!.push(s);
-        });
+        if (groupBy === 'none') {
+            groups.set('Todas', sortedSnapshots);
+        } else {
+            sortedSnapshots.forEach(s => {
+                let key: string;
+                switch (groupBy) {
+                    case 'ubicacion': key = s.tags?.ubicacion || 'Sin clasificar'; break;
+                    case 'posicion': key = s.tags?.posicion || 'Sin clasificar'; break;
+                    case 'etiqueta':
+                        if (s.tags?.custom?.length) {
+                            s.tags.custom.forEach(t => {
+                                if (!groups.has(t)) groups.set(t, []);
+                                groups.get(t)!.push(s);
+                            });
+                            return; // already added
+                        }
+                        key = 'Sin etiqueta';
+                        break;
+                    default: key = 'Todas';
+                }
+                if (!groups.has(key)) groups.set(key, []);
+                groups.get(key)!.push(s);
+            });
+        }
         return groups;
     });
 
-    let hasAnyFilters = $derived(availableUbicaciones.length > 0 || availablePosiciones.length > 0 || availableCustomTags.length > 0);
     let visibleCount = $derived(traceManager.instantaneas.filter(s => s.visible).length);
 
     function toggleGroup(key: string) {
@@ -114,14 +141,29 @@
     }
 
     function requestDeleteAll() {
-        if (confirmDeleteAll) {
-            const ids = traceManager.instantaneas.map(s => s.id);
-            ids.forEach(id => traceManager.deleteInstantanea(id));
-            confirmDeleteAll = false;
+        const hasActiveFilters = filterUbicacion || filterPosicion || filterCustom;
+        if (hasActiveFilters && sortedSnapshots.length < traceManager.instantaneas.length) {
+            showDeleteDialog = true;
         } else {
-            confirmDeleteAll = true;
-            setTimeout(() => { confirmDeleteAll = false; }, 3000);
+            if (confirmDeleteAll) {
+                const ids = traceManager.instantaneas.map(s => s.id);
+                ids.forEach(id => traceManager.deleteInstantanea(id));
+                confirmDeleteAll = false;
+            } else {
+                confirmDeleteAll = true;
+                setTimeout(() => { confirmDeleteAll = false; }, 3000);
+            }
         }
+    }
+
+    function deleteFiltered() {
+        sortedSnapshots.forEach(s => traceManager.deleteInstantanea(s.id));
+        showDeleteDialog = false;
+    }
+
+    function deleteAll() {
+        traceManager.instantaneas.map(s => s.id).forEach(id => traceManager.deleteInstantanea(id));
+        showDeleteDialog = false;
     }
 
     // --- Tag editing ---
@@ -239,95 +281,67 @@
             onclick={captureActiveLive}
         >
             <span class="material-symbols-outlined text-sm">photo_camera</span>
-            Capturar instantánea
+            Capturar
         </button>
-
-        <!-- 🔧 AVANZADO: Métricas a capturar -->
-        {#if uiStore.showAdvanced}
-            <div class="flex flex-col gap-2 bg-[#121216]/40 border border-[#1a1a24]/30 rounded-lg p-3 select-none">
-                <div class="flex items-center gap-1.5">
-                    <span class="material-symbols-outlined text-[12px] text-gray-600">tune</span>
-                    <span class="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Métricas a capturar:</span>
-                </div>
-                <div class="grid grid-cols-2 gap-2 mt-1">
-                    {#each Object.keys(traceManager.metricsToCapture) as metric}
-                        <label class="flex items-center gap-1.5 text-[10px] text-gray-300 cursor-pointer">
-                            <input type="checkbox" bind:checked={traceManager.metricsToCapture[metric]} class="accent-[#3b82f6] scale-90" />
-                            <span>{metric === 'GroupDelay' ? 'Group Delay' : metric}</span>
-                        </label>
-                    {/each}
-                </div>
-            </div>
-        {/if}
-
-        <!-- 🔧 AVANZADO: Guardar / Abrir + Ordenación -->
-        {#if uiStore.showAdvanced}
-            <div class="flex items-center gap-2">
-                <input type="file" accept=".snapshots.json,.snapshot.json" class="hidden" id="open-snap-input"
-                    onchange={handleOpenFile}
-                />
-                <button
-                    class="flex-1 bg-[#0d0d14] border border-[#2a2a3a] hover:border-gray-500 text-gray-400 hover:text-white rounded-lg py-1.5 text-[10px] font-semibold text-center cursor-pointer transition-all flex items-center justify-center gap-1 min-h-[28px]"
-                    onclick={() => {
-                        const hasActiveFilters = filterUbicacion || filterPosicion || filterCustom;
-                        if (hasActiveFilters && sortedSnapshots.length < traceManager.instantaneas.length) {
-                            showExportDialog = true;
-                        } else {
-                            traceManager.exportAllInstantaneas();
-                        }
-                    }}
-                    disabled={traceManager.instantaneas.length === 0}
-                >
-                    <span class="material-symbols-outlined text-sm">save</span>
-                    Guardar
-                </button>
-                <label for="open-snap-input"
-                    class="flex-1 bg-[#0d0d14] border border-[#2a2a3a] hover:border-gray-500 text-gray-400 hover:text-white rounded-lg py-1.5 text-[10px] font-semibold text-center cursor-pointer transition-all flex items-center justify-center gap-1 min-h-[28px]">
-                    <span class="material-symbols-outlined text-sm">folder_open</span>
-                    Abrir
-                </label>
-                <div class="flex bg-[#0d0d14] p-0.5 rounded-md border border-[#2a2a3a]/40">
-                    <button class="px-2 py-1 text-[9px] font-semibold rounded transition-all cursor-pointer min-h-[24px]
-                                   {sortOrder === 'desc' ? 'bg-[#3b82f6] text-white shadow' : 'text-gray-400 hover:text-gray-200'}"
-                        onclick={() => (sortOrder = "desc")}>Recientes</button>
-                    <button class="px-2 py-1 text-[9px] font-semibold rounded transition-all cursor-pointer min-h-[24px]
-                                   {sortOrder === 'asc' ? 'bg-[#3b82f6] text-white shadow' : 'text-gray-400 hover:text-gray-200'}"
-                        onclick={() => (sortOrder = "asc")}>Antiguos</button>
-                </div>
-            </div>
-        {/if}
     </div>
 
-    <!-- Filtros de tags -->
-    {#if hasAnyFilters}
-        <div class="flex flex-wrap gap-1.5">
-            {#if availableUbicaciones.length > 0}
-                <select class="bg-[#0d0d14] border border-[#2a2a3a] rounded-md px-2 py-1 text-[9px] text-gray-400 focus:outline-none focus:border-[#3b82f6] cursor-pointer min-h-[24px]"
-                    bind:value={filterUbicacion}>
-                    <option value="">Ubicación</option>
-                    {#each availableUbicaciones as ub}<option value={ub}>{ub}</option>{/each}
-                </select>
-            {/if}
-            {#if availablePosiciones.length > 0}
-                <select class="bg-[#0d0d14] border border-[#2a2a3a] rounded-md px-2 py-1 text-[9px] text-gray-400 focus:outline-none focus:border-[#3b82f6] cursor-pointer min-h-[24px]"
-                    bind:value={filterPosicion}>
-                    <option value="">Posición</option>
-                    {#each availablePosiciones as pos}<option value={pos}>{pos}</option>{/each}
-                </select>
-            {/if}
-            {#if availableCustomTags.length > 0}
-                <select class="bg-[#0d0d14] border border-[#2a2a3a] rounded-md px-2 py-1 text-[9px] text-gray-400 focus:outline-none focus:border-[#3b82f6] cursor-pointer min-h-[24px]"
-                    bind:value={filterCustom}>
-                    <option value="">Etiqueta</option>
-                    {#each availableCustomTags as tag}<option value={tag}>{tag}</option>{/each}
-                </select>
-            {/if}
-            {#if filterUbicacion || filterPosicion || filterCustom}
-                <button class="text-[9px] text-gray-500 hover:text-gray-300 cursor-pointer transition-colors px-1"
-                    onclick={() => { filterUbicacion = ''; filterPosicion = ''; filterCustom = ''; }}>Limpiar</button>
-            {/if}
+    <!-- Filtros + Sort/Group -->
+    <div class="flex flex-wrap gap-1.5 items-center">
+        {#if availableUbicaciones.length > 0}
+            <select class="bg-[#0d0d14] border border-[#2a2a3a] rounded-md px-2 py-1 text-[9px] text-gray-300 focus:outline-none focus:border-[#3b82f6] cursor-pointer min-h-[24px]"
+                style="color-scheme: dark;"
+                bind:value={filterUbicacion}>
+                <option value="">Ubicación</option>
+                {#each availableUbicaciones as ub}<option value={ub}>{ub}</option>{/each}
+            </select>
+        {/if}
+        {#if availablePosiciones.length > 0}
+            <select class="bg-[#0d0d14] border border-[#2a2a3a] rounded-md px-2 py-1 text-[9px] text-gray-300 focus:outline-none focus:border-[#3b82f6] cursor-pointer min-h-[24px]"
+                style="color-scheme: dark;"
+                bind:value={filterPosicion}>
+                <option value="">Posición</option>
+                {#each availablePosiciones as pos}<option value={pos}>{pos}</option>{/each}
+            </select>
+        {/if}
+        {#if availableCustomTags.length > 0}
+            <select class="bg-[#0d0d14] border border-[#2a2a3a] rounded-md px-2 py-1 text-[9px] text-gray-300 focus:outline-none focus:border-[#3b82f6] cursor-pointer min-h-[24px]"
+                style="color-scheme: dark;"
+                bind:value={filterCustom}>
+                <option value="">Etiqueta</option>
+                {#each availableCustomTags as tag}<option value={tag}>{tag}</option>{/each}
+            </select>
+        {/if}
+        {#if filterUbicacion || filterPosicion || filterCustom}
+            <button class="text-[9px] text-gray-500 hover:text-gray-300 cursor-pointer transition-colors px-1"
+                onclick={() => { filterUbicacion = ''; filterPosicion = ''; filterCustom = ''; }}>Limpiar</button>
+        {/if}
+        <!-- Spacer -->
+        <div class="flex-1"></div>
+        <!-- Sort icon-only -->
+        <div class="relative flex items-center justify-center w-6 h-6 rounded hover:bg-white/5 transition-all" title="Ordenar">
+            <span class="material-symbols-outlined text-[14px] text-gray-500 pointer-events-none">sort</span>
+            <select class="absolute inset-0 opacity-0 cursor-pointer text-[9px]"
+                style="color-scheme: dark;"
+                bind:value={sortOrder}>
+                <option value="newest">⬇ Recientes</option>
+                <option value="oldest">⬆ Antiguos</option>
+                <option value="name-az">A→Z</option>
+                <option value="name-za">Z→A</option>
+            </select>
         </div>
-    {/if}
+        <!-- Group icon-only -->
+        <div class="relative flex items-center justify-center w-6 h-6 rounded hover:bg-white/5 transition-all" title="Agrupar">
+            <span class="material-symbols-outlined text-[14px] text-gray-500 pointer-events-none">workspaces</span>
+            <select class="absolute inset-0 opacity-0 cursor-pointer text-[9px]"
+                style="color-scheme: dark;"
+                bind:value={groupBy}>
+                <option value="ubicacion">Ubicación</option>
+                <option value="posicion">Posición</option>
+                <option value="etiqueta">Etiqueta</option>
+                <option value="none">Sin agrupar</option>
+            </select>
+        </div>
+    </div>
 
     <!-- Lista agrupada por ubicación -->
     <div class="flex-1 flex flex-col gap-0.5 min-h-0 overflow-y-auto pr-0.5">
@@ -519,21 +533,78 @@
         {/if}
     </div>
 
-    <!-- Footer de resumen -->
-    {#if sortedSnapshots.length > 0}
-        <div class="flex items-center justify-between pt-2 border-t border-[#2a2a3a]/30 flex-shrink-0">
-            <span class="text-[9px] text-gray-500">
-                {sortedSnapshots.length} instantánea{sortedSnapshots.length !== 1 ? 's' : ''} · {visibleCount} visible{visibleCount !== 1 ? 's' : ''}
-            </span>
-            <button class="text-[9px] font-semibold cursor-pointer transition-all min-h-[20px] px-2 py-0.5 rounded
-                           {confirmDeleteAll
-                                ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-                                : 'text-gray-600 hover:text-red-400'}"
-                onclick={requestDeleteAll}>
-                {confirmDeleteAll ? '¿Seguro? Clic para confirmar' : 'Borrar todo'}
+    <!-- Footer -->
+    <div class="flex items-center justify-between pt-2 border-t border-[#2a2a3a]/30 flex-shrink-0 gap-1">
+        <span class="text-[9px] text-gray-500 flex-shrink-0">
+            {sortedSnapshots.length}{sortedSnapshots.length !== traceManager.instantaneas.length ? `/${traceManager.instantaneas.length}` : ''}
+            · {visibleCount} vis
+        </span>
+        <div class="flex items-center gap-1">
+            <input type="file" accept=".snapshots.json,.snapshot.json" class="hidden" id="open-snap-input"
+                onchange={handleOpenFile}
+            />
+            <button
+                class="flex items-center justify-center w-6 h-6 rounded text-gray-600 hover:text-white hover:bg-white/5 cursor-pointer transition-all"
+                title="Guardar"
+                onclick={() => {
+                    const hasActiveFilters = filterUbicacion || filterPosicion || filterCustom;
+                    if (hasActiveFilters && sortedSnapshots.length < traceManager.instantaneas.length) {
+                        showExportDialog = true;
+                    } else {
+                        traceManager.exportAllInstantaneas();
+                    }
+                }}
+                disabled={traceManager.instantaneas.length === 0}
+            >
+                <span class="material-symbols-outlined text-[14px]">save</span>
+            </button>
+            <label for="open-snap-input"
+                class="flex items-center justify-center w-6 h-6 rounded text-gray-600 hover:text-white hover:bg-white/5 cursor-pointer transition-all"
+                title="Abrir">
+                <span class="material-symbols-outlined text-[14px]">folder_open</span>
+            </label>
+            <button
+                class="flex items-center justify-center w-6 h-6 rounded cursor-pointer transition-all
+                       {confirmDeleteAll
+                            ? 'text-red-400 bg-red-500/20'
+                            : 'text-gray-600 hover:text-red-400 hover:bg-white/5'}"
+                title={confirmDeleteAll ? '¿Seguro? Clic para confirmar' : 'Borrar todo'}
+                onclick={requestDeleteAll}
+                disabled={traceManager.instantaneas.length === 0}
+            >
+                <span class="material-symbols-outlined text-[14px]">delete_sweep</span>
+            </button>
+            <button
+                class="flex items-center justify-center w-6 h-6 rounded text-gray-600 hover:text-[#3b82f6] hover:bg-white/5 cursor-pointer transition-all"
+                title="Compartir"
+                onclick={async () => {
+                    if (traceManager.instantaneas.length === 0) return;
+                    try {
+                        const jsonStr = JSON.stringify({ _version: 1, snapshots: traceManager.instantaneas.map(ins => {
+                            const d: Record<string, number[]> = {};
+                            for (const m in ins.data) d[m] = Array.from(ins.data[m]);
+                            return { id: ins.id, name: ins.name, timestamp: ins.timestamp, visible: ins.visible, color: ins.color, source: ins.source, metric: ins.metric, offsetY: ins.offsetY, tags: ins.tags, notes: ins.notes, sessionId: ins.sessionId, metadata: ins.metadata, data: d };
+                        })}, null, 2);
+                        const file = new File([jsonStr], `instantaneas_${new Date().toISOString().slice(0,10)}.snapshots.json`, { type: 'application/json' });
+                        if (navigator.canShare?.({ files: [file] })) {
+                            await navigator.share({ files: [file], title: 'Instantáneas' });
+                        } else {
+                            // Fallback: copiar al clipboard
+                            await navigator.clipboard.writeText(jsonStr);
+                            statusText = 'Datos copiados al portapapeles';
+                        }
+                    } catch (err: any) {
+                        if (err?.name !== 'AbortError') {
+                            traceManager.exportAllInstantaneas();
+                        }
+                    }
+                }}
+                disabled={traceManager.instantaneas.length === 0}
+            >
+                <span class="material-symbols-outlined text-[14px]">share</span>
             </button>
         </div>
-    {/if}
+    </div>
 </div>
 
 <!-- Import mode dialog -->
@@ -629,6 +700,55 @@
             <button
                 class="text-[10px] text-gray-500 hover:text-gray-300 cursor-pointer transition-colors text-center"
                 onclick={() => showExportDialog = false}
+            >
+                Cancelar
+            </button>
+        </div>
+    </div>
+{/if}
+
+<!-- Delete selection dialog -->
+{#if showDeleteDialog}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div
+        class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center"
+        style="z-index: 100;"
+        onclick={(e) => { if (e.target === e.currentTarget) showDeleteDialog = false; }}
+        role="dialog"
+        aria-modal="true"
+    >
+        <div class="bg-[#16161e] border border-[#2a2a3a] rounded-2xl shadow-2xl w-[340px] max-w-[90vw] p-5 flex flex-col gap-4">
+            <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-red-400 text-xl">delete_sweep</span>
+                <h2 class="text-sm font-bold text-gray-200">Borrar instantáneas</h2>
+            </div>
+            <p class="text-xs text-gray-400">
+                Tenés filtros activos. ¿Qué querés borrar?
+            </p>
+            <div class="flex flex-col gap-2">
+                <button
+                    class="w-full bg-red-500/20 border border-red-500/30 hover:bg-red-500/30
+                           text-red-400 rounded-lg py-2.5 text-xs font-bold cursor-pointer transition-all min-h-[36px]
+                           flex items-center justify-center gap-1.5"
+                    onclick={deleteFiltered}
+                >
+                    <span class="material-symbols-outlined text-sm">filter_alt</span>
+                    Selección ({sortedSnapshots.length})
+                </button>
+                <button
+                    class="w-full bg-[#0d0d14] border border-[#2a2a3a] hover:border-red-500/40
+                           text-gray-400 hover:text-red-400 rounded-lg py-2.5 text-xs font-semibold cursor-pointer
+                           transition-all min-h-[36px] flex items-center justify-center gap-1.5"
+                    onclick={deleteAll}
+                >
+                    <span class="material-symbols-outlined text-sm">select_all</span>
+                    Todas ({traceManager.instantaneas.length})
+                </button>
+            </div>
+            <button
+                class="text-[10px] text-gray-500 hover:text-gray-300 cursor-pointer transition-colors text-center"
+                onclick={() => showDeleteDialog = false}
             >
                 Cancelar
             </button>

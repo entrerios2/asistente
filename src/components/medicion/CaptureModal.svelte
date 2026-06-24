@@ -284,6 +284,22 @@
                 ></textarea>
             </div>
 
+            <!-- Métricas a capturar (collapsible) -->
+            <details class="group">
+                <summary class="text-[10px] font-bold text-gray-400 uppercase tracking-wider cursor-pointer select-none flex items-center gap-1 hover:text-gray-300 transition-colors">
+                    <span class="material-symbols-outlined text-[12px] transition-transform group-open:rotate-90">chevron_right</span>
+                    Métricas a capturar
+                </summary>
+                <div class="grid grid-cols-2 gap-1.5 mt-2 pl-4">
+                    {#each Object.keys(traceManager.metricsToCapture) as metric}
+                        <label class="flex items-center gap-1.5 text-[10px] text-gray-300 cursor-pointer">
+                            <input type="checkbox" bind:checked={traceManager.metricsToCapture[metric]} class="accent-[#3b82f6] scale-90" />
+                            <span>{metric === 'GroupDelay' ? 'Group Delay' : metric}</span>
+                        </label>
+                    {/each}
+                </div>
+            </details>
+
             <!-- Save -->
             <div class="flex gap-2 pt-1">
                 <button

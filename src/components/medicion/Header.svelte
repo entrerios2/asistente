@@ -1,6 +1,7 @@
 <script lang="ts">
     import { meterStore } from "$lib/stores/meterStore.svelte";
     import { uiStore } from "$lib/stores/ui.svelte";
+    import { traceManager } from "$lib/stores/traceManager.svelte";
 
     // Nombres legibles para las señales
     const signalNames: Record<string, string> = {
@@ -114,6 +115,18 @@
             title="Ecualización"
         >
             <span class="material-symbols-outlined text-[16px]">equalizer</span>
+        </button>
+
+        <div class="header-sep"></div>
+
+        <!-- Capturar instantánea -->
+        <button
+            class="header-btn"
+            style="color: var(--text-muted);"
+            onclick={() => traceManager.captureInstantanea()}
+            title="Capturar instantánea"
+        >
+            <span class="material-symbols-outlined text-[16px]">photo_camera</span>
         </button>
 
         <div class="header-sep"></div>
