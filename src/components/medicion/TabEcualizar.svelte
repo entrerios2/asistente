@@ -252,55 +252,49 @@
 <div class="flex-1 overflow-y-auto flex flex-col gap-0" id="panel-eq">
 
     <!-- ═══════ BARRA SUPERIOR ═══════ -->
-    <div class="px-4 py-3 flex flex-col gap-2.5" style="background: var(--bg-tertiary); border-bottom: 1px solid var(--border-primary)">
-        <!-- Título + toggles -->
-        <div class="flex items-center justify-between">
-            <span class="text-[11px] font-bold uppercase tracking-wider" style="color: var(--text-secondary)">
-                <span class="material-symbols-outlined text-[13px] align-middle mr-1" style="color: #fbbf24">equalizer</span>
-                Ecualizador
-            </span>
-        </div>
+    <div class="px-4 py-3 flex flex-col gap-2.5" style="background: var(--bg-tertiary);">
         <div class="flex gap-2">
-            <!-- Toggle: Capa EQ visible -->
+            <!-- Toggle: Capa ecualizador visible -->
             <button
                 class="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[9px] font-semibold transition-all cursor-pointer"
                 style="background: {eqStore.showEQ ? '#fbbf2412' : 'transparent'}; color: {eqStore.showEQ ? '#fbbf24' : 'var(--text-muted)'}; border: 1px solid {eqStore.showEQ ? '#fbbf2430' : 'var(--border-primary)'}"
                 onclick={() => eqStore.showEQ = !eqStore.showEQ}
             >
                 <span class="material-symbols-outlined text-[12px]">{eqStore.showEQ ? 'visibility' : 'visibility_off'}</span>
-                Capa EQ
+                Capa ecualizador
             </button>
-            <!-- Toggle: Respuesta simulada -->
+            <!-- Toggle: Simular respuesta -->
             <button
                 class="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[9px] font-semibold transition-all cursor-pointer"
-                style="background: {eqStore.showEQ ? '#00ffff12' : 'transparent'}; color: {eqStore.showEQ ? '#00ffff' : 'var(--text-muted)'}; border: 1px solid {eqStore.showEQ ? '#00ffff30' : 'var(--border-primary)'}; opacity: {eqStore.showEQ ? 1 : 0.4}"
-                onclick={() => { if (eqStore.showEQ) uiStore.addSimulatedMagnitudeToAll(); }}
+                style="background: {eqStore.showSimulatedResponse ? '#00ffff12' : 'transparent'}; color: {eqStore.showSimulatedResponse ? '#00ffff' : 'var(--text-muted)'}; border: 1px solid {eqStore.showSimulatedResponse ? '#00ffff30' : 'var(--border-primary)'}; opacity: {eqStore.showEQ ? 1 : 0.4}"
+                onclick={() => { if (eqStore.showEQ) eqStore.showSimulatedResponse = !eqStore.showSimulatedResponse; }}
                 disabled={!eqStore.showEQ}
-                title={eqStore.showEQ ? 'Agregar respuesta simulada a los cuadrantes' : 'Activar capa EQ primero'}
+                title={eqStore.showEQ ? (eqStore.showSimulatedResponse ? 'Ocultar respuesta simulada' : 'Mostrar respuesta simulada') : 'Activar capa EQ primero'}
             >
-                <span class="material-symbols-outlined text-[12px]">insights</span>
-                Resp. Simulada
+                <span class="material-symbols-outlined text-[12px]">{eqStore.showSimulatedResponse ? 'visibility' : 'visibility_off'}</span>
+                Simular respuesta
             </button>
         </div>
+    </div>
 
-        <!-- Tabs -->
-        <div class="flex p-0.5 rounded-lg gap-0.5" style="background: var(--bg-secondary)">
-            <button
-                class="flex-1 px-3 py-1.5 rounded-md text-[10px] font-semibold transition-all cursor-pointer"
-                style="background: {activeTab === 'simulacion' ? 'var(--bg-tertiary)' : 'transparent'}; color: {activeTab === 'simulacion' ? 'var(--text-primary)' : 'var(--text-muted)'}; {activeTab === 'simulacion' ? 'box-shadow: 0 1px 3px rgba(0,0,0,0.3)' : ''}"
-                onclick={() => activeTab = 'simulacion'}
-            >Simulación</button>
-            <button
-                class="flex-1 px-3 py-1.5 rounded-md text-[10px] font-semibold transition-all cursor-pointer"
-                style="background: {activeTab === 'calcular' ? 'var(--bg-tertiary)' : 'transparent'}; color: {activeTab === 'calcular' ? 'var(--text-primary)' : 'var(--text-muted)'}; {activeTab === 'calcular' ? 'box-shadow: 0 1px 3px rgba(0,0,0,0.3)' : ''}"
-                onclick={() => activeTab = 'calcular'}
-            >Calcular</button>
-        </div>
+    <!-- Tabs — pegados al contenido, sin borde intermedio -->
+    <div class="flex px-4" style="background: var(--bg-tertiary); border-bottom: 1px solid var(--border-primary);">
+        <button
+            class="px-4 py-2 text-[10px] font-semibold transition-all cursor-pointer"
+            style="background: {activeTab === 'simulacion' ? 'var(--bg-secondary)' : 'transparent'}; color: {activeTab === 'simulacion' ? 'var(--text-primary)' : 'var(--text-muted)'}; border: 1px solid {activeTab === 'simulacion' ? 'var(--border-primary)' : 'transparent'}; border-bottom: {activeTab === 'simulacion' ? '1px solid var(--bg-secondary)' : '1px solid transparent'}; border-radius: 6px 6px 0 0; margin-bottom: -1px; position: relative; z-index: 1;"
+            onclick={() => activeTab = 'simulacion'}
+        >Simulación</button>
+        <button
+            class="px-4 py-2 text-[10px] font-semibold transition-all cursor-pointer"
+            style="background: {activeTab === 'calcular' ? 'var(--bg-secondary)' : 'transparent'}; color: {activeTab === 'calcular' ? 'var(--text-primary)' : 'var(--text-muted)'}; border: 1px solid {activeTab === 'calcular' ? 'var(--border-primary)' : 'transparent'}; border-bottom: {activeTab === 'calcular' ? '1px solid var(--bg-secondary)' : '1px solid transparent'}; border-radius: 6px 6px 0 0; margin-bottom: -1px; position: relative; z-index: 1;"
+            onclick={() => activeTab = 'calcular'}
+        >Calcular</button>
     </div>
 
     <!-- ═══════ TAB: SIMULACIÓN ═══════ -->
     {#if activeTab === 'simulacion'}
-    <div class="flex flex-col gap-3 p-4">
+    <div class="flex flex-col gap-3 p-4" style="background: var(--bg-secondary);">
+
 
         <!-- Tipo de EQ -->
         <div class="flex flex-col gap-1.5">
@@ -554,13 +548,13 @@
 
     <!-- ═══════ TAB: CALCULAR ═══════ -->
     {#if activeTab === 'calcular'}
-    <div class="flex flex-col gap-3 p-4">
+    <div class="flex flex-col gap-3 p-4" style="background: var(--bg-secondary);">
 
         <!-- Fuente de datos -->
         <div class="flex flex-col gap-2 rounded-lg p-3" style="background: var(--bg-tertiary); border: 1px solid var(--border-primary)">
             <span class="text-[9px] font-bold uppercase tracking-wider" style="color: var(--text-muted)">Fuente de datos</span>
             <div class="flex gap-1">
-                {#each [{ value: 'live', label: 'Live', icon: 'mic' }, { value: 'snapshot', label: 'Snapshots', icon: 'camera' }, { value: 'calculated', label: 'Capa', icon: 'layers' }] as source}
+                {#each [{ value: 'live', label: 'Medición', icon: 'mic' }, { value: 'snapshot', label: 'Instantáneas', icon: 'camera' }, { value: 'calculated', label: 'Capas', icon: 'layers' }] as source}
                     <button class="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded text-[9px] font-semibold transition-all cursor-pointer"
                         style="background: {eqStore.autoEQSourceType === source.value ? '#3b82f610' : 'transparent'}; color: {eqStore.autoEQSourceType === source.value ? '#3b82f6' : 'var(--text-muted)'}; border: 1px solid {eqStore.autoEQSourceType === source.value ? '#3b82f630' : 'var(--border-primary)'}"
                         onclick={() => eqStore.autoEQSourceType = source.value as any}>

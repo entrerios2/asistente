@@ -612,15 +612,19 @@ export function drawQuadrant(p: DrawParams): void {
             );
         }
 
-        // P1b: Ghost curve of active (hovered/dragged/selected) filter
+        // P1b: Ghost curves for ALL filters — EQ line color by default, type color when interacted
         const bands = p.eqBands;
         const activeFilterIdx = p.draggingEQNode ?? p.hoveringEQNode ?? p.selectedEQNode;
-        if (activeFilterIdx !== null && activeFilterIdx >= 0 && activeFilterIdx < bands.length) {
-            const activeBand = bands[activeFilterIdx];
-            const activeColor = filterTypeColors[activeBand.type] || '#fbbf24';
-            const coeffs = getCoeffsForType(activeBand.type, activeBand.freq, activeBand.gain, activeBand.q, p.sampleRate);
+        const eqLineColor = '#fbbf24';
+
+        for (let i = 0; i < bands.length; i++) {
+            const band = bands[i];
+            if (band.gain === 0 && !['lowpass', 'highpass', 'notch', 'bandpass'].includes(band.type)) continue;
+            const isInteracted = i === activeFilterIdx;
+            const color = isInteracted ? (filterTypeColors[band.type] || eqLineColor) : eqLineColor;
+            const coeffs = getCoeffsForType(band.type, band.freq, band.gain, band.q, p.sampleRate);
             drawIndividualFilterCurve(
-                p.ctx, p.width, p.height, coeffs, activeColor,
+                p.ctx, p.width, p.height, coeffs, color,
                 p.metricConfigs, p.interactionState, p.BINS, p.sampleRate
             );
         }

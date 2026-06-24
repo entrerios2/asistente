@@ -48,14 +48,15 @@
     // Lista de métricas activas
     let activeMetrics = $state<string[]>(["Magnitude"]);
     $effect(() => {
-        const req = uiStore.simulatedMagnitudeRequest;
-        if (req > 0) {
-            untrack(() => {
-                if (!activeMetrics.includes("Simulated Magnitude")) {
-                    activeMetrics = [...activeMetrics, "Simulated Magnitude"];
-                }
-            });
-        }
+        const show = eqStore.showSimulatedResponse;
+        untrack(() => {
+            const has = activeMetrics.includes("Simulated Magnitude");
+            if (show && !has) {
+                activeMetrics = [...activeMetrics, "Simulated Magnitude"];
+            } else if (!show && has) {
+                activeMetrics = activeMetrics.filter(m => m !== "Simulated Magnitude");
+            }
+        });
     });
     let showEQOverlay = $derived(eqStore.showEQ && eqStore.activeBands.length > 0);
     let draggingEQNode = $state<number | null>(null);

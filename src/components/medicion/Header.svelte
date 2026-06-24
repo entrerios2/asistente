@@ -65,6 +65,9 @@
     function handleEQClick() {
         uiStore.activeTab = 'eq';
         eqStore.showEQ = true;
+        if (uiStore.isMeasuring) {
+            eqStore.autoEQSourceType = 'live';
+        }
     }
 
     function isHighlighted(col: number, row: number) {
