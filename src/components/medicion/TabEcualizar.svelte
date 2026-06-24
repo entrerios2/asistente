@@ -159,7 +159,7 @@
             return {
                 id: prev?.id || i + 1, freq: Math.round(f.fc), gain: Math.round(f.gain * 10) / 10,
                 q: Math.round(f.q * 10) / 10, type: assignedType,
-                supportedTypes: types, showConfig: false,
+                supportedTypes: types, showConfig: false, muted: false,
             };
         });
     }
@@ -242,6 +242,7 @@
             type: f.type,
             supportedTypes: [...f.supportedTypes],
             showConfig: false,
+            muted: false,
         }));
     }
 
@@ -358,7 +359,7 @@
                             eqStore.parametricFilters = [...eqStore.parametricFilters, {
                                 id: newId, type: 'peaking', freq: 1000, gain: 0, q: 1.0,
                                 supportedTypes: ['peaking', 'lowpass', 'highpass', 'low_shelf', 'high_shelf', 'notch', 'bandpass'],
-                                showConfig: false
+                                showConfig: false, muted: false
                             }];
                         }}
                     >

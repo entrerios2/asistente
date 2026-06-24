@@ -331,6 +331,7 @@ class MathOrchestrator {
             hash = (hash * 31 + (band.gain * 1e3)) | 0;
             hash = (hash * 31 + (band.q * 100)) | 0;
             hash = (hash * 31 + (band.type ? band.type.charCodeAt(0) : 0)) | 0;
+            hash = (hash * 31 + (band.muted ? 1 : 0)) | 0;
         }
         for (const filter of calibrationStore.suggestedFilters) {
             hash = (hash * 31 + (filter.frequency * 1e6)) | 0;
@@ -388,6 +389,8 @@ class MathOrchestrator {
             const bandCoeffs: number[][] = [];
             for (let b = 0; b < bands.length; b++) {
                 const band = bands[b];
+                // Skip muted bands
+                if (band.muted) continue;
                 // A2 fix: include notch/bandpass/lowpass/highpass even when gain=0
                 if (band.gain !== 0 || ['lowpass', 'highpass', 'notch', 'bandpass'].includes(band.type)) {
                     bandCoeffs.push(getCoeffsForType(band.type, band.freq, band.gain, band.q, sr));

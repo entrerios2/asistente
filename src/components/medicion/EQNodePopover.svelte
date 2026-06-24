@@ -15,6 +15,7 @@
 
     const band = $derived(eqStore.activeBands[nodeIndex]);
     const color = $derived(filterTypeColors[band?.type] || 'var(--accent-yellow)');
+    const isMuted = $derived(band?.muted ?? false);
 
     const filterTypes = ['peaking', 'low_shelf', 'high_shelf', 'lowpass', 'highpass', 'notch', 'bandpass'] as const;
 
@@ -64,7 +65,7 @@
     }
 
     function handleBypass() {
-        eqStore.updateBand(nodeIndex, 'gain', 0);
+        eqStore.toggleMute(nodeIndex);
     }
 
     function handleReset() {
@@ -205,7 +206,7 @@
 
         <!-- Action buttons -->
         <div class="action-row">
-            <button class="action-btn" onclick={handleBypass} title="Poner ganancia en 0dB">Silenciar</button>
+            <button class="action-btn {isMuted ? 'action-btn--active' : ''}" onclick={handleBypass} title="Silenciar/activar filtro">{isMuted ? 'Activar' : 'Silenciar'}</button>
             <button class="action-btn" onclick={handleReset} title="Restablecer valores">Resetear</button>
             <button class="action-btn action-btn--danger" onclick={handleDelete} title="Eliminar este filtro">Eliminar</button>
         </div>
@@ -420,6 +421,12 @@
     .action-btn--danger:hover {
         background: rgba(239, 68, 68, 0.15);
         color: #ef4444;
+        border-color: rgba(239, 68, 68, 0.2);
+    }
+
+    .action-btn--active {
+        background: rgba(239, 68, 68, 0.12);
+        color: rgba(239, 68, 68, 0.8);
         border-color: rgba(239, 68, 68, 0.2);
     }
 </style>

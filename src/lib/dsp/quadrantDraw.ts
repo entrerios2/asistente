@@ -77,7 +77,7 @@ export interface DrawParams {
 
     // EQ overlay
     showEQOverlay: boolean;
-    eqBands: { freq: number; gain: number; q: number; type: string }[];
+    eqBands: { freq: number; gain: number; q: number; type: string; muted?: boolean }[];
     hoveringEQNode: number | null;
     draggingEQNode: number | null;
     selectedEQNode: number | null;
@@ -586,6 +586,7 @@ export function drawQuadrant(p: DrawParams): void {
         // Precompute biquad coefficients for analytical curve evaluation
         const bandCoeffs: number[][] = [];
         for (const band of p.eqBands) {
+            if (band.muted) continue; // Skip muted bands from total curve
             if (band.gain !== 0 || ['lowpass', 'highpass', 'notch', 'bandpass'].includes(band.type)) {
                 bandCoeffs.push(getCoeffsForType(band.type, band.freq, band.gain, band.q, p.sampleRate));
             }
@@ -620,8 +621,10 @@ export function drawQuadrant(p: DrawParams): void {
         for (let i = 0; i < bands.length; i++) {
             const band = bands[i];
             if (band.gain === 0 && !['lowpass', 'highpass', 'notch', 'bandpass'].includes(band.type)) continue;
+            const isMuted = !!band.muted;
             const isInteracted = i === activeFilterIdx;
-            const color = isInteracted ? (filterTypeColors[band.type] || eqLineColor) : eqLineColor;
+            const color = isMuted ? 'rgba(128, 128, 128, 0.3)'
+                : isInteracted ? (filterTypeColors[band.type] || eqLineColor) : eqLineColor;
             const coeffs = getCoeffsForType(band.type, band.freq, band.gain, band.q, p.sampleRate);
             drawIndividualFilterCurve(
                 p.ctx, p.width, p.height, coeffs, color,
@@ -655,7 +658,8 @@ export function drawQuadrant(p: DrawParams): void {
         // P2c+P3a: Draw filter nodes with type color + icon + enriched tooltip
         for (let i = 0; i < bands.length; i++) {
             const band = bands[i];
-            const color = filterTypeColors[band.type] || '#fbbf24';
+            const isMuted = !!band.muted;
+            const color = isMuted ? '#888888' : (filterTypeColors[band.type] || '#fbbf24');
             const x = valToX(band.freq, p.containerWidth, false, p.interactionState);
             // Fix: position node at band's individual gain, not total EQ response
             const y = valToY(band.gain, p.containerHeight, "Magnitude", p.metricConfigs, p.interactionState);
@@ -665,8 +669,8 @@ export function drawQuadrant(p: DrawParams): void {
             const isActive = isHovered || isDragging;
             const radius = isDragging ? 18 : isHovered ? 15 : 11;
 
-            // Glow
-            if (isActive) {
+            // Glow (skip for muted)
+            if (isActive && !isMuted) {
                 p.ctx.shadowColor = color;
                 p.ctx.shadowBlur = isDragging ? 14 : 10;
             }
@@ -674,15 +678,25 @@ export function drawQuadrant(p: DrawParams): void {
             // Circle background
             p.ctx.beginPath();
             p.ctx.arc(x, y, radius, 0, Math.PI * 2);
-            p.ctx.fillStyle = isActive ? color : `${color}cc`;
+            p.ctx.fillStyle = isMuted ? '#66666688' : (isActive ? color : `${color}cc`);
             p.ctx.fill();
-            p.ctx.strokeStyle = '#ffffff';
+            p.ctx.strokeStyle = isMuted ? '#999999' : '#ffffff';
             p.ctx.lineWidth = isActive ? 2 : 1.5;
             p.ctx.stroke();
             p.ctx.shadowBlur = 0;
 
-            // Draw type icon inside the node
-            drawFilterIcon(p.ctx, x, y, radius, band.type, '#ffffff');
+            // Draw type icon inside the node (dimmed for muted)
+            drawFilterIcon(p.ctx, x, y, radius, band.type, isMuted ? '#aaaaaa' : '#ffffff');
+
+            // Mute indicator: diagonal line through node
+            if (isMuted) {
+                p.ctx.beginPath();
+                p.ctx.moveTo(x - radius * 0.5, y - radius * 0.5);
+                p.ctx.lineTo(x + radius * 0.5, y + radius * 0.5);
+                p.ctx.strokeStyle = '#ff4444';
+                p.ctx.lineWidth = 2;
+                p.ctx.stroke();
+            }
 
             // P3a: Enriched tooltip on hover/drag
             if (isActive) {

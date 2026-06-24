@@ -348,7 +348,14 @@
     function handleTouchStart(e: TouchEvent) { e.preventDefault(); interactionHandleTouchStart(e, interactionState); }
     function handleTouchMove(e: TouchEvent) { e.preventDefault(); interactionHandleTouchMove(e, interactionState, canvas, activeMetrics, metricConfigs); }
     function handleTouchEnd() { interactionHandleTouchEnd(interactionState, containerWidth, containerHeight, hasTimeDomainActive, activeMetrics, metricConfigs); }
-    function handleDoubleClick() { interactionHandleDoubleClick(interactionState); }
+    function handleDoubleClick() {
+        // If hovering an EQ node, toggle mute instead of resetting zoom
+        if (showEQOverlay && hoveringEQNode !== null && eqStore.eqType === 'parametrico') {
+            eqStore.toggleMute(hoveringEQNode);
+            return;
+        }
+        interactionHandleDoubleClick(interactionState);
+    }
 
 
 

@@ -20,6 +20,7 @@ export interface EQBand {
     gain: number;
     q: number;
     type: string;
+    muted?: boolean;
 }
 
 export interface GraphicBand {
@@ -33,6 +34,7 @@ export interface ParametricFilter {
     gain: number;
     q: number;
     type: string;
+    muted: boolean;
     supportedTypes: string[];
     showConfig: boolean;
 }
@@ -115,12 +117,12 @@ class EQStore {
     ]);
 
     parametricFilters = $state<ParametricFilter[]>([
-        { id: 1, freq: 80, gain: 0, q: 1.0, type: "peaking", supportedTypes: ["peaking", "lowpass", "highpass", "low_shelf", "high_shelf", "notch", "bandpass"], showConfig: false },
-        { id: 2, freq: 500, gain: 0, q: 1.0, type: "peaking", supportedTypes: ["peaking", "low_shelf", "high_shelf", "notch"], showConfig: false },
-        { id: 3, freq: 2000, gain: 0, q: 1.0, type: "peaking", supportedTypes: ["peaking", "notch"], showConfig: false },
-        { id: 4, freq: 8000, gain: 0, q: 1.0, type: "peaking", supportedTypes: ["peaking", "lowpass", "low_shelf", "high_shelf"], showConfig: false },
-        { id: 5, freq: 12000, gain: 0, q: 1.0, type: "peaking", supportedTypes: ["peaking", "lowpass"], showConfig: false },
-        { id: 6, freq: 16000, gain: 0, q: 1.0, type: "peaking", supportedTypes: ["peaking"], showConfig: false },
+        { id: 1, freq: 80, gain: 0, q: 1.0, type: "peaking", muted: false, supportedTypes: ["peaking", "lowpass", "highpass", "low_shelf", "high_shelf", "notch", "bandpass"], showConfig: false },
+        { id: 2, freq: 500, gain: 0, q: 1.0, type: "peaking", muted: false, supportedTypes: ["peaking", "low_shelf", "high_shelf", "notch"], showConfig: false },
+        { id: 3, freq: 2000, gain: 0, q: 1.0, type: "peaking", muted: false, supportedTypes: ["peaking", "notch"], showConfig: false },
+        { id: 4, freq: 8000, gain: 0, q: 1.0, type: "peaking", muted: false, supportedTypes: ["peaking", "lowpass", "low_shelf", "high_shelf"], showConfig: false },
+        { id: 5, freq: 12000, gain: 0, q: 1.0, type: "peaking", muted: false, supportedTypes: ["peaking", "lowpass"], showConfig: false },
+        { id: 6, freq: 16000, gain: 0, q: 1.0, type: "peaking", muted: false, supportedTypes: ["peaking"], showConfig: false },
     ]);
 
     /**
@@ -142,6 +144,7 @@ class EQStore {
                 gain: b.gain,
                 q,
                 type: "peaking",
+                muted: false,
             }));
         } else {
             return this.parametricFilters.map((f) => ({
@@ -149,6 +152,7 @@ class EQStore {
                 gain: f.gain,
                 q: f.q,
                 type: f.type,
+                muted: f.muted,
             }));
         }
     }
@@ -177,6 +181,19 @@ class EQStore {
         this.activeBandsVersion++;
     }
 
+    /**
+     * Toggle mute state for a parametric filter.
+     */
+    toggleMute(index: number) {
+        if (this.eqType === 'parametrico') {
+            const filter = this.parametricFilters[index];
+            if (filter) {
+                filter.muted = !filter.muted;
+                this.activeBandsVersion++;
+            }
+        }
+    }
+
     loadFromConfig(config: EQConfig & Record<string, unknown>) {
         if (config.eqType) this.eqType = config.eqType;
         if (config.eqShowEQ !== undefined) this.showEQ = config.eqShowEQ;
@@ -186,6 +203,7 @@ class EQStore {
         if (config.eqParametricFilters && Array.isArray(config.eqParametricFilters)) {
             this.parametricFilters = config.eqParametricFilters.map((f) => ({
                 ...f,
+                muted: (f as any).muted ?? false,
                 showConfig: false,
                 supportedTypes: f.supportedTypes || ['peaking'],
             }));
@@ -255,10 +273,10 @@ class EQStore {
             { freq: 16000, gain: 0 },
         ];
         this.parametricFilters = [
-            { id: 1, freq: 80, gain: 0, q: 1.0, type: "peaking", supportedTypes: ["peaking", "lowpass", "highpass", "low_shelf", "high_shelf", "notch", "bandpass"], showConfig: false },
-            { id: 2, freq: 500, gain: 0, q: 1.0, type: "peaking", supportedTypes: ["peaking", "low_shelf", "high_shelf", "notch"], showConfig: false },
-            { id: 3, freq: 2000, gain: 0, q: 1.0, type: "peaking", supportedTypes: ["peaking", "notch"], showConfig: false },
-            { id: 4, freq: 8000, gain: 0, q: 1.0, type: "peaking", supportedTypes: ["peaking", "lowpass", "low_shelf", "high_shelf"], showConfig: false },
+            { id: 1, freq: 80, gain: 0, q: 1.0, type: "peaking", muted: false, supportedTypes: ["peaking", "lowpass", "highpass", "low_shelf", "high_shelf", "notch", "bandpass"], showConfig: false },
+            { id: 2, freq: 500, gain: 0, q: 1.0, type: "peaking", muted: false, supportedTypes: ["peaking", "low_shelf", "high_shelf", "notch"], showConfig: false },
+            { id: 3, freq: 2000, gain: 0, q: 1.0, type: "peaking", muted: false, supportedTypes: ["peaking", "notch"], showConfig: false },
+            { id: 4, freq: 8000, gain: 0, q: 1.0, type: "peaking", muted: false, supportedTypes: ["peaking", "lowpass", "low_shelf", "high_shelf"], showConfig: false },
         ];
     }
 
