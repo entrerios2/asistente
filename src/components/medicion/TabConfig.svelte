@@ -4,6 +4,10 @@
     import { calibrationStore } from "$lib/stores/calibrationStore.svelte";
     import { mathOrchestrator } from "$lib/stores/mathOrchestrator.svelte";
     import { getAudioProvider } from "$lib/hal";
+    import { eqStore } from "$lib/stores/eqStore.svelte";
+    import { targetTrace } from "$lib/stores/targetTrace.svelte";
+    import { traceManager } from "$lib/stores/traceManager.svelte";
+    import { exportConfig, importConfig, type PersistedConfig } from "$lib/utils/configPersistence";
 
     const provider = getAudioProvider();
 
@@ -81,6 +85,211 @@
 
     const accentBg = 'bg-[#3b82f6]/15 text-[#3b82f6] shadow';
     const inactiveBtn = 'text-gray-500 hover:text-gray-300';
+
+    // ─── Guardar/Abrir/Resetear ───
+    let showResetModal = $state(false);
+    let resetCategories = $state({
+        hardware: false,
+        dsp: false,
+        generador: false,
+        calibracion: false,
+        eq: false,
+        autoEQ: false,
+        targetCurve: false,
+        captura: false,
+        pantalla: false,
+    });
+
+    function buildCurrentConfig(): PersistedConfig {
+        return {
+            _version: 5,
+            layout: uiStore.layout,
+            themeMode: uiStore.themeMode,
+            audioInDevice: uiStore.audioInDevice,
+            audioOutDevice: uiStore.audioOutDevice,
+            sampleRate: uiStore.sampleRate,
+            fftSize: uiStore.fftSize,
+            dspUpdateRate: uiStore.dspUpdateRate,
+            weightingType: uiStore.weightingType,
+            averagingType: uiStore.averagingType,
+            averagingDepth: uiStore.averagingDepth,
+            averagingAlpha: uiStore.averagingAlpha,
+            besselSpeed: uiStore.besselSpeed,
+            ppoSmoothing: uiStore.ppoSmoothing,
+            fftOverlap: uiStore.fftOverlap,
+            windowType: uiStore.windowType,
+            inputGain: uiStore.inputGain,
+            displayOffset: uiStore.displayOffset,
+            polarity: uiStore.polarity,
+            inputFilter: uiStore.inputFilter,
+            compensationDelayMs: uiStore.compensationDelayMs,
+            autoDelayCompensation: uiStore.autoDelayCompensation,
+            refChannel: uiStore.refChannel,
+            measChannel: uiStore.measChannel,
+            generatorType: uiStore.generatorType,
+            genLevel: uiStore.genLevel,
+            genRouting: uiStore.genRouting,
+            targetFps: uiStore.targetFps,
+            linkGeneratorToMeasurement: uiStore.linkGeneratorToMeasurement,
+            enableLeq: uiStore.enableLeq,
+            enableSourceWindow: uiStore.enableSourceWindow,
+            sourceWindowWidthMs: uiStore.sourceWindowWidthMs,
+            sourceWindowOffsetMs: uiStore.sourceWindowOffsetMs,
+            genFreq: uiStore.genFreq,
+            autoSaveSnapshotOnStop: uiStore.autoSaveSnapshotOnStop,
+            measurementMode: uiStore.measurementMode,
+            leqWindowSeconds: uiStore.leqWindowSeconds,
+            averagingThresholdDb: uiStore.averagingThresholdDb,
+            showAdvanced: uiStore.showAdvanced,
+            showMinorGrid: uiStore.showMinorGrid,
+            ...eqStore.toConfig(),
+            ...targetTrace.toConfig(),
+            ...calibrationStore.toConfig(),
+            ...traceManager.toConfig(),
+        };
+    }
+
+    function handleSaveConfig() {
+        const json = exportConfig(buildCurrentConfig());
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `asistente-config-${new Date().toISOString().slice(0, 10)}.ca.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    function handleOpenConfig(e: Event) {
+        const file = (e.target as HTMLInputElement).files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            const json = evt.target?.result as string;
+            const config = importConfig(json);
+            if (!config) {
+                alert('El archivo no es una configuración válida.');
+                return;
+            }
+            // Aplicar a todos los stores
+            const c = config as any;
+            if (c.layout) uiStore.setLayout(c.layout);
+            if (c.themeMode) uiStore.setThemeMode(c.themeMode);
+            if (c.audioInDevice) uiStore.audioInDevice = c.audioInDevice;
+            if (c.audioOutDevice) uiStore.audioOutDevice = c.audioOutDevice;
+            if (c.sampleRate) uiStore.sampleRate = c.sampleRate;
+            if (c.fftSize) uiStore.fftSize = c.fftSize;
+            if (c.dspUpdateRate) uiStore.dspUpdateRate = c.dspUpdateRate;
+            if (c.weightingType) uiStore.weightingType = c.weightingType;
+            if (c.averagingType) uiStore.averagingType = c.averagingType;
+            if (c.averagingDepth !== undefined) uiStore.averagingDepth = c.averagingDepth;
+            if (c.averagingAlpha !== undefined) uiStore.averagingAlpha = c.averagingAlpha;
+            if (c.besselSpeed) uiStore.besselSpeed = c.besselSpeed;
+            if (c.ppoSmoothing !== undefined) uiStore.ppoSmoothing = c.ppoSmoothing;
+            if (c.fftOverlap !== undefined) uiStore.fftOverlap = c.fftOverlap;
+            if (c.windowType) uiStore.windowType = c.windowType;
+            if (c.inputGain !== undefined) uiStore.inputGain = c.inputGain;
+            if (c.displayOffset !== undefined) uiStore.displayOffset = c.displayOffset;
+            if (c.polarity !== undefined) uiStore.polarity = c.polarity;
+            if (c.inputFilter) uiStore.inputFilter = c.inputFilter;
+            if (c.compensationDelayMs !== undefined) uiStore.compensationDelayMs = c.compensationDelayMs;
+            if (c.autoDelayCompensation !== undefined) uiStore.autoDelayCompensation = c.autoDelayCompensation;
+            if (c.refChannel !== undefined) uiStore.refChannel = c.refChannel;
+            if (c.measChannel !== undefined) uiStore.measChannel = c.measChannel;
+            if (c.generatorType) uiStore.generatorType = c.generatorType;
+            if (c.genLevel !== undefined) uiStore.genLevel = c.genLevel;
+            if (c.genRouting) uiStore.genRouting = c.genRouting;
+            if (c.targetFps !== undefined) uiStore.targetFps = c.targetFps;
+            if (c.linkGeneratorToMeasurement !== undefined) uiStore.linkGeneratorToMeasurement = c.linkGeneratorToMeasurement;
+            if (c.enableLeq !== undefined) uiStore.enableLeq = c.enableLeq;
+            if (c.enableSourceWindow !== undefined) uiStore.enableSourceWindow = c.enableSourceWindow;
+            if (c.sourceWindowWidthMs !== undefined) uiStore.sourceWindowWidthMs = c.sourceWindowWidthMs;
+            if (c.sourceWindowOffsetMs !== undefined) uiStore.sourceWindowOffsetMs = c.sourceWindowOffsetMs;
+            if (c.genFreq !== undefined) uiStore.genFreq = c.genFreq;
+            if (c.autoSaveSnapshotOnStop !== undefined) uiStore.autoSaveSnapshotOnStop = c.autoSaveSnapshotOnStop;
+            if (c.measurementMode) uiStore.measurementMode = c.measurementMode;
+            if (c.leqWindowSeconds !== undefined) uiStore.leqWindowSeconds = c.leqWindowSeconds;
+            if (c.averagingThresholdDb !== undefined) uiStore.averagingThresholdDb = c.averagingThresholdDb;
+            if (c.showAdvanced !== undefined) uiStore.showAdvanced = c.showAdvanced;
+            if (c.showMinorGrid !== undefined) uiStore.showMinorGrid = c.showMinorGrid;
+            eqStore.loadFromConfig(c);
+            targetTrace.loadFromConfig(c);
+            calibrationStore.loadFromConfig(c);
+            traceManager.loadFromConfig(c);
+        };
+        reader.readAsText(file);
+        // Reset input so same file can be loaded again
+        (e.target as HTMLInputElement).value = '';
+    }
+
+    function applyReset() {
+        const r = resetCategories;
+        if (r.hardware) {
+            uiStore.audioInDevice = '';
+            uiStore.audioOutDevice = '';
+            uiStore.refChannel = -1;
+            uiStore.measChannel = 1;
+        }
+        if (r.dsp) {
+            uiStore.sampleRate = 48000;
+            uiStore.fftSize = 16384;
+            uiStore.dspUpdateRate = 4;
+            uiStore.weightingType = 'Z' as any;
+            uiStore.averagingType = 'LPF' as any;
+            uiStore.averagingDepth = 8;
+            uiStore.averagingAlpha = 0.1;
+            uiStore.besselSpeed = 'Slow' as any;
+            uiStore.ppoSmoothing = 0;
+            uiStore.fftOverlap = 50 as any;
+            uiStore.windowType = 'Hann' as any;
+            uiStore.inputFilter = 'None' as any;
+            uiStore.compensationDelayMs = 0;
+            uiStore.autoDelayCompensation = true;
+            uiStore.enableLeq = false;
+            uiStore.leqWindowSeconds = 10;
+            uiStore.enableSourceWindow = false;
+            uiStore.sourceWindowWidthMs = 10.0;
+            uiStore.sourceWindowOffsetMs = 0.0;
+            uiStore.averagingThresholdDb = -60;
+            uiStore.inputGain = 0;
+            uiStore.displayOffset = 0;
+            uiStore.polarity = false;
+        }
+        if (r.generador) {
+            uiStore.generatorType = 'pink';
+            uiStore.genFreq = 1000;
+            uiStore.genLevel = 0;
+            uiStore.genRouting = 'Stereo' as any;
+            uiStore.linkGeneratorToMeasurement = true;
+        }
+        if (r.calibracion) {
+            calibrationStore.resetCalibration();
+        }
+        if (r.eq) {
+            eqStore.resetEQ();
+        }
+        if (r.autoEQ) {
+            eqStore.resetAutoEQ();
+        }
+        if (r.targetCurve) {
+            targetTrace.resetToDefaults();
+        }
+        if (r.captura) {
+            traceManager.resetCaptureConfig();
+        }
+        if (r.pantalla) {
+            uiStore.setLayout('1x1');
+            uiStore.setThemeMode('dark');
+            uiStore.showMinorGrid = true;
+            uiStore.showAdvanced = false;
+            uiStore.targetFps = 30;
+            uiStore.autoSaveSnapshotOnStop = false;
+            uiStore.measurementMode = 'manual';
+        }
+        showResetModal = false;
+        // Reset checkboxes
+        resetCategories = { hardware: false, dsp: false, generador: false, calibracion: false, eq: false, autoEQ: false, targetCurve: false, captura: false, pantalla: false };
+    }
 </script>
 
 {#snippet advIcon()}
@@ -652,4 +861,103 @@
             </label>
         </div>
     </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <!-- 5. CONFIGURACIÓN (GUARDAR / ABRIR / RESETEAR) -->
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <div class="flex flex-col gap-4 bg-[#121216]/40 border border-[#1a1a24]/50 rounded-xl p-4">
+        {@render sectionHeader('settings', '#f59e0b', 'Configuración')}
+
+        <div class="flex gap-2">
+            <!-- Guardar -->
+            <button
+                class="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-[10px] font-bold transition-all cursor-pointer border
+                       bg-[#121216] text-gray-400 border-[#1a1a24]/40 hover:text-white hover:border-[#3b82f6]/30"
+                onclick={handleSaveConfig}
+                title="Guardar toda la configuración como archivo .ca.json"
+            >
+                <span class="material-symbols-outlined text-sm">download</span>
+                Guardar
+            </button>
+
+            <!-- Abrir -->
+            <input type="file" accept=".ca.json,.json" class="hidden" id="config-file-input"
+                onchange={handleOpenConfig} />
+            <label
+                for="config-file-input"
+                class="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-[10px] font-bold transition-all cursor-pointer border
+                       bg-[#121216] text-gray-400 border-[#1a1a24]/40 hover:text-white hover:border-[#3b82f6]/30"
+                title="Abrir configuración desde archivo .ca.json"
+            >
+                <span class="material-symbols-outlined text-sm">upload</span>
+                Abrir
+            </label>
+
+            <!-- Resetear -->
+            <button
+                class="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-[10px] font-bold transition-all cursor-pointer border
+                       bg-[#121216] text-[#ef4444]/70 border-[#ef4444]/10 hover:text-[#ef4444] hover:border-[#ef4444]/30"
+                onclick={() => showResetModal = true}
+                title="Resetear configuración a valores por defecto"
+            >
+                <span class="material-symbols-outlined text-sm">restart_alt</span>
+                Resetear
+            </button>
+        </div>
+
+        <span class="text-[9px] text-gray-600 italic text-center">Los cambios se guardan automáticamente en el navegador.</span>
+    </div>
 </div>
+
+<!-- MODAL RESETEAR -->
+{#if showResetModal}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="fixed inset-0 z-50 flex items-center justify-center" style="background: rgba(0,0,0,0.6)" onclick={() => showResetModal = false}>
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="rounded-xl p-5 w-[320px] flex flex-col gap-4 shadow-[0_16px_48px_#000000]" style="background: var(--bg-surface, #1a1a2e); border: 1px solid var(--border-primary, #2a2a3e)" onclick={(e) => e.stopPropagation()}>
+            <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-[#ef4444]">restart_alt</span>
+                <h3 class="text-sm font-bold text-gray-200">Resetear a valores por defecto</h3>
+            </div>
+            <p class="text-[10px] text-gray-500">Seleccioná qué categorías querés resetear:</p>
+
+            <div class="flex flex-col gap-1.5">
+                {#each [
+                    { key: 'hardware', label: 'Hardware de audio', desc: 'Dispositivos, routing, canales' },
+                    { key: 'dsp', label: 'DSP', desc: 'Averaging, FFT, ventana, ponderación, ganancia' },
+                    { key: 'generador', label: 'Generador', desc: 'Tipo, frecuencia, nivel, routing' },
+                    { key: 'calibracion', label: 'Calibración', desc: 'Curva de micrófono' },
+                    { key: 'eq', label: 'Ecualizador', desc: 'Tipo, bandas, filtros paramétricos' },
+                    { key: 'autoEQ', label: 'AutoEQ', desc: 'Algoritmo, rangos, opciones avanzadas' },
+                    { key: 'targetCurve', label: 'Curva objetivo', desc: 'Target trace' },
+                    { key: 'captura', label: 'Captura', desc: 'Métricas, tag presets' },
+                    { key: 'pantalla', label: 'Pantalla', desc: 'Layout, tema, grilla, FPS' },
+                ] as item}
+                    <label class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md cursor-pointer hover:bg-white/5 transition-all">
+                        <input type="checkbox" bind:checked={resetCategories[item.key as keyof typeof resetCategories]}
+                            class="w-3.5 h-3.5 rounded accent-[#ef4444] cursor-pointer" />
+                        <div class="flex flex-col">
+                            <span class="text-[11px] font-semibold text-gray-300">{item.label}</span>
+                            <span class="text-[9px] text-gray-600">{item.desc}</span>
+                        </div>
+                    </label>
+                {/each}
+            </div>
+
+            <div class="flex gap-2 pt-2 border-t border-[#1a1a24]/30">
+                <button
+                    class="flex-1 py-2 rounded-md text-[10px] font-bold cursor-pointer transition-all bg-[#121216] text-gray-400 border border-[#1a1a24]/40 hover:text-white"
+                    onclick={() => showResetModal = false}
+                >Cancelar</button>
+                <button
+                    class="flex-1 py-2 rounded-md text-[10px] font-bold cursor-pointer transition-all bg-[#ef4444]/15 text-[#ef4444] border border-[#ef4444]/30 hover:bg-[#ef4444]/25
+                           disabled:opacity-30"
+                    disabled={!Object.values(resetCategories).some(v => v)}
+                    onclick={applyReset}
+                >Resetear selección</button>
+            </div>
+        </div>
+    </div>
+{/if}

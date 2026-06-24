@@ -664,6 +664,35 @@ class TraceManager {
         const metricList = Object.keys(this.metricsToCapture).filter(k => this.metricsToCapture[k]);
         return this.captureInstantanea(name, metricList);
     }
+
+    toConfig() {
+        return {
+            tagPresets: { ubicacion: [...this.tagPresets.ubicacion], posicion: [...this.tagPresets.posicion] },
+            metricsToCapture: { ...this.metricsToCapture },
+        };
+    }
+
+    loadFromConfig(c: Record<string, any>) {
+        if (c.tagPresets && typeof c.tagPresets === 'object') {
+            if (Array.isArray(c.tagPresets.ubicacion)) this.tagPresets.ubicacion = c.tagPresets.ubicacion;
+            if (Array.isArray(c.tagPresets.posicion)) this.tagPresets.posicion = c.tagPresets.posicion;
+        }
+        if (c.metricsToCapture && typeof c.metricsToCapture === 'object') {
+            this.metricsToCapture = { ...this.metricsToCapture, ...c.metricsToCapture };
+        }
+    }
+
+    resetCaptureConfig() {
+        this.tagPresets = {
+            ubicacion: ['Principal', 'Delay 1', 'Delay 2', 'Delay 3', 'Relleno', 'Subwoofer'],
+            posicion: ['Izquierda', 'Centro', 'Derecha', 'Arriba', 'Abajo'],
+        };
+        this.metricsToCapture = {
+            "Magnitude": true, "Phase": true, "Coherence": true,
+            "Impulse": false, "GroupDelay": false, "Step": false,
+        };
+        this._saveTagPresets();
+    }
 }
 
 export const traceManager = new TraceManager();

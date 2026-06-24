@@ -81,6 +81,35 @@ class TargetTraceStore {
         
         return (p0.g * (1 - t) + p1.g * t) + this.offset;
     }
+
+    toConfig() {
+        return {
+            targetPoints: this.points.map(p => ({ f: p.f, g: p.g })),
+            targetVisible: this.visible,
+            targetColor: this.color,
+            targetOpacity: this.opacity,
+            targetOffset: this.offset,
+            targetName: this.name,
+        };
+    }
+
+    loadFromConfig(c: Record<string, any>) {
+        if (c.targetPoints && Array.isArray(c.targetPoints)) this.points = c.targetPoints;
+        if (c.targetVisible !== undefined) this.visible = c.targetVisible;
+        if (c.targetColor) this.color = c.targetColor;
+        if (c.targetOpacity !== undefined) this.opacity = c.targetOpacity;
+        if (c.targetOffset !== undefined) this.offset = c.targetOffset;
+        if (c.targetName) this.name = c.targetName;
+    }
+
+    resetToDefaults() {
+        this.points = [{ f: 20, g: 0 }, { f: 20000, g: 0 }];
+        this.visible = false;
+        this.color = '#00ff00';
+        this.opacity = 0.5;
+        this.offset = 0;
+        this.name = 'Flat';
+    }
 }
 
 export const targetTrace = new TargetTraceStore();

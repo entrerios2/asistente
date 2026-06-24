@@ -202,6 +202,25 @@ export class CalibrationStore {
         this.calibrationFilename = '';
         this.agnosticMode = false;
     }
+
+    toConfig() {
+        return {
+            calibrationPoints: this.calibrationPoints.map(p => ({ frequency: p.frequency, gain: p.gain })),
+            calibrationFilename: this.calibrationFilename,
+        };
+    }
+
+    loadFromConfig(c: Record<string, any>) {
+        if (c.calibrationPoints && Array.isArray(c.calibrationPoints)) {
+            this.calibrationPoints = c.calibrationPoints;
+        }
+        if (c.calibrationFilename) this.calibrationFilename = c.calibrationFilename;
+    }
+
+    resetCalibration() {
+        this.calibrationPoints = [];
+        this.calibrationFilename = '';
+    }
 }
 
 // Instancia única (Singleton) para toda la aplicación

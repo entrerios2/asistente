@@ -3,7 +3,7 @@
  */
 
 const CONFIG_KEY = 'asistente_config';
-const CONFIG_VERSION = 4;
+const CONFIG_VERSION = 5;
 const SAVE_DEBOUNCE_MS = 1000;
 
 export interface PersistedConfig {
@@ -51,6 +51,52 @@ export interface PersistedConfig {
     showAdvanced?: boolean;
     showMinorGrid?: boolean;
     globalMetricDefaults?: Record<string, unknown>;
+
+    // ─── v5: Nuevos campos ───
+
+    // uiStore faltantes
+    genFreq?: number;
+    autoSaveSnapshotOnStop?: boolean;
+    measurementMode?: string;
+    leqWindowSeconds?: number;
+    averagingThresholdDb?: number;
+
+    // Target trace
+    targetPoints?: { f: number; g: number }[];
+    targetVisible?: boolean;
+    targetColor?: string;
+    targetOpacity?: number;
+    targetOffset?: number;
+    targetName?: string;
+
+    // Calibración
+    calibrationPoints?: { frequency: number; gain: number }[];
+    calibrationFilename?: string;
+
+    // Captura
+    metricsToCapture?: Record<string, boolean>;
+    tagPresets?: { ubicacion: string[]; posicion: string[] };
+
+    // AutoEQ config
+    autoEQAlgorithm?: string;
+    autoEQCostDomain?: string;
+    autoEQMaxBoost?: number;
+    autoEQMaxCut?: number;
+    autoEQMinQ?: number;
+    autoEQMaxQ?: number;
+    autoEQMaxIterations?: number;
+    autoEQCoherenceThreshold?: number;
+    autoEQTrebleAveraging?: boolean;
+    autoEQTrebleFreq?: number;
+    autoEQOnlyCorrectPeaks?: boolean;
+    autoEQPSOPopulation?: number;
+    autoEQPSOInertia?: number;
+    autoEQPSOCognitive?: number;
+    autoEQPSOSocial?: number;
+    autoEQGAPopulation?: number;
+    autoEQGAMutationRate?: number;
+    autoEQGACrossoverRate?: number;
+    autoEQGAElitism?: number;
 
     // Legacy (kept for migration)
     inChannels?: boolean[];
@@ -101,4 +147,27 @@ export function saveConfig(config: PersistedConfig): void {
         }
         saveTimer = null;
     }, SAVE_DEBOUNCE_MS);
+}
+
+/**
+ * Exporta la configuración actual como JSON string para guardar como archivo .ca.json.
+ */
+export function exportConfig(config: PersistedConfig): string {
+    return JSON.stringify({ ...config, _exportedAt: Date.now() }, null, 2);
+}
+
+/**
+ * Importa configuración desde un JSON string (archivo .ca.json).
+ * Valida y retorna los datos parseados, o null si es inválido.
+ */
+export function importConfig(json: string): Partial<PersistedConfig> | null {
+    try {
+        const parsed = JSON.parse(json);
+        if (!parsed || typeof parsed !== 'object') return null;
+        // Aceptar tanto con como sin _version
+        return parsed as Partial<PersistedConfig>;
+    } catch (e) {
+        console.error('[configPersistence] Error importando configuración:', e);
+        return null;
+    }
 }

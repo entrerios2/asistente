@@ -8,7 +8,9 @@
     import { uiStore } from '$lib/stores/ui.svelte';
     import { mathOrchestrator } from '$lib/stores/mathOrchestrator.svelte';
     import { loadConfig, saveConfig } from "$lib/utils/configPersistence";
-    import { eqStore } from '$lib/stores/eqStore.svelte';  // Asegura inicialización del $effect.root
+    import { eqStore } from '$lib/stores/eqStore.svelte';
+    import { targetTrace } from '$lib/stores/targetTrace.svelte';
+    import { calibrationStore } from '$lib/stores/calibrationStore.svelte';
 
     onMount(() => {
         // Cargar configuración persistida
@@ -49,10 +51,19 @@
             if (config.enableSourceWindow !== undefined) uiStore.enableSourceWindow = config.enableSourceWindow;
             if (config.sourceWindowWidthMs !== undefined) uiStore.sourceWindowWidthMs = config.sourceWindowWidthMs;
             if (config.sourceWindowOffsetMs !== undefined) uiStore.sourceWindowOffsetMs = config.sourceWindowOffsetMs;
+            // uiStore v5
+            if (config.genFreq !== undefined) uiStore.genFreq = config.genFreq;
+            if (config.autoSaveSnapshotOnStop !== undefined) uiStore.autoSaveSnapshotOnStop = config.autoSaveSnapshotOnStop;
+            if (config.measurementMode) uiStore.measurementMode = config.measurementMode;
+            if (config.leqWindowSeconds !== undefined) uiStore.leqWindowSeconds = config.leqWindowSeconds;
+            if (config.averagingThresholdDb !== undefined) uiStore.averagingThresholdDb = config.averagingThresholdDb;
             // UI preferences (v4)
             if (config.showAdvanced !== undefined) uiStore.showAdvanced = config.showAdvanced;
             if (config.showMinorGrid !== undefined) uiStore.showMinorGrid = config.showMinorGrid;
             eqStore.loadFromConfig(config);
+            targetTrace.loadFromConfig(config);
+            calibrationStore.loadFromConfig(config);
+            traceManager.loadFromConfig(config);
         } else {
             uiStore.setLayout('1x1');
         }
@@ -81,7 +92,7 @@
 
     $effect(() => {
         saveConfig({
-            _version: 4,
+            _version: 5,
             layout: uiStore.layout,
             themeMode: uiStore.themeMode,
             audioInDevice: uiStore.audioInDevice,
@@ -115,10 +126,19 @@
             enableSourceWindow: uiStore.enableSourceWindow,
             sourceWindowWidthMs: uiStore.sourceWindowWidthMs,
             sourceWindowOffsetMs: uiStore.sourceWindowOffsetMs,
+            // uiStore v5
+            genFreq: uiStore.genFreq,
+            autoSaveSnapshotOnStop: uiStore.autoSaveSnapshotOnStop,
+            measurementMode: uiStore.measurementMode,
+            leqWindowSeconds: uiStore.leqWindowSeconds,
+            averagingThresholdDb: uiStore.averagingThresholdDb,
             // UI preferences
             showAdvanced: uiStore.showAdvanced,
             showMinorGrid: uiStore.showMinorGrid,
             ...eqStore.toConfig(),
+            ...targetTrace.toConfig(),
+            ...calibrationStore.toConfig(),
+            ...traceManager.toConfig(),
         });
     });
     // Detectar si estamos en modo Tauri (datos simulados)

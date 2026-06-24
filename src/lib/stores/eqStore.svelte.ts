@@ -189,6 +189,28 @@ class EQStore {
                 supportedTypes: f.supportedTypes || ['peaking'],
             }));
         }
+        // AutoEQ config
+        if (config.autoEQAlgorithm) this.autoEQAlgorithm = config.autoEQAlgorithm as any;
+        if (config.autoEQCostDomain) this.autoEQCostDomain = config.autoEQCostDomain as any;
+        if (config.autoEQMaxBoost !== undefined) this.autoEQMaxBoost = config.autoEQMaxBoost as number;
+        if (config.autoEQMaxCut !== undefined) this.autoEQMaxCut = config.autoEQMaxCut as number;
+        if (config.autoEQMinQ !== undefined) this.autoEQMinQ = config.autoEQMinQ as number;
+        if (config.autoEQMaxQ !== undefined) this.autoEQMaxQ = config.autoEQMaxQ as number;
+        if (config.autoEQMaxIterations !== undefined) this.autoEQMaxIterations = config.autoEQMaxIterations as number;
+        if (config.autoEQCoherenceThreshold !== undefined) this.autoEQCoherenceThreshold = config.autoEQCoherenceThreshold as number;
+        if (config.autoEQTrebleAveraging !== undefined) this.autoEQTrebleAveraging = config.autoEQTrebleAveraging as boolean;
+        if (config.autoEQTrebleFreq !== undefined) this.autoEQTrebleFreq = config.autoEQTrebleFreq as number;
+        if (config.autoEQOnlyCorrectPeaks !== undefined) this.autoEQOnlyCorrectPeaks = config.autoEQOnlyCorrectPeaks as boolean;
+        // PSO
+        if (config.autoEQPSOPopulation !== undefined) this.autoEQPSOPopulation = config.autoEQPSOPopulation as number;
+        if (config.autoEQPSOInertia !== undefined) this.autoEQPSOInertia = config.autoEQPSOInertia as number;
+        if (config.autoEQPSOCognitive !== undefined) this.autoEQPSOCognitive = config.autoEQPSOCognitive as number;
+        if (config.autoEQPSOSocial !== undefined) this.autoEQPSOSocial = config.autoEQPSOSocial as number;
+        // GA
+        if (config.autoEQGAPopulation !== undefined) this.autoEQGAPopulation = config.autoEQGAPopulation as number;
+        if (config.autoEQGAMutationRate !== undefined) this.autoEQGAMutationRate = config.autoEQGAMutationRate as number;
+        if (config.autoEQGACrossoverRate !== undefined) this.autoEQGACrossoverRate = config.autoEQGACrossoverRate as number;
+        if (config.autoEQGAElitism !== undefined) this.autoEQGAElitism = config.autoEQGAElitism as number;
     }
 
     toConfig() {
@@ -199,7 +221,66 @@ class EQStore {
             eqParametricFilters: $state.snapshot(this.parametricFilters).map(f => ({
                 id: f.id, freq: f.freq, gain: f.gain, q: f.q, type: f.type, supportedTypes: f.supportedTypes,
             })),
+            // AutoEQ config
+            autoEQAlgorithm: this.autoEQAlgorithm,
+            autoEQCostDomain: this.autoEQCostDomain,
+            autoEQMaxBoost: this.autoEQMaxBoost,
+            autoEQMaxCut: this.autoEQMaxCut,
+            autoEQMinQ: this.autoEQMinQ,
+            autoEQMaxQ: this.autoEQMaxQ,
+            autoEQMaxIterations: this.autoEQMaxIterations,
+            autoEQCoherenceThreshold: this.autoEQCoherenceThreshold,
+            autoEQTrebleAveraging: this.autoEQTrebleAveraging,
+            autoEQTrebleFreq: this.autoEQTrebleFreq,
+            autoEQOnlyCorrectPeaks: this.autoEQOnlyCorrectPeaks,
+            autoEQPSOPopulation: this.autoEQPSOPopulation,
+            autoEQPSOInertia: this.autoEQPSOInertia,
+            autoEQPSOCognitive: this.autoEQPSOCognitive,
+            autoEQPSOSocial: this.autoEQPSOSocial,
+            autoEQGAPopulation: this.autoEQGAPopulation,
+            autoEQGAMutationRate: this.autoEQGAMutationRate,
+            autoEQGACrossoverRate: this.autoEQGACrossoverRate,
+            autoEQGAElitism: this.autoEQGAElitism,
         };
+    }
+
+    resetEQ() {
+        this.eqType = 'grafico';
+        this.showEQ = true;
+        this.graphicBands = [
+            { freq: 31, gain: 0 }, { freq: 63, gain: 0 }, { freq: 125, gain: 0 },
+            { freq: 250, gain: 0 }, { freq: 500, gain: 0 }, { freq: 1000, gain: 0 },
+            { freq: 2000, gain: 0 }, { freq: 4000, gain: 0 }, { freq: 8000, gain: 0 },
+            { freq: 16000, gain: 0 },
+        ];
+        this.parametricFilters = [
+            { id: 1, freq: 80, gain: 0, q: 1.0, type: "peaking", supportedTypes: ["peaking", "lowpass", "highpass", "low_shelf", "high_shelf", "notch", "bandpass"], showConfig: false },
+            { id: 2, freq: 500, gain: 0, q: 1.0, type: "peaking", supportedTypes: ["peaking", "low_shelf", "high_shelf", "notch"], showConfig: false },
+            { id: 3, freq: 2000, gain: 0, q: 1.0, type: "peaking", supportedTypes: ["peaking", "notch"], showConfig: false },
+            { id: 4, freq: 8000, gain: 0, q: 1.0, type: "peaking", supportedTypes: ["peaking", "lowpass", "low_shelf", "high_shelf"], showConfig: false },
+        ];
+    }
+
+    resetAutoEQ() {
+        this.autoEQAlgorithm = 'greedy';
+        this.autoEQCostDomain = 'dB';
+        this.autoEQMaxBoost = 6;
+        this.autoEQMaxCut = -12;
+        this.autoEQMinQ = 0.2;
+        this.autoEQMaxQ = 6.0;
+        this.autoEQMaxIterations = 200;
+        this.autoEQCoherenceThreshold = 0.3;
+        this.autoEQTrebleAveraging = true;
+        this.autoEQTrebleFreq = 10000;
+        this.autoEQOnlyCorrectPeaks = false;
+        this.autoEQPSOPopulation = 30;
+        this.autoEQPSOInertia = 0.7;
+        this.autoEQPSOCognitive = 1.5;
+        this.autoEQPSOSocial = 1.5;
+        this.autoEQGAPopulation = 50;
+        this.autoEQGAMutationRate = 0.1;
+        this.autoEQGACrossoverRate = 0.8;
+        this.autoEQGAElitism = 2;
     }
 }
 

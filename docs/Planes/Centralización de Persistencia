@@ -1,0 +1,232 @@
+# Centralización de Persistencia + Guardar/Abrir Configuración
+
+## Objetivo
+
+Todo control de la página debe tener persistencia automática. Agregar funcionalidad para:
+- **Guardar configuración** → descarga `.ca.json`
+- **Abrir configuración** → carga `.ca.json`
+- **Resetear a defaults** → modal con selección granular de qué resetear
+
+---
+
+## Auditoría Exhaustiva de Controles
+
+### ✅ Controles que YA se persisten (via `configPersistence`)
+
+| Control | Store | Ubicación UI |
+|---|---|---|
+| layout | uiStore | TabConfig + Header |
+| themeMode | uiStore | TabConfig |
+| audioInDevice / audioOutDevice | uiStore | TabConfig |
+| sampleRate, fftSize, dspUpdateRate | uiStore | TabConfig |
+| weightingType, averagingType/Depth/Alpha | uiStore | TabConfig |
+| besselSpeed, ppoSmoothing, fftOverlap | uiStore | TabConfig |
+| windowType | uiStore | TabConfig |
+| inputGain, displayOffset, polarity | uiStore | TabConfig |
+| inputFilter | uiStore | TabConfig |
+| compensationDelayMs, autoDelayCompensation | uiStore | TabConfig |
+| refChannel, measChannel | uiStore | TabConfig |
+| generatorType, genLevel, genRouting | uiStore | TabMedicion |
+| targetFps, linkGeneratorToMeasurement | uiStore | TabConfig / TabMedicion |
+| enableLeq, enableSourceWindow | uiStore | TabConfig |
+| sourceWindowWidthMs, sourceWindowOffsetMs | uiStore | TabConfig |
+| showAdvanced, showMinorGrid | uiStore | TabConfig |
+| eqType, showEQ, graphicBands, parametricFilters | eqStore | TabEcualizar |
+
+### ❌ Controles que NO se persisten
+
+| Control | Store | Ubicación UI | Categoría reset |
+|---|---|---|---|
+| **targetTrace.points** | targetTrace | TabEcualizar (curva referencia) | EQ |
+| **targetTrace.visible** | targetTrace | TabEcualizar | EQ |
+| **targetTrace.color** | targetTrace | TabEcualizar | EQ |
+| **targetTrace.opacity** | targetTrace | TabEcualizar | EQ |
+| **targetTrace.offset** | targetTrace | TabEcualizar | EQ |
+| **targetTrace.name** | targetTrace | TabEcualizar | EQ |
+| **calibrationPoints** | calibrationStore | TabConfig | Calibración |
+| **calibrationFilename** | calibrationStore | TabConfig | Calibración |
+| **metricsToCapture** | traceManager | CaptureModal | Captura |
+| **tagPresets** | traceManager | CaptureModal / TabInstantáneas | Captura |
+| **autoEQAlgorithm** | eqStore | TabEcualizar | AutoEQ |
+| **autoEQCostDomain** | eqStore | TabEcualizar | AutoEQ |
+| **autoEQMaxBoost** | eqStore | TabEcualizar | AutoEQ |
+| **autoEQMaxCut** | eqStore | TabEcualizar | AutoEQ |
+| **autoEQMinQ, autoEQMaxQ** | eqStore | TabEcualizar | AutoEQ |
+| **autoEQMaxIterations** | eqStore | TabEcualizar | AutoEQ |
+| **autoEQCoherenceThreshold** | eqStore | TabEcualizar | AutoEQ |
+| **autoEQTrebleAveraging** | eqStore | TabEcualizar | AutoEQ |
+| **autoEQTrebleFreq** | eqStore | TabEcualizar | AutoEQ |
+| **autoEQOnlyCorrectPeaks** | eqStore | TabEcualizar | AutoEQ |
+| **autoEQPSOPopulation/Inertia/Cognitive/Social** | eqStore | TabEcualizar | AutoEQ |
+| **autoEQGAPopulation/MutationRate/CrossoverRate/Elitism** | eqStore | TabEcualizar | AutoEQ |
+| **genFreq** | uiStore | TabMedicion | Generador |
+| **autoSaveSnapshotOnStop** | uiStore | TabMedicion | Medición |
+| **measurementMode** | uiStore | TabMedicion | Medición |
+| **leqWindowSeconds** | uiStore | TabConfig | DSP |
+| **averagingThresholdDb** | uiStore | TabConfig | DSP |
+
+---
+
+## Propuesta de Cambios
+
+### Fase 1: Agregar `toConfig()` / `loadFromConfig()` a stores faltantes
+
+---
+
+#### [MODIFY] [targetTrace.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/targetTrace.svelte.ts)
+
+Agregar:
+```typescript
+toConfig() {
+    return {
+        targetPoints: this.points,
+        targetVisible: this.visible,
+        targetColor: this.color,
+        targetOpacity: this.opacity,
+        targetOffset: this.offset,
+        targetName: this.name,
+    };
+}
+
+loadFromConfig(c: Record<string, any>) {
+    if (c.targetPoints) this.points = c.targetPoints;
+    if (c.targetVisible !== undefined) this.visible = c.targetVisible;
+    if (c.targetColor) this.color = c.targetColor;
+    if (c.targetOpacity !== undefined) this.opacity = c.targetOpacity;
+    if (c.targetOffset !== undefined) this.offset = c.targetOffset;
+    if (c.targetName) this.name = c.targetName;
+}
+```
+
+---
+
+#### [MODIFY] [calibrationStore.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/calibrationStore.svelte.ts)
+
+Agregar:
+```typescript
+toConfig() {
+    return {
+        calibrationPoints: this.calibrationPoints,
+        calibrationFilename: this.calibrationFilename,
+    };
+}
+
+loadFromConfig(c: Record<string, any>) {
+    if (c.calibrationPoints) this.calibrationPoints = c.calibrationPoints;
+    if (c.calibrationFilename) this.calibrationFilename = c.calibrationFilename;
+}
+```
+
+---
+
+#### [MODIFY] [eqStore.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/eqStore.svelte.ts)
+
+Ampliar `toConfig()` y `loadFromConfig()` con todos los campos autoEQ faltantes.
+
+---
+
+#### [MODIFY] [traceManager.svelte.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/stores/traceManager.svelte.ts)
+
+Agregar `toConfig()` / `loadFromConfig()` para `tagPresets` y `metricsToCapture`.  
+**Eliminar** el localStorage separado de `tagPresets` (unificarlo en configPersistence).
+
+---
+
+### Fase 2: Ampliar `PersistedConfig` v5
+
+#### [MODIFY] [configPersistence.ts](file:///c:/Users/Abel/Documents/Asistente/asistente/src/lib/utils/configPersistence.ts)
+
+Agregar al schema:
+```typescript
+// Target trace
+targetPoints?: { f: number; g: number }[];
+targetVisible?: boolean;
+targetColor?: string;
+targetOpacity?: number;
+targetOffset?: number;
+targetName?: string;
+
+// Calibración
+calibrationPoints?: { frequency: number; gain: number }[];
+calibrationFilename?: string;
+
+// Captura
+metricsToCapture?: Record<string, boolean>;
+tagPresets?: { ubicacion: string[]; posicion: string[] };
+
+// AutoEQ config
+autoEQAlgorithm?: string;
+autoEQCostDomain?: string;
+autoEQMaxBoost?: number;
+autoEQMaxCut?: number;
+autoEQMinQ?: number;
+autoEQMaxQ?: number;
+autoEQMaxIterations?: number;
+autoEQCoherenceThreshold?: number;
+autoEQTrebleAveraging?: boolean;
+autoEQTrebleFreq?: number;
+autoEQOnlyCorrectPeaks?: boolean;
+
+// uiStore faltantes
+genFreq?: number;
+autoSaveSnapshotOnStop?: boolean;
+measurementMode?: string;
+leqWindowSeconds?: number;
+averagingThresholdDb?: number;
+```
+
+Agregar funciones de export/import:
+```typescript
+export function exportConfig(config: PersistedConfig): string {
+    return JSON.stringify({ ...config, _exportedAt: Date.now() }, null, 2);
+}
+
+export function importConfig(json: string): Partial<PersistedConfig> | null {
+    // Parsea, valida, migra si necesario
+}
+```
+
+---
+
+### Fase 3: Actualizar `$effect` en +page.svelte
+
+#### [MODIFY] [+page.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/routes/+page.svelte)
+
+- En `onMount`: cargar los nuevos campos hacia `targetTrace`, `calibrationStore`, `traceManager`
+- En `$effect saveConfig()`: incluir `...targetTrace.toConfig()`, `...calibrationStore.toConfig()`, `...traceManager.toConfig()`
+- Agregar los campos `uiStore` faltantes: `genFreq`, `autoSaveSnapshotOnStop`, `measurementMode`, `leqWindowSeconds`, `averagingThresholdDb`
+
+---
+
+### Fase 4: UI de Guardar / Abrir / Resetear en TabConfig
+
+#### [MODIFY] [TabConfig.svelte](file:///c:/Users/Abel/Documents/Asistente/asistente/src/components/medicion/TabConfig.svelte)
+
+Al final del panel, agregar sección **"Configuración"** con 3 botones:
+
+1. **Guardar configuración** → recopila todo el `PersistedConfig`, lo serializa y descarga como `.ca.json`
+2. **Abrir configuración** → `<input type="file" accept=".ca.json,.json">`, parsea, valida, aplica a todos los stores
+3. **Resetear a defaults** → abre un modal con checkboxes por categoría:
+   - ☐ Hardware de audio (devices, routing, canales)
+   - ☐ DSP (averaging, FFT, ventana, ponderación)
+   - ☐ Generador (tipo, freq, nivel, routing)
+   - ☐ Calibración (puntos, archivo)
+   - ☐ EQ (tipo, bandas, filtros paramétricos)
+   - ☐ AutoEQ (algoritmo, rangos, opciones avanzadas)
+   - ☐ Curva objetivo (target trace)
+   - ☐ Captura (métricas, tag presets)
+   - ☐ Pantalla (layout, tema, grilla, FPS)
+
+---
+
+## Verificación
+
+### Automatizada
+```bash
+npx svelte-check --output human
+```
+
+### Manual
+- Verificar que todos los valores sobrevivan un reload del browser
+- Verificar guardar → abrir `.ca.json` restaura todos los valores
+- Verificar reset selectivo restaura solo las categorías seleccionadas
