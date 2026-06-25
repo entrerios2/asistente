@@ -311,8 +311,8 @@
             initOffscreenCanvas: () => spectroMgr.init(containerWidth),
             spectrogramDbHistory: spectroMgr.dbHistory, sharedImageData: spectroMgr.sharedImageData,
             targetTrace, meterStore,
-            hReal: mathOrchestrator.hReal, hImag: mathOrchestrator.hImag,
-            outputCrestFactor: mathOrchestrator.outputCrestFactor,
+            hReal: interpEngine.interpHReal, hImag: interpEngine.interpHImag,
+            outputCrestFactor: interpEngine.interpCrestFactor,
         });
         if (result) { localLastVersion = result.localLastVersion; dirty = result.dirty; _cachedCtx = result.cachedCtx; }
     }
