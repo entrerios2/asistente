@@ -175,3 +175,18 @@ export function importConfig(json: string): Partial<PersistedConfig> | null {
         return null;
     }
 }
+
+/**
+ * Intenta cargar defaults del sitio desde /defaults.ca.json (un archivo exportado desde la app).
+ * Retorna null si el archivo no existe o es inválido.
+ */
+export async function loadDefaults(basePath: string = ''): Promise<Partial<PersistedConfig> | null> {
+    try {
+        const res = await fetch(`${basePath}/defaults.ca.json`);
+        if (!res.ok) return null;
+        const json = await res.text();
+        return importConfig(json);
+    } catch {
+        return null;
+    }
+}

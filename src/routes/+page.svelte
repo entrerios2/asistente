@@ -7,68 +7,75 @@
     import { traceManager, UBICACION_COLORS, type InstantaneaTags } from '$lib/stores/traceManager.svelte';
     import { uiStore } from '$lib/stores/ui.svelte';
     import { mathOrchestrator } from '$lib/stores/mathOrchestrator.svelte';
-    import { loadConfig, saveConfig } from "$lib/utils/configPersistence";
+    import { loadConfig, saveConfig, loadDefaults } from "$lib/utils/configPersistence";
     import { eqStore } from '$lib/stores/eqStore.svelte';
     import { targetTrace } from '$lib/stores/targetTrace.svelte';
     import { calibrationStore } from '$lib/stores/calibrationStore.svelte';
+    import { base } from '$app/paths';
+
+    // Extracted config application to share between sync and async paths
+    function applyConfig(config: Partial<import('$lib/utils/configPersistence').PersistedConfig>) {
+        if (config.layout) uiStore.setLayout(config.layout);
+        if (config.themeMode) uiStore.setThemeMode(config.themeMode);
+        if (config.audioInDevice) uiStore.audioInDevice = config.audioInDevice;
+        if (config.audioOutDevice) uiStore.audioOutDevice = config.audioOutDevice;
+        if (config.sampleRate) uiStore.sampleRate = config.sampleRate;
+        if (config.fftSize) uiStore.fftSize = config.fftSize;
+        if (config.dspUpdateRate) uiStore.dspUpdateRate = config.dspUpdateRate;
+        if (config.weightingType) uiStore.weightingType = config.weightingType as any;
+        if (config.averagingType) uiStore.averagingType = config.averagingType as any;
+        if (config.averagingDepth !== undefined) uiStore.averagingDepth = config.averagingDepth;
+        if (config.averagingAlpha !== undefined) uiStore.averagingAlpha = config.averagingAlpha;
+        if (config.besselSpeed) uiStore.besselSpeed = config.besselSpeed as any;
+        if (config.ppoSmoothing !== undefined) uiStore.ppoSmoothing = config.ppoSmoothing;
+        if (config.fftOverlap !== undefined) uiStore.fftOverlap = config.fftOverlap as any;
+        if (config.windowType) uiStore.windowType = config.windowType as any;
+        if (config.inputGain !== undefined) uiStore.inputGain = config.inputGain;
+        if (config.displayOffset !== undefined) uiStore.displayOffset = config.displayOffset;
+        if (config.polarity !== undefined) uiStore.polarity = config.polarity;
+        if (config.inputFilter) uiStore.inputFilter = config.inputFilter as any;
+        if (config.compensationDelayMs !== undefined) uiStore.compensationDelayMs = config.compensationDelayMs;
+        if (config.autoDelayCompensation !== undefined) uiStore.autoDelayCompensation = config.autoDelayCompensation;
+        if (config.refChannel !== undefined) uiStore.refChannel = config.refChannel;
+        if (config.measChannel !== undefined) uiStore.measChannel = config.measChannel;
+        if (config.generatorType) uiStore.generatorType = config.generatorType;
+        if (config.genLevel !== undefined) uiStore.genLevel = config.genLevel;
+        if (config.genRouting) uiStore.genRouting = config.genRouting as any;
+        if (config.targetFps !== undefined) uiStore.targetFps = config.targetFps;
+        if (config.linkGeneratorToMeasurement !== undefined) uiStore.linkGeneratorToMeasurement = config.linkGeneratorToMeasurement;
+        if (config.enableLeq !== undefined) uiStore.enableLeq = config.enableLeq;
+        if (config.enableSourceWindow !== undefined) uiStore.enableSourceWindow = config.enableSourceWindow;
+        if (config.sourceWindowWidthMs !== undefined) uiStore.sourceWindowWidthMs = config.sourceWindowWidthMs;
+        if (config.sourceWindowOffsetMs !== undefined) uiStore.sourceWindowOffsetMs = config.sourceWindowOffsetMs;
+        if (config.genFreq !== undefined) uiStore.genFreq = config.genFreq;
+        if (config.autoSaveSnapshotOnStop !== undefined) uiStore.autoSaveSnapshotOnStop = config.autoSaveSnapshotOnStop;
+        if (config.measurementMode) uiStore.measurementMode = config.measurementMode;
+        if (config.leqWindowSeconds !== undefined) uiStore.leqWindowSeconds = config.leqWindowSeconds;
+        if (config.averagingThresholdDb !== undefined) uiStore.averagingThresholdDb = config.averagingThresholdDb;
+        if (config.showAdvanced !== undefined) uiStore.showAdvanced = config.showAdvanced;
+        if (config.showMinorGrid !== undefined) uiStore.showMinorGrid = config.showMinorGrid;
+        if (config.palette) uiStore.setPalette(config.palette);
+        if (config.canvasTheme) uiStore.setCanvasTheme(config.canvasTheme);
+        eqStore.loadFromConfig(config);
+        targetTrace.loadFromConfig(config);
+        calibrationStore.loadFromConfig(config);
+        traceManager.loadFromConfig(config);
+    }
 
     onMount(() => {
-        // Cargar configuración persistida
+        // Cargar configuración: localStorage > /defaults.json > hardcoded
         const config = loadConfig();
         if (config) {
-            if (config.layout) uiStore.setLayout(config.layout);
-            if (config.themeMode) {
-                uiStore.setThemeMode(config.themeMode);
-            }
-            if (config.audioInDevice) uiStore.audioInDevice = config.audioInDevice;
-            if (config.audioOutDevice) uiStore.audioOutDevice = config.audioOutDevice;
-            if (config.sampleRate) uiStore.sampleRate = config.sampleRate;
-            if (config.fftSize) uiStore.fftSize = config.fftSize;
-            if (config.dspUpdateRate) uiStore.dspUpdateRate = config.dspUpdateRate;
-            // DSP advanced (v4)
-            if (config.weightingType) uiStore.weightingType = config.weightingType as any;
-            if (config.averagingType) uiStore.averagingType = config.averagingType as any;
-            if (config.averagingDepth !== undefined) uiStore.averagingDepth = config.averagingDepth;
-            if (config.averagingAlpha !== undefined) uiStore.averagingAlpha = config.averagingAlpha;
-            if (config.besselSpeed) uiStore.besselSpeed = config.besselSpeed as any;
-            if (config.ppoSmoothing !== undefined) uiStore.ppoSmoothing = config.ppoSmoothing;
-            if (config.fftOverlap !== undefined) uiStore.fftOverlap = config.fftOverlap as any;
-            if (config.windowType) uiStore.windowType = config.windowType as any;
-            if (config.inputGain !== undefined) uiStore.inputGain = config.inputGain;
-            if (config.displayOffset !== undefined) uiStore.displayOffset = config.displayOffset;
-            if (config.polarity !== undefined) uiStore.polarity = config.polarity;
-            if (config.inputFilter) uiStore.inputFilter = config.inputFilter as any;
-            if (config.compensationDelayMs !== undefined) uiStore.compensationDelayMs = config.compensationDelayMs;
-            if (config.autoDelayCompensation !== undefined) uiStore.autoDelayCompensation = config.autoDelayCompensation;
-            if (config.refChannel !== undefined) uiStore.refChannel = config.refChannel;
-            if (config.measChannel !== undefined) uiStore.measChannel = config.measChannel;
-            if (config.generatorType) uiStore.generatorType = config.generatorType;
-            if (config.genLevel !== undefined) uiStore.genLevel = config.genLevel;
-            if (config.genRouting) uiStore.genRouting = config.genRouting as any;
-            if (config.targetFps !== undefined) uiStore.targetFps = config.targetFps;
-            if (config.linkGeneratorToMeasurement !== undefined) uiStore.linkGeneratorToMeasurement = config.linkGeneratorToMeasurement;
-            if (config.enableLeq !== undefined) uiStore.enableLeq = config.enableLeq;
-            if (config.enableSourceWindow !== undefined) uiStore.enableSourceWindow = config.enableSourceWindow;
-            if (config.sourceWindowWidthMs !== undefined) uiStore.sourceWindowWidthMs = config.sourceWindowWidthMs;
-            if (config.sourceWindowOffsetMs !== undefined) uiStore.sourceWindowOffsetMs = config.sourceWindowOffsetMs;
-            // uiStore v5
-            if (config.genFreq !== undefined) uiStore.genFreq = config.genFreq;
-            if (config.autoSaveSnapshotOnStop !== undefined) uiStore.autoSaveSnapshotOnStop = config.autoSaveSnapshotOnStop;
-            if (config.measurementMode) uiStore.measurementMode = config.measurementMode;
-            if (config.leqWindowSeconds !== undefined) uiStore.leqWindowSeconds = config.leqWindowSeconds;
-            if (config.averagingThresholdDb !== undefined) uiStore.averagingThresholdDb = config.averagingThresholdDb;
-            // UI preferences (v4)
-            if (config.showAdvanced !== undefined) uiStore.showAdvanced = config.showAdvanced;
-            if (config.showMinorGrid !== undefined) uiStore.showMinorGrid = config.showMinorGrid;
-            // Theme (v6)
-            if (config.palette) uiStore.setPalette(config.palette);
-            if (config.canvasTheme) uiStore.setCanvasTheme(config.canvasTheme);
-            eqStore.loadFromConfig(config);
-            targetTrace.loadFromConfig(config);
-            calibrationStore.loadFromConfig(config);
-            traceManager.loadFromConfig(config);
+            applyConfig(config);
         } else {
-            uiStore.setLayout('1x1');
+            // No localStorage: try /defaults.json asynchronously
+            loadDefaults(base).then((defaults) => {
+                if (defaults) {
+                    applyConfig(defaults);
+                } else {
+                    uiStore.setLayout('1x1');
+                }
+            });
         }
 
         // Hotkeys globales
