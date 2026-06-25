@@ -36,6 +36,10 @@ import { uiStore } from '../stores/ui.svelte';
 
 const maxHistory = 100;
 
+// Pre-allocated spectrogram row buffer
+let _spectroRow: Float32Array | null = null;
+let _spectroRowWidth = 0;
+
 // Cached offscreen canvas for coherence masking (reused across frames)
 let _maskCanvas: HTMLCanvasElement | null = null;
 let _maskCtx: CanvasRenderingContext2D | null = null;
@@ -169,7 +173,11 @@ export function drawQuadrant(p: DrawParams): void {
                 const logMin = Math.log10(freqMin);
                 const logMax = Math.log10(freqMax);
 
-                const dbRow = new Float32Array(w);
+                if (!_spectroRow || _spectroRowWidth !== w) {
+                    _spectroRow = new Float32Array(w);
+                    _spectroRowWidth = w;
+                }
+                const dbRow = _spectroRow;
                 for (let x = 0; x < w; x++) {
                     const logFreq = (x / w) * (logMax - logMin) + logMin;
                     const freq = Math.pow(10, logFreq);
@@ -193,7 +201,7 @@ export function drawQuadrant(p: DrawParams): void {
 
                 p.offscreenCtx.putImageData(p.sharedImageData, 0, yRow);
 
-                p.spectrogramDbHistory.push(dbRow);
+                p.spectrogramDbHistory.push(new Float32Array(dbRow));
                 if (p.spectrogramDbHistory.length > maxHistory) {
                     p.spectrogramDbHistory.shift();
                 }

@@ -14,6 +14,23 @@ import {
 } from '../canvasInteraction';
 import { type MetricConfig } from '../quadrantState';
 
+// Pre-allocated coordinate buffers to avoid GC pressure (max 8192 bins)
+const MAX_POINTS = 8192;
+let _xs = new Float64Array(MAX_POINTS);
+let _ys = new Float64Array(MAX_POINTS);
+
+function ensureCapacity(size: number) {
+    if (_xs.length < size) {
+        const newSize = Math.max(_xs.length * 2, size);
+        _xs = new Float64Array(newSize);
+        _ys = new Float64Array(newSize);
+    }
+}
+
+// Pre-allocated ETC buffer (reused across frames)
+let _etcBuffer: Float32Array | null = null;
+let _etcBufferSize = 0;
+
 export function drawMetricPath(
     ctx: CanvasRenderingContext2D,
     dataArray: Float32Array,
@@ -37,7 +54,8 @@ export function drawMetricPath(
     const cfg = metricConfigs[metricType];
 
     // Construir array de puntos (un punto por bin FFT visible)
-    const points: {x: number, y: number}[] = [];
+    ensureCapacity(dataArray.length);
+    let pointCount = 0;
     const binWidth = (sampleRate / 2) / dataArray.length;
 
     for (let bin = 0; bin < dataArray.length; bin++) {
@@ -70,19 +88,21 @@ export function drawMetricPath(
         }
 
         const y = valToY(val, height, metricType, metricConfigs, state) + (cfg?.yShift || 0);
-        points.push({ x, y });
+        _xs[pointCount] = x;
+        _ys[pointCount] = y;
+        pointCount++;
     }
 
     // Single Path2D with quadratic spline — coherence masking handled externally
-    if (points.length > 1) {
+    if (pointCount > 1) {
         const path = new Path2D();
-        path.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length - 1; i++) {
-            const midX = (points[i].x + points[i + 1].x) / 2;
-            const midY = (points[i].y + points[i + 1].y) / 2;
-            path.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+        path.moveTo(_xs[0], _ys[0]);
+        for (let i = 1; i < pointCount - 1; i++) {
+            const midX = (_xs[i] + _xs[i + 1]) / 2;
+            const midY = (_ys[i] + _ys[i + 1]) / 2;
+            path.quadraticCurveTo(_xs[i], _ys[i], midX, midY);
         }
-        path.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+        path.lineTo(_xs[pointCount - 1], _ys[pointCount - 1]);
         ctx.stroke(path);
     }
 
@@ -133,7 +153,8 @@ export function drawSpectrumPath(
     const offset = hasLive ? 0 : 68;
 
     // Construir array de puntos
-    const points: {x: number, y: number}[] = [];
+    ensureCapacity(dataArray.length);
+    let pointCount = 0;
     const binWidth = (sampleRate / 2) / dataArray.length;
 
     for (let bin = 0; bin < dataArray.length; bin++) {
@@ -153,19 +174,21 @@ export function drawSpectrumPath(
         }
 
         const y = valToY(val, height, "Spectrum", metricConfigs, state) + (cfg.yShift || 0);
-        points.push({ x, y });
+        _xs[pointCount] = x;
+        _ys[pointCount] = y;
+        pointCount++;
     }
 
     // Single Path2D with quadratic spline — coherence masking handled externally
-    if (points.length > 1) {
+    if (pointCount > 1) {
         const path = new Path2D();
-        path.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length - 1; i++) {
-            const midX = (points[i].x + points[i + 1].x) / 2;
-            const midY = (points[i].y + points[i + 1].y) / 2;
-            path.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+        path.moveTo(_xs[0], _ys[0]);
+        for (let i = 1; i < pointCount - 1; i++) {
+            const midX = (_xs[i] + _xs[i + 1]) / 2;
+            const midY = (_ys[i] + _ys[i + 1]) / 2;
+            path.quadraticCurveTo(_xs[i], _ys[i], midX, midY);
         }
-        path.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+        path.lineTo(_xs[pointCount - 1], _ys[pointCount - 1]);
         ctx.stroke(path);
     }
 
@@ -189,7 +212,11 @@ export function drawTimeDomainPath(
     let data = dataArray;
     // ETC mode: Energy Time Curve (dB display of impulse)
     if (metricType === "Impulse" && metricConfigs?.["Impulse"]?.modeY === 'ETC') {
-        const etcData = new Float32Array(data.length);
+        if (!_etcBuffer || _etcBufferSize !== data.length) {
+            _etcBuffer = new Float32Array(data.length);
+            _etcBufferSize = data.length;
+        }
+        const etcData = _etcBuffer;
         let peakVal = 0;
         for (let i = 0; i < data.length; i++) {
             const absVal = Math.abs(data[i]);
@@ -206,8 +233,9 @@ export function drawTimeDomainPath(
     ctx.lineWidth = lw;
     ctx.setLineDash(lineDash || []);
     // Build points array
-    const points: { x: number, y: number }[] = [];
     const numPoints = 350;
+    ensureCapacity(numPoints);
+    let pointCount = 0;
     for (let i = 0; i < numPoints; i++) {
         const t = timeMin + (i / (numPoints - 1)) * (timeMax - timeMin);
         const x = valToX(t, width, hasTimeDomainActive, state);
@@ -215,20 +243,22 @@ export function drawTimeDomainPath(
         const y = valToY(val, height, metricType, metricConfigs || {}, state);
 
         if (x >= -50 && x <= width + 50 && y >= -50 && y <= height + 50) {
-            points.push({ x, y });
+            _xs[pointCount] = x;
+            _ys[pointCount] = y;
+            pointCount++;
         }
     }
 
     // Draw with quadratic spline
-    if (points.length > 1) {
+    if (pointCount > 1) {
         const path = new Path2D();
-        path.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length - 1; i++) {
-            const midX = (points[i].x + points[i + 1].x) / 2;
-            const midY = (points[i].y + points[i + 1].y) / 2;
-            path.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+        path.moveTo(_xs[0], _ys[0]);
+        for (let i = 1; i < pointCount - 1; i++) {
+            const midX = (_xs[i] + _xs[i + 1]) / 2;
+            const midY = (_ys[i] + _ys[i + 1]) / 2;
+            path.quadraticCurveTo(_xs[i], _ys[i], midX, midY);
         }
-        path.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+        path.lineTo(_xs[pointCount - 1], _ys[pointCount - 1]);
         ctx.stroke(path);
     }
     ctx.setLineDash([]);
@@ -258,7 +288,8 @@ export function drawSimulatedMagnitudePath(
     const sr = sampleRate;
     const binWidth = sr / 2 / bins;
 
-    const points: {x: number, y: number}[] = [];
+    ensureCapacity(bins);
+    let pointCount = 0;
     let prevX = -100;
 
     for (let bin = 0; bin < bins; bin++) {
@@ -280,18 +311,20 @@ export function drawSimulatedMagnitudePath(
         }
 
         const y = valToY(val, height, "Simulated Magnitude", metricConfigs, state) + (cfg.yShift || 0);
-        points.push({ x, y });
+        _xs[pointCount] = x;
+        _ys[pointCount] = y;
+        pointCount++;
     }
 
-    if (points.length > 1) {
+    if (pointCount > 1) {
         const path = new Path2D();
-        path.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length - 1; i++) {
-            const midX = (points[i].x + points[i + 1].x) / 2;
-            const midY = (points[i].y + points[i + 1].y) / 2;
-            path.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+        path.moveTo(_xs[0], _ys[0]);
+        for (let i = 1; i < pointCount - 1; i++) {
+            const midX = (_xs[i] + _xs[i + 1]) / 2;
+            const midY = (_ys[i] + _ys[i + 1]) / 2;
+            path.quadraticCurveTo(_xs[i], _ys[i], midX, midY);
         }
-        path.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+        path.lineTo(_xs[pointCount - 1], _ys[pointCount - 1]);
         ctx.stroke(path);
     }
 
@@ -314,23 +347,26 @@ export function drawNyquistPath(
     ctx.strokeStyle = color;
     ctx.lineWidth = lw;
     // Build points
-    const points: { x: number, y: number }[] = [];
+    ensureCapacity(hReal.length);
+    let pointCount = 0;
     for (let k = 0; k < hReal.length; k++) {
         const x = centerX + hReal[k] * maxRad;
         const y = centerY - hImag[k] * maxRad;
-        points.push({ x, y });
+        _xs[pointCount] = x;
+        _ys[pointCount] = y;
+        pointCount++;
     }
 
     // Draw with quadratic spline
-    if (points.length > 1) {
+    if (pointCount > 1) {
         const path = new Path2D();
-        path.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length - 1; i++) {
-            const midX = (points[i].x + points[i + 1].x) / 2;
-            const midY = (points[i].y + points[i + 1].y) / 2;
-            path.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+        path.moveTo(_xs[0], _ys[0]);
+        for (let i = 1; i < pointCount - 1; i++) {
+            const midX = (_xs[i] + _xs[i + 1]) / 2;
+            const midY = (_ys[i] + _ys[i + 1]) / 2;
+            path.quadraticCurveTo(_xs[i], _ys[i], midX, midY);
         }
-        path.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+        path.lineTo(_xs[pointCount - 1], _ys[pointCount - 1]);
         ctx.stroke(path);
     }
 }
@@ -374,11 +410,16 @@ export function drawPhasePath(
 
     // Build points array with decimation (bin-based like drawMetricPath)
     const bins = interpPhase.length;
+    ensureCapacity(bins);
     const binWidth = (sampleRate / 2) / bins;
 
-    // Collect segments (break on coherence gaps or phase wrapping jumps)
-    const segments: { x: number, y: number }[][] = [];
-    let currentSeg: { x: number, y: number }[] = [];
+    // We will store all point coordinates in _xs and _ys consecutively.
+    // To identify segments, we keep track of where each segment starts and its length.
+    let pointCount = 0;
+    const segStarts: number[] = [];
+    const segLengths: number[] = [];
+    let currentSegStart = 0;
+    let currentSegLen = 0;
     let lastY = 0;
 
     for (let bin = 0; bin < bins; bin++) {
@@ -389,9 +430,10 @@ export function drawPhasePath(
 
         // Coherence masking
         if (interpCoherence && magCfg.enableCoherence && interpCoherence[bin] < (magCfg.coherenceThreshold ?? 0.5)) {
-            if (currentSeg.length > 0) {
-                segments.push(currentSeg);
-                currentSeg = [];
+            if (currentSegLen > 0) {
+                segStarts.push(currentSegStart);
+                segLengths.push(currentSegLen);
+                currentSegLen = 0;
             }
             continue;
         }
@@ -415,33 +457,48 @@ export function drawPhasePath(
         const y = valToY(val, height, "Phase", metricConfigs, state) + (cfg.yShift || 0);
 
         // Break segment on large Y jumps (phase wrapping)
-        if (currentSeg.length > 0 && Math.abs(y - lastY) > height * 0.65) {
-            segments.push(currentSeg);
-            currentSeg = [];
+        if (currentSegLen > 0 && Math.abs(y - lastY) > height * 0.65) {
+            segStarts.push(currentSegStart);
+            segLengths.push(currentSegLen);
+            currentSegStart = pointCount;
+            currentSegLen = 0;
         }
 
-        currentSeg.push({ x, y });
+        _xs[pointCount] = x;
+        _ys[pointCount] = y;
+        if (currentSegLen === 0) {
+            currentSegStart = pointCount;
+        }
+        pointCount++;
+        currentSegLen++;
         lastY = y;
     }
-    if (currentSeg.length > 0) segments.push(currentSeg);
+    if (currentSegLen > 0) {
+        segStarts.push(currentSegStart);
+        segLengths.push(currentSegLen);
+    }
 
     // Draw each segment with quadratic spline
     const path = new Path2D();
-    for (const seg of segments) {
-        if (seg.length < 2) {
-            if (seg.length === 1) {
-                path.moveTo(seg[0].x, seg[0].y);
-                path.lineTo(seg[0].x + 0.5, seg[0].y);
+    for (let s = 0; s < segStarts.length; s++) {
+        const start = segStarts[s];
+        const len = segLengths[s];
+        if (len < 2) {
+            if (len === 1) {
+                path.moveTo(_xs[start], _ys[start]);
+                path.lineTo(_xs[start] + 0.5, _ys[start]);
             }
             continue;
         }
-        path.moveTo(seg[0].x, seg[0].y);
-        for (let i = 1; i < seg.length - 1; i++) {
-            const midX = (seg[i].x + seg[i + 1].x) / 2;
-            const midY = (seg[i].y + seg[i + 1].y) / 2;
-            path.quadraticCurveTo(seg[i].x, seg[i].y, midX, midY);
+        path.moveTo(_xs[start], _ys[start]);
+        for (let i = 1; i < len - 1; i++) {
+            const idx = start + i;
+            const midX = (_xs[idx] + _xs[idx + 1]) / 2;
+            const midY = (_ys[idx] + _ys[idx + 1]) / 2;
+            path.quadraticCurveTo(_xs[idx], _ys[idx], midX, midY);
         }
-        path.lineTo(seg[seg.length - 1].x, seg[seg.length - 1].y);
+        const endIdx = start + len - 1;
+        path.lineTo(_xs[endIdx], _ys[endIdx]);
     }
     ctx.stroke(path);
     ctx.setLineDash([]);
@@ -462,7 +519,8 @@ export function drawCrestFactor(
     ctx.lineWidth = 1.5;
 
     // Build points with decimation
-    const points: { x: number, y: number }[] = [];
+    ensureCapacity(width);
+    let pointCount = 0;
 
     for (let x = 0; x < width; x++) {
         const binIndex = frequencyLUT[x];
@@ -470,19 +528,21 @@ export function drawCrestFactor(
 
         const val = crestFactorData[binIndex];
         const y = valToY(val, height, "Crest Factor", {}, state);
-        points.push({ x, y });
+        _xs[pointCount] = x;
+        _ys[pointCount] = y;
+        pointCount++;
     }
 
     // Draw with quadratic spline
-    if (points.length > 1) {
+    if (pointCount > 1) {
         const path = new Path2D();
-        path.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length - 1; i++) {
-            const midX = (points[i].x + points[i + 1].x) / 2;
-            const midY = (points[i].y + points[i + 1].y) / 2;
-            path.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+        path.moveTo(_xs[0], _ys[0]);
+        for (let i = 1; i < pointCount - 1; i++) {
+            const midX = (_xs[i] + _xs[i + 1]) / 2;
+            const midY = (_ys[i] + _ys[i + 1]) / 2;
+            path.quadraticCurveTo(_xs[i], _ys[i], midX, midY);
         }
-        path.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+        path.lineTo(_xs[pointCount - 1], _ys[pointCount - 1]);
         ctx.stroke(path);
     }
 }
@@ -508,7 +568,8 @@ export function drawPhaseDelay(
     const binWidth = sr / 2 / bins;
 
     // Build points array with decimation
-    const points: { x: number, y: number }[] = [];
+    ensureCapacity(bins);
+    let pointCount = 0;
 
     for (let bin = 1; bin < bins; bin++) {
         const freq = bin * binWidth;
@@ -521,19 +582,21 @@ export function drawPhaseDelay(
         const clampedDelay = Math.max(-5, Math.min(25, phaseDelayMs));
 
         const y = valToY(clampedDelay, height, 'Phase Delay', metricConfigs, state);
-        points.push({ x, y });
+        _xs[pointCount] = x;
+        _ys[pointCount] = y;
+        pointCount++;
     }
 
     // Draw with quadratic spline
-    if (points.length > 1) {
+    if (pointCount > 1) {
         const path = new Path2D();
-        path.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length - 1; i++) {
-            const midX = (points[i].x + points[i + 1].x) / 2;
-            const midY = (points[i].y + points[i + 1].y) / 2;
-            path.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+        path.moveTo(_xs[0], _ys[0]);
+        for (let i = 1; i < pointCount - 1; i++) {
+            const midX = (_xs[i] + _xs[i + 1]) / 2;
+            const midY = (_ys[i] + _ys[i + 1]) / 2;
+            path.quadraticCurveTo(_xs[i], _ys[i], midX, midY);
         }
-        path.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+        path.lineTo(_xs[pointCount - 1], _ys[pointCount - 1]);
         ctx.stroke(path);
     }
 }
