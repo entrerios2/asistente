@@ -205,8 +205,8 @@ export function drawTimeDomainPath(
     ctx.strokeStyle = color;
     ctx.lineWidth = lw;
     ctx.setLineDash(lineDash || []);
-    ctx.beginPath();
-    let first = true;
+    // Build points array
+    const points: { x: number, y: number }[] = [];
     const numPoints = 350;
     for (let i = 0; i < numPoints; i++) {
         const t = timeMin + (i / (numPoints - 1)) * (timeMax - timeMin);
@@ -215,15 +215,22 @@ export function drawTimeDomainPath(
         const y = valToY(val, height, metricType, metricConfigs || {}, state);
 
         if (x >= -50 && x <= width + 50 && y >= -50 && y <= height + 50) {
-            if (first) {
-                ctx.moveTo(x, y);
-                first = false;
-            } else {
-                ctx.lineTo(x, y);
-            }
+            points.push({ x, y });
         }
     }
-    ctx.stroke();
+
+    // Draw with quadratic spline
+    if (points.length > 1) {
+        const path = new Path2D();
+        path.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length - 1; i++) {
+            const midX = (points[i].x + points[i + 1].x) / 2;
+            const midY = (points[i].y + points[i + 1].y) / 2;
+            path.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+        }
+        path.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+        ctx.stroke(path);
+    }
     ctx.setLineDash([]);
 }
 
@@ -279,9 +286,12 @@ export function drawSimulatedMagnitudePath(
     if (points.length > 1) {
         const path = new Path2D();
         path.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length; i++) {
-            path.lineTo(points[i].x, points[i].y);
+        for (let i = 1; i < points.length - 1; i++) {
+            const midX = (points[i].x + points[i + 1].x) / 2;
+            const midY = (points[i].y + points[i + 1].y) / 2;
+            path.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
         }
+        path.lineTo(points[points.length - 1].x, points[points.length - 1].y);
         ctx.stroke(path);
     }
 
@@ -303,21 +313,26 @@ export function drawNyquistPath(
 
     ctx.strokeStyle = color;
     ctx.lineWidth = lw;
-    ctx.beginPath();
-    let first = true;
-
+    // Build points
+    const points: { x: number, y: number }[] = [];
     for (let k = 0; k < hReal.length; k++) {
         const x = centerX + hReal[k] * maxRad;
         const y = centerY - hImag[k] * maxRad;
-
-        if (first) {
-            ctx.moveTo(x, y);
-            first = false;
-        } else {
-            ctx.lineTo(x, y);
-        }
+        points.push({ x, y });
     }
-    ctx.stroke();
+
+    // Draw with quadratic spline
+    if (points.length > 1) {
+        const path = new Path2D();
+        path.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length - 1; i++) {
+            const midX = (points[i].x + points[i + 1].x) / 2;
+            const midY = (points[i].y + points[i + 1].y) / 2;
+            path.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+        }
+        path.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+        ctx.stroke(path);
+    }
 }
 
 export function drawPhasePath(
@@ -325,11 +340,12 @@ export function drawPhasePath(
     width: number,
     height: number,
     style: { color: string, lineWidth: number, lineDash: number[] },
-    frequencyLUT: Int32Array,
+    _frequencyLUT: Int32Array,
     interpPhase: Float32Array,
     metricConfigs: Record<string, MetricConfig>,
     state: InteractionState,
-    interpCoherence?: Float32Array
+    interpCoherence?: Float32Array,
+    sampleRate: number = 48000
 ) {
     ctx.strokeStyle = style.color;
     ctx.lineWidth = style.lineWidth;
@@ -356,21 +372,31 @@ export function drawPhasePath(
         phaseToRender = unwrapped;
     }
 
-    const path = new Path2D();
+    // Build points array with decimation (bin-based like drawMetricPath)
+    const bins = interpPhase.length;
+    const binWidth = (sampleRate / 2) / bins;
+
+    // Collect segments (break on coherence gaps or phase wrapping jumps)
+    const segments: { x: number, y: number }[][] = [];
+    let currentSeg: { x: number, y: number }[] = [];
     let lastY = 0;
-    let first = true;
 
-    for (let x = 0; x < width; x++) {
-        const binIndex = frequencyLUT[x];
-        if (binIndex === undefined) continue;
+    for (let bin = 0; bin < bins; bin++) {
+        const freq = bin * binWidth;
+        if (freq < freqMin || freq > freqMax) continue;
+        const x = valToX(freq, width, false, state);
+        if (x < -10 || x > width + 10) continue;
 
-        // Masking by coherence
-        if (interpCoherence && magCfg.enableCoherence && interpCoherence[binIndex] < (magCfg.coherenceThreshold ?? 0.5)) {
-            first = true;
+        // Coherence masking
+        if (interpCoherence && magCfg.enableCoherence && interpCoherence[bin] < (magCfg.coherenceThreshold ?? 0.5)) {
+            if (currentSeg.length > 0) {
+                segments.push(currentSeg);
+                currentSeg = [];
+            }
             continue;
         }
 
-        let val = phaseToRender[binIndex];
+        let val = phaseToRender[bin];
         
         // Rotar fase
         val = val + (cfg.rotate || 0);
@@ -388,17 +414,34 @@ export function drawPhasePath(
 
         const y = valToY(val, height, "Phase", metricConfigs, state) + (cfg.yShift || 0);
 
-        if (first) {
-            path.moveTo(x, y);
-            first = false;
-        } else {
-            if (Math.abs(y - lastY) > height * 0.65) {
-                path.moveTo(x, y);
-            } else {
-                path.lineTo(x, y);
-            }
+        // Break segment on large Y jumps (phase wrapping)
+        if (currentSeg.length > 0 && Math.abs(y - lastY) > height * 0.65) {
+            segments.push(currentSeg);
+            currentSeg = [];
         }
+
+        currentSeg.push({ x, y });
         lastY = y;
+    }
+    if (currentSeg.length > 0) segments.push(currentSeg);
+
+    // Draw each segment with quadratic spline
+    const path = new Path2D();
+    for (const seg of segments) {
+        if (seg.length < 2) {
+            if (seg.length === 1) {
+                path.moveTo(seg[0].x, seg[0].y);
+                path.lineTo(seg[0].x + 0.5, seg[0].y);
+            }
+            continue;
+        }
+        path.moveTo(seg[0].x, seg[0].y);
+        for (let i = 1; i < seg.length - 1; i++) {
+            const midX = (seg[i].x + seg[i + 1].x) / 2;
+            const midY = (seg[i].y + seg[i + 1].y) / 2;
+            path.quadraticCurveTo(seg[i].x, seg[i].y, midX, midY);
+        }
+        path.lineTo(seg[seg.length - 1].x, seg[seg.length - 1].y);
     }
     ctx.stroke(path);
     ctx.setLineDash([]);
@@ -417,8 +460,9 @@ export function drawCrestFactor(
 
     ctx.strokeStyle = color;
     ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    let first = true;
+
+    // Build points with decimation
+    const points: { x: number, y: number }[] = [];
 
     for (let x = 0; x < width; x++) {
         const binIndex = frequencyLUT[x];
@@ -426,15 +470,21 @@ export function drawCrestFactor(
 
         const val = crestFactorData[binIndex];
         const y = valToY(val, height, "Crest Factor", {}, state);
-
-        if (first) {
-            ctx.moveTo(x, y);
-            first = false;
-        } else {
-            ctx.lineTo(x, y);
-        }
+        points.push({ x, y });
     }
-    ctx.stroke();
+
+    // Draw with quadratic spline
+    if (points.length > 1) {
+        const path = new Path2D();
+        path.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length - 1; i++) {
+            const midX = (points[i].x + points[i + 1].x) / 2;
+            const midY = (points[i].y + points[i + 1].y) / 2;
+            path.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+        }
+        path.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+        ctx.stroke(path);
+    }
 }
 
 export function drawPhaseDelay(
@@ -454,32 +504,36 @@ export function drawPhaseDelay(
 
     ctx.strokeStyle = color;
     ctx.lineWidth = lw;
-    ctx.beginPath();
-    let first = true;
     const sr = sampleRate;
     const binWidth = sr / 2 / bins;
 
-    for (let x = 0; x < width; x++) {
-        const binIndex = frequencyLUT[x];
-        if (binIndex === undefined || binIndex < 1) continue;
+    // Build points array with decimation
+    const points: { x: number, y: number }[] = [];
 
-        const freq = binIndex * binWidth || 1e-6;
-        const phaseRad = (phaseData[binIndex] * Math.PI) / 180;
+    for (let bin = 1; bin < bins; bin++) {
+        const freq = bin * binWidth;
+        if (freq < freqMin || freq > freqMax) continue;
+        const x = valToX(freq, width, false, state);
+        if (x < -10 || x > width + 10) continue;
 
-        // Phase Delay = -φ(f) / (2πf), convertido a ms
+        const phaseRad = (phaseData[bin] * Math.PI) / 180;
         const phaseDelayMs = (-phaseRad / (2 * Math.PI * freq)) * 1000;
-
-        // Clamp para evitar valores absurdos en bajas frecuencias
         const clampedDelay = Math.max(-5, Math.min(25, phaseDelayMs));
 
         const y = valToY(clampedDelay, height, 'Phase Delay', metricConfigs, state);
-
-        if (first) {
-            ctx.moveTo(x, y);
-            first = false;
-        } else {
-            ctx.lineTo(x, y);
-        }
+        points.push({ x, y });
     }
-    ctx.stroke();
+
+    // Draw with quadratic spline
+    if (points.length > 1) {
+        const path = new Path2D();
+        path.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length - 1; i++) {
+            const midX = (points[i].x + points[i + 1].x) / 2;
+            const midY = (points[i].y + points[i + 1].y) / 2;
+            path.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+        }
+        path.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+        ctx.stroke(path);
+    }
 }

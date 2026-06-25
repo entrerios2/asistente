@@ -267,7 +267,7 @@ export function drawQuadrant(p: DrawParams): void {
                         p.ctx, p.width, p.height,
                         { color: snapColor, lineWidth, lineDash: snapDash },
                         p.frequencyLUT, adjustedBuffer, p.metricConfigs,
-                        p.interactionState, p.interpEngine.interpCoherence
+                        p.interactionState, p.interpEngine.interpCoherence, p.sampleRate
                     );
                 } else if (metric === "Simulated Magnitude") {
                     drawSimulatedMagnitudePath(
@@ -473,7 +473,8 @@ export function drawQuadrant(p: DrawParams): void {
                     rawBuffer,
                     p.metricConfigs,
                     p.interactionState,
-                    p.interpEngine.interpCoherence
+                    p.interpEngine.interpCoherence,
+                    p.sampleRate
                 );
             }
         });

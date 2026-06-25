@@ -136,9 +136,10 @@ export function drawEQPhaseOverlayPath(
     ctx.lineWidth = 1.5;
     ctx.globalAlpha = 0.7;
 
-    const path = new Path2D();
     const freqs = getEqFreqLUT(bins, sampleRate);
-    let started = false;
+    const xs = new Float64Array(EQ_CURVE_POINTS);
+    const ys = new Float64Array(EQ_CURVE_POINTS);
+    let count = 0;
 
     for (let i = 0; i < EQ_CURVE_POINTS; i++) {
         const freq = freqs[i];
@@ -149,11 +150,18 @@ export function drawEQPhaseOverlayPath(
         const phaseDeg = phaseRad * (180 / Math.PI);
         const y = valToY(phaseDeg, height, "Phase", metricConfigs, state);
 
-        if (!started) { path.moveTo(x, y); started = true; }
-        else { path.lineTo(x, y); }
+        xs[count] = x;
+        ys[count] = y;
+        count++;
     }
 
-    if (started) {
+    if (count > 1) {
+        const path = new Path2D();
+        path.moveTo(xs[0], ys[0]);
+        for (let i = 1; i < count; i++) {
+            const cpx = (xs[i - 1] + xs[i]) / 2;
+            path.bezierCurveTo(cpx, ys[i - 1], cpx, ys[i], xs[i], ys[i]);
+        }
         ctx.stroke(path);
     }
 

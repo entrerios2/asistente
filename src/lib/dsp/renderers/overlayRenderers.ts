@@ -305,21 +305,27 @@ export function drawTargetTrace(
     ctx.lineWidth = 2;
     ctx.setLineDash([5, 5]);
 
-    ctx.beginPath();
-    let first = true;
+    // Build points array
+    const points: { x: number, y: number }[] = [];
     for (let i = 0; i < targetStore.points.length; i++) {
         const p = targetStore.points[i];
         const x = valToX(p.f, width, false, state);
         const y = valToY(p.g + targetStore.offset, height, "Magnitude", {}, state);
-
-        if (first) {
-            ctx.moveTo(x, y);
-            first = false;
-        } else {
-            ctx.lineTo(x, y);
-        }
+        points.push({ x, y });
     }
-    ctx.stroke();
+
+    // Draw with quadratic spline
+    if (points.length > 1) {
+        const path = new Path2D();
+        path.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length - 1; i++) {
+            const midX = (points[i].x + points[i + 1].x) / 2;
+            const midY = (points[i].y + points[i + 1].y) / 2;
+            path.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+        }
+        path.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+        ctx.stroke(path);
+    }
     ctx.setLineDash([]);
     ctx.globalAlpha = 1.0;
 }
@@ -334,13 +340,26 @@ export function drawScope(
 ) {
     ctx.strokeStyle = color;
     ctx.lineWidth = lw;
-    ctx.beginPath();
+
+    // Build points
+    const points: { x: number, y: number }[] = [];
     const step = width / timeData.length;
     for (let i = 0; i < timeData.length; i++) {
         const x = i * step;
         const y = (height / 2) - (timeData[i] * height / 2);
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+        points.push({ x, y });
     }
-    ctx.stroke();
+
+    // Draw with quadratic spline
+    if (points.length > 1) {
+        const path = new Path2D();
+        path.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length - 1; i++) {
+            const midX = (points[i].x + points[i + 1].x) / 2;
+            const midY = (points[i].y + points[i + 1].y) / 2;
+            path.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+        }
+        path.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+        ctx.stroke(path);
+    }
 }
