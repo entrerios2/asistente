@@ -14,7 +14,10 @@ export interface PersistedConfig {
     audioOutDevice: string;
     sampleRate: number;
     fftSize: number;
-    dspUpdateRate: number;
+    dspUpdateRate?: number;
+    dspBaseRate?: number;
+    targetFpsMultiplier?: number;
+    metricDecimation?: Record<string, number>;
     eqType?: 'grafico' | 'parametrico';
     eqShowEQ?: boolean;
     eqGraphicBands?: { freq: number; gain: number }[];

@@ -106,9 +106,10 @@
                         </div>
                     {/if}
                     <div class="flex flex-col gap-1">
-                        <span class="text-[var(--text-secondary)] font-medium">Umbral coherencia ({metricConfigs[activeConfigMetric].coherenceThreshold})</span>
+                        <span class="text-[var(--text-secondary)] font-medium">Umbral coherencia ({metricConfigs["Coherence"]?.thresholdValue ?? 0.2})</span>
                         <input type="range" min="0" max="1" step="0.05" class="accent-[var(--accent)]"
-                               bind:value={metricConfigs[activeConfigMetric].coherenceThreshold} />
+                               value={metricConfigs["Coherence"]?.thresholdValue ?? 0.2}
+                               oninput={e => metricConfigs["Coherence"] = { ...metricConfigs["Coherence"], thresholdValue: +e.currentTarget.value }} />
                     </div>
                 </div>
             {/if}

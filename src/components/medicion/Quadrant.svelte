@@ -302,6 +302,7 @@
             refreshEQCache: () => mathOrchestrator.refreshEQCache(),
             updateCalculatedLayers: () => traceManager.updateCalculatedLayers(),
             orchestratorVersion: mathOrchestrator.version,
+            isMeasuring: uiStore.isMeasuring,
             liveData: interpEngine.interpSpectrum, frequencyLUT,
             myLayers, quadrantLayers, instantaneas: traceManager.instantaneas,
             eqBands: eqStore.activeBands, hoveringEQNode, draggingEQNode, selectedEQNode,
@@ -388,7 +389,7 @@
 
         const cleanupLoop = initCanvasAndLoop(
             container, canvas, draw,
-            () => uiStore.targetFps,
+            () => uiStore.currentFps,
             (w, h) => { containerWidth = w; containerHeight = h; },
         );
 

@@ -255,9 +255,9 @@ export const defaultMetricStyles: Record<string, MetricStyle> = {
 };
 
 export const defaultMetricConfigs: Record<string, MetricConfig> = {
-    "Spectrum": { modeY: "dB", sensorResistance: 10, smoothingPPO: 48, invertY: false, enableCoherence: false, coherenceThreshold: 0.2, coherenceMode: "attenuate", coherenceColor: "#666666", yShift: 0 },
-    "Magnitude": { modeY: "dB", sensorResistance: 10, smoothingPPO: 48, invertY: false, enableCoherence: true, coherenceThreshold: 0.2, coherenceMode: "attenuate", coherenceColor: "#666666", yShift: 0 },
-    "Simulated Magnitude": { modeY: "dB", sensorResistance: 10, smoothingPPO: 48, invertY: false, enableCoherence: false, coherenceThreshold: 0.2, coherenceMode: "attenuate", coherenceColor: "#666666", yShift: 0 },
+    "Spectrum": { modeY: "dB", sensorResistance: 10, smoothingPPO: 48, invertY: false, enableCoherence: false, coherenceMode: "attenuate", coherenceColor: "#666666", yShift: 0 },
+    "Magnitude": { modeY: "dB", sensorResistance: 10, smoothingPPO: 48, invertY: false, enableCoherence: true, coherenceMode: "attenuate", coherenceColor: "#666666", yShift: 0 },
+    "Simulated Magnitude": { modeY: "dB", sensorResistance: 10, smoothingPPO: 48, invertY: false, enableCoherence: false, coherenceMode: "attenuate", coherenceColor: "#666666", yShift: 0 },
     "Phase": { unwrapMode: "±180", rotate: 0, range: 360, yShift: 0 },
     "Coherence": { cohType: "normal", showLine: true, showBackground: true, bgPalette: "RedTransparent", showThresholdLine: true, thresholdColor: "#eab308", thresholdValue: 0.2, yShift: 0 },
     "Spectrogram": { palette: "Magma" as PaletteType },

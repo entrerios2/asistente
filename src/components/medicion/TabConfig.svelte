@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import { uiStore } from "$lib/stores/ui.svelte";
+    import { uiStore, DSP_BASE_RATES, FPS_MULTIPLIERS, METRIC_DECIMATIONS } from "$lib/stores/ui.svelte";
     import { calibrationStore } from "$lib/stores/calibrationStore.svelte";
     import { mathOrchestrator } from "$lib/stores/mathOrchestrator.svelte";
     import { getAudioProvider } from "$lib/hal";
@@ -109,7 +109,9 @@
             audioOutDevice: uiStore.audioOutDevice,
             sampleRate: uiStore.sampleRate,
             fftSize: uiStore.fftSize,
-            dspUpdateRate: uiStore.dspUpdateRate,
+            dspBaseRate: uiStore.dspBaseRate,
+            targetFpsMultiplier: uiStore.targetFpsMultiplier,
+            metricDecimation: uiStore.metricDecimation,
             weightingType: uiStore.weightingType,
             averagingType: uiStore.averagingType,
             averagingDepth: uiStore.averagingDepth,
@@ -129,7 +131,7 @@
             generatorType: uiStore.generatorType,
             genLevel: uiStore.genLevel,
             genRouting: uiStore.genRouting,
-            targetFps: uiStore.targetFps,
+            targetFps: uiStore.currentFps,
             linkGeneratorToMeasurement: uiStore.linkGeneratorToMeasurement,
             enableLeq: uiStore.enableLeq,
             enableSourceWindow: uiStore.enableSourceWindow,
@@ -181,7 +183,8 @@
             if (c.audioOutDevice) uiStore.audioOutDevice = c.audioOutDevice;
             if (c.sampleRate) uiStore.sampleRate = c.sampleRate;
             if (c.fftSize) uiStore.fftSize = c.fftSize;
-            if (c.dspUpdateRate) uiStore.dspUpdateRate = c.dspUpdateRate;
+            if (c.dspBaseRate) uiStore.dspBaseRate = c.dspBaseRate;
+            else if (c.dspUpdateRate) uiStore.dspBaseRate = c.dspUpdateRate;
             if (c.weightingType) uiStore.weightingType = c.weightingType;
             if (c.averagingType) uiStore.averagingType = c.averagingType;
             if (c.averagingDepth !== undefined) uiStore.averagingDepth = c.averagingDepth;
@@ -201,7 +204,12 @@
             if (c.generatorType) uiStore.generatorType = c.generatorType;
             if (c.genLevel !== undefined) uiStore.genLevel = c.genLevel;
             if (c.genRouting) uiStore.genRouting = c.genRouting;
-            if (c.targetFps !== undefined) uiStore.targetFps = c.targetFps;
+            if (c.targetFpsMultiplier) uiStore.targetFpsMultiplier = c.targetFpsMultiplier;
+            else if (c.targetFps !== undefined && c.targetFps > 0) {
+                const inferred = Math.round(c.targetFps / uiStore.dspBaseRate);
+                uiStore.targetFpsMultiplier = Math.max(1, Math.min(inferred, 4));
+            }
+            if (c.metricDecimation) Object.assign(uiStore.metricDecimation, c.metricDecimation);
             if (c.linkGeneratorToMeasurement !== undefined) uiStore.linkGeneratorToMeasurement = c.linkGeneratorToMeasurement;
             if (c.enableLeq !== undefined) uiStore.enableLeq = c.enableLeq;
             if (c.enableSourceWindow !== undefined) uiStore.enableSourceWindow = c.enableSourceWindow;
@@ -237,7 +245,7 @@
         if (r.dsp) {
             uiStore.sampleRate = 48000;
             uiStore.fftSize = 16384;
-            uiStore.dspUpdateRate = 4;
+            uiStore.dspBaseRate = 30;
             uiStore.weightingType = 'Z' as any;
             uiStore.averagingType = 'LPF' as any;
             uiStore.averagingDepth = 8;
@@ -286,7 +294,8 @@
             uiStore.setThemeMode('dark');
             uiStore.showMinorGrid = true;
             uiStore.showAdvanced = false;
-            uiStore.targetFps = 30;
+            uiStore.targetFpsMultiplier = 2;
+            uiStore.dspBaseRate = 30;
             uiStore.autoSaveSnapshotOnStop = false;
             uiStore.measurementMode = 'manual';
         }
@@ -743,42 +752,89 @@
                 {/if}
             </div>
 
-            <!-- FPS, DSP Rate, FFT Size -->
+            <!-- DSP Base Rate, Target FPS, FFT Size -->
             <div class="flex flex-col gap-2 pt-2 border-t border-[color-mix(in_srgb,var(--border-primary)_20%,transparent)]">
                 <div class="flex items-center gap-2">
-                    <span class="text-[9px] text-[var(--text-muted)] font-bold uppercase w-16">Target FPS</span>
-                    <input
-                        type="range" min="5" max="60" step="5"
-                        bind:value={uiStore.targetFps}
-                        ondblclick={() => uiStore.targetFps = 30}
-                        class="flex-1 h-1 bg-[var(--bg-tertiary)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]"
-                        title="Doble clic para reiniciar a 30"
-                    />
-                    <span class="text-[10px] font-mono text-[var(--accent)] w-8 text-right">{uiStore.targetFps}</span>
-                </div>
-                <div class="flex items-center gap-2">
-                    <span class="text-[9px] text-[var(--text-muted)] font-bold uppercase w-16">DSP Rate</span>
-                    <input
-                        type="range" min="1" max="10" step="1"
-                        bind:value={uiStore.dspUpdateRate}
-                        ondblclick={() => uiStore.dspUpdateRate = 4}
-                        class="flex-1 h-1 bg-[var(--bg-tertiary)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]"
-                        title="Doble clic para reiniciar a 4 Hz"
-                    />
-                    <span class="text-[10px] font-mono text-[var(--accent)] w-10 text-right">{uiStore.dspUpdateRate} Hz</span>
-                </div>
-                <div class="flex items-center gap-2">
-                    <span class="text-[9px] text-[var(--text-muted)] font-bold uppercase w-16">FFT Size</span>
-                    <select
-                        bind:value={uiStore.fftSize}
-                        class="flex-1 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded px-2 py-1 text-xs text-[var(--text-primary)]"
-                    >
-                        {#each [2048, 4096, 8192, 16384, 32768] as size}
-                            <option value={size}>{size}</option>
+                    <span class="text-[9px] text-[var(--text-muted)] font-bold uppercase w-24">DSP Base Rate</span>
+                    <div class="flex bg-[var(--bg-tertiary)] p-0.5 rounded-md border border-[color-mix(in_srgb,var(--border-primary)_40%,transparent)] flex-1">
+                        {#each DSP_BASE_RATES as rate}
+                            <button
+                                class="flex-1 py-1 text-[9px] font-bold rounded transition-all cursor-pointer min-h-[22px]
+                                       {uiStore.dspBaseRate === rate ? 'bg-[color-mix(in_srgb,var(--accent)_15%,transparent)] text-[var(--accent)]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}"
+                                onclick={() => {
+                                    uiStore.dspBaseRate = rate;
+                                    if (uiStore.targetFpsMultiplier > uiStore.maxFpsMultiplier) {
+                                        uiStore.targetFpsMultiplier = uiStore.maxFpsMultiplier;
+                                    }
+                                }}
+                            >{rate}</button>
                         {/each}
-                    </select>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-[9px] text-[var(--text-muted)] font-bold uppercase w-24">Target FPS</span>
+                    <div class="flex bg-[var(--bg-tertiary)] p-0.5 rounded-md border border-[color-mix(in_srgb,var(--border-primary)_40%,transparent)] flex-1">
+                        {#each FPS_MULTIPLIERS as mult}
+                            {@const invalid = mult > uiStore.maxFpsMultiplier}
+                            <button
+                                class="flex-1 py-1 text-[9px] font-bold rounded transition-all cursor-pointer min-h-[22px]
+                                       {invalid ? 'opacity-30 cursor-not-allowed' : ''}
+                                       {!invalid && uiStore.targetFpsMultiplier === mult ? 'bg-[color-mix(in_srgb,var(--accent)_15%,transparent)] text-[var(--accent)]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}"
+                                disabled={invalid}
+                                onclick={() => { if (!invalid) uiStore.targetFpsMultiplier = mult; }}
+                            >{mult}&times;</button>
+                        {/each}
+                    </div>
+                    <span class="text-[10px] font-mono text-[var(--accent)] w-12 text-right">{uiStore.currentFps} Hz</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-[9px] text-[var(--text-muted)] font-bold uppercase w-24">FFT Size</span>
+                    <div class="flex bg-[var(--bg-tertiary)] p-0.5 rounded-md border border-[color-mix(in_srgb,var(--border-primary)_40%,transparent)] flex-1">
+                        {#each [2048, 4096, 8192, 16384, 32768, 65536] as size}
+                            <button
+                                class="flex-1 py-1 text-[9px] font-bold rounded transition-all cursor-pointer min-h-[22px]
+                                       {uiStore.fftSize === size ? 'bg-[color-mix(in_srgb,var(--accent)_15%,transparent)] text-[var(--accent)]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}"
+                                onclick={() => uiStore.fftSize = size}
+                            >{size / 1000}k</button>
+                        {/each}
+                    </div>
                 </div>
             </div>
+
+            <!-- Factores por métrica (colapsado) -->
+            <details class="pt-2 border-t border-[color-mix(in_srgb,var(--border-primary)_20%,transparent)]">
+                <summary class="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-wider cursor-pointer select-none hover:text-[var(--text-primary)]">
+                    Factores por métrica
+                </summary>
+                <div class="flex flex-col gap-1.5 pt-2">
+                    {#each [
+                        { key: 'magnitude', label: 'Magnitud' },
+                        { key: 'phase', label: 'Fase' },
+                        { key: 'coherence', label: 'Coherencia' },
+                        { key: 'impulse', label: 'Impulso' },
+                        { key: 'step', label: 'Step' },
+                        { key: 'spectrum', label: 'Spectrum' },
+                        { key: 'crest', label: 'Cresta' },
+                        { key: 'gd', label: 'GD' },
+                    ] as m}
+                        {@const factor = (uiStore.metricDecimation as Record<string, number>)[m.key] || 1}
+                        {@const metricRate = uiStore.dspBaseRate / factor}
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] text-[var(--text-primary)] w-20">{m.label}</span>
+                            <div class="flex bg-[var(--bg-tertiary)] p-0.5 rounded-md border border-[color-mix(in_srgb,var(--border-primary)_40%,transparent)] flex-1">
+                                {#each METRIC_DECIMATIONS as d}
+                                    <button
+                                        class="flex-1 py-0.5 text-[9px] font-bold rounded transition-all cursor-pointer min-h-[20px]
+                                               {factor === d ? 'bg-[color-mix(in_srgb,var(--accent)_15%,transparent)] text-[var(--accent)]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}"
+                                        onclick={() => { (uiStore.metricDecimation as any)[m.key] = d; }}
+                                    >{d === 1 ? '×1' : '÷' + d}</button>
+                                {/each}
+                            </div>
+                            <span class="text-[9px] font-mono text-[var(--text-muted)] w-14 text-right">{metricRate.toFixed(1)} Hz</span>
+                        </div>
+                    {/each}
+                </div>
+            </details>
         </div>
     {/if}
 

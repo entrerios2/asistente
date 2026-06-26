@@ -77,6 +77,7 @@ class MathOrchestrator {
     // Worker & autonomous timer
     private worker: Worker | null = null;
     private timerId: ReturnType<typeof setInterval> | null = null;
+    private dspFrameCount = 0;
 
     constructor() {
         if (typeof window !== 'undefined') {
@@ -101,7 +102,7 @@ class MathOrchestrator {
                 untrack(() => this.reallocateBuffers(fftSize));
             });
             $effect(() => {
-                this.startTimer(uiStore.dspUpdateRate);
+                this.startTimer(uiStore.dspBaseRate);
             });
             // Enviar FSK enable/disable al worklet cuando cambia measurementMode
             $effect(() => {
@@ -207,10 +208,24 @@ class MathOrchestrator {
         }
     }
 
+    // Mapeo de nombre de métrica (en UI) → clave en metricDecimation
+    private static METRIC_TO_DECIM_KEY: Record<string, string> = {
+        'Magnitude': 'magnitude',
+        'Phase': 'phase',
+        'Coherence': 'coherence',
+        'Spectrum': 'spectrum',
+        'Group Delay': 'gd',
+        'Impulse': 'impulse',
+        'Step': 'step',
+        'Crest': 'crest',
+    };
+
     private handleWorkerMessage(data: DSPWorkerResult) {
         if (data.type === 'dsp-results') {
             this.lastMathTime = performance.now();
-            // Data arrives as owned ArrayBuffers (sliced in worker), wrap as views (zero-copy)
+            this.dspFrameCount++;
+
+            // Always update raw output buffers (zero-copy from worker)
             this.outputMagnitude = new Float32Array(data.outputMagnitude);
             this.outputPhase = new Float32Array(data.outputPhase);
             this.outputCoherence = new Float32Array(data.outputCoherence);
@@ -227,41 +242,49 @@ class MathOrchestrator {
                 this.hImag = new Float32Array(data.hImag);
             }
             
-            // Meters independientes por canal
+            // Meters — siempre
             meterStore.updateIn([data.refPeakDb ?? -60]);
             meterStore.updateOut([data.measPeakDb ?? -60]);
 
-            // Spectrum del worker → liveFrequencyData para el rendering
+            // Spectrum — siempre (para espectrograma / liveFrequencyData)
             if (data.outputSpectrum) {
                 const specData = new Float32Array(data.outputSpectrum);
                 this.outputSpectrum = specData;
-                // Reasignar referencia para reactividad Svelte 5 (trigger $derived)
                 traceManager.liveFrequencyData = specData;
             }
 
-            // Auto delay compensation
+            // Auto delay compensation — siempre
             if (data.detectedDelaySamples !== undefined) {
                 this.compensationDelaySamples = data.detectedDelaySamples;
             }
             
-            // ESCRIBIR EN LA CAPA ACTIVA BAJO MEDICIÓN (PROMPT 6)
+            // Escribir en la capa activa solo cuando el factor de decimación
+            // de la métrica principal lo permite
             const activeLayer = traceManager.layers.find(l => l.isMeasuring && l.id === uiStore.activeLayerId);
             if (activeLayer) {
                 const qMetrics = this.activeMetricsByQuadrant[activeLayer.quadrantId] || ["Magnitude"];
-                const mainMetric = qMetrics.find(m => ["Magnitude", "Phase", "Coherence", "Spectrum", "Group Delay"].includes(m)) || "Magnitude";
+                const mainMetric = qMetrics.find(m => ["Magnitude", "Phase", "Coherence", "Spectrum", "Group Delay", "Crest"].includes(m)) || "Magnitude";
                 
-                let sourceBuffer = this.outputMagnitude;
-                if (mainMetric === "Phase") sourceBuffer = this.outputPhase;
-                else if (mainMetric === "Coherence") sourceBuffer = this.outputCoherence;
-                else if (mainMetric === "Group Delay") sourceBuffer = this.outputGroupDelay;
+                const decimKey = MathOrchestrator.METRIC_TO_DECIM_KEY[mainMetric] || 'magnitude';
+                const decimFactor = (uiStore.metricDecimation as any)[decimKey] || 1;
 
-                if (activeLayer.data.length !== sourceBuffer.length) {
-                    activeLayer.data = new Float32Array(sourceBuffer.length);
+                if (this.dspFrameCount % decimFactor === 0) {
+                    let sourceBuffer = this.outputMagnitude;
+                    if (mainMetric === "Phase") sourceBuffer = this.outputPhase;
+                    else if (mainMetric === "Coherence") sourceBuffer = this.outputCoherence;
+                    else if (mainMetric === "Group Delay") sourceBuffer = this.outputGroupDelay;
+                    else if (mainMetric === "Crest") sourceBuffer = this.outputCrestFactor;
+
+                    if (activeLayer.data.length !== sourceBuffer.length) {
+                        activeLayer.data = new Float32Array(sourceBuffer.length);
+                    }
+                    activeLayer.data.set(sourceBuffer);
+
+                    this.version++;
                 }
-                activeLayer.data.set(sourceBuffer);
+            } else {
+                this.version++;
             }
-
-            this.version++;
         }
     }
 
@@ -292,6 +315,17 @@ class MathOrchestrator {
         return active;
     });
 
+    private getWorkerMetrics(): string[] {
+        const metrics = new Set(this.globalActiveMetrics);
+        // Si hay un cuadrante con espectrograma pero nadie pidió Spectrum,
+        // lo agregamos automáticamente — el worker lo necesita para alimentar
+        // outputSpectrum → interpSpectrum → spectrogram feed.
+        if (metrics.has("Spectrogram") && !metrics.has("Spectrum")) {
+            metrics.add("Spectrum");
+        }
+        return Array.from(metrics);
+    }
+
     reallocateBuffers(newFftSize: number) {
         // Guard: skip if size hasn't changed and buffers are already allocated
         if (newFftSize === this.FFT_SIZE && this.outputMagnitude.length === newFftSize / 2) {
@@ -317,7 +351,7 @@ class MathOrchestrator {
     }
 
     get throttleMs(): number {
-        return 1000 / uiStore.dspUpdateRate;
+        return 1000 / uiStore.dspBaseRate;
     }
 
     /**
@@ -538,7 +572,7 @@ class MathOrchestrator {
                 refTimeDomain: refCopy.buffer,
                 BINS: this.BINS,
                 FFT_SIZE: this.FFT_SIZE,
-                metrics: Array.from(this.globalActiveMetrics),
+                metrics: this.getWorkerMetrics(),
                 windowType: uiStore.windowType,
                 weightingType: uiStore.weightingType,
                 averagingType: uiStore.averagingType,

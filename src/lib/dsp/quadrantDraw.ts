@@ -117,6 +117,9 @@ export interface DrawParams {
 
     // Custom PPO smoothing
     customPPOSmooth: (idx: number, arr: Float32Array) => number;
+
+    // Measurement state
+    isMeasuring: boolean;
 }
 
 export function drawQuadrant(p: DrawParams): void {
@@ -140,11 +143,12 @@ export function drawQuadrant(p: DrawParams): void {
         );
     }
 
-    // Alimentar buffer de Espectrograma en vivo optimizado con offscreen canvas
+    // Alimentar buffer de Espectrograma en vivo — solo mientras se mide
     if (
         p.liveData && p.liveData.length > 0 &&
         p.activeMetrics.includes("Spectrogram") &&
-        !p.hasTimeDomainActive
+        !p.hasTimeDomainActive &&
+        p.isMeasuring
     ) {
         p.spectrogramFrameCountRef.value++;
         if (p.spectrogramFrameCountRef.value % 3 === 0) {
@@ -448,10 +452,10 @@ export function drawQuadrant(p: DrawParams): void {
             }
 
             if (metric === "Simulated Magnitude") {
-                const rawBuffer = isLive ? p.smoothedMagnitude : layer.data;
-                // smoothedMagnitude is pre-smoothed → noop PPO for live
+                const rawBuffer = isLive ? p.interpEngine.interpMagnitude : layer.data;
+                const simPPO = p.metricConfigs["Simulated Magnitude"]?.smoothingPPO ?? 48;
                 const simPpoFn = isLive
-                    ? (idx: number, arr: Float32Array) => arr[idx]
+                    ? (idx: number, arr: Float32Array) => p.getPPOSmoothedValue(idx, arr, simPPO)
                     : p.getPPOSmoothedValue;
                 drawSimulatedMagnitudePath(
                     ctx,
@@ -501,7 +505,7 @@ export function drawQuadrant(p: DrawParams): void {
                 p.width,
                 p.height,
                 p.interpEngine.interpCoherence,
-                cfg.coherenceThreshold ?? 0.2,
+                p.metricConfigs["Coherence"]?.thresholdValue ?? 0.2,
                 cfg.coherenceMode || 'attenuate',
                 cfg.coherenceColor || '#666666',
                 p.interactionState,

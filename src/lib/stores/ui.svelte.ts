@@ -4,6 +4,10 @@
 
 import { setCanvasDarkMode } from '$lib/dsp/canvasTheme';
 
+export const DSP_BASE_RATES = [1, 2, 4, 5, 15, 30, 60];
+export const FPS_MULTIPLIERS = [1, 2, 4];
+export const METRIC_DECIMATIONS = [1, 2, 4, 8];
+
 class UIStore {
     layout = $state('1x1'); // '1x1' | '1x2' | '2x1' | '2x2' | '3x1' | '3x2'
     themeMode = $state<'system' | 'light' | 'dark'>('dark');
@@ -23,10 +27,33 @@ class UIStore {
     measurementMode = $state('manual'); // 'manual' | 'secuencial'
     isMeasuring = $state(false);
 
-    // Configuración de Rendimiento y DSP (Fase 2)
-    targetFps = $state(30);
-    dspUpdateRate = $state(4); // Hz
+    dspBaseRate = $state(30);    // Hz — 1,2,4,5,15,30,60
+    targetFpsMultiplier = $state(2);  // ×1, ×2, ×4
     fftSize = $state(16384);
+
+    /** FPS resultante = base × multiplier */
+    get currentFps(): number {
+        return Math.min(this.dspBaseRate * this.targetFpsMultiplier, 60);
+    }
+
+    /** Máximo multiplicador válido para la base actual (no superar 60 fps) */
+    get maxFpsMultiplier(): number {
+        const max = Math.floor(60 / this.dspBaseRate);
+        if (max <= 0) return 1;
+        return FPS_MULTIPLIERS.slice().reverse().find(m => m <= max) || 1;
+    }
+
+    /** Factor de decimación por métrica (1=siempre, 8=cada 8 frames DSP) */
+    metricDecimation = $state<Record<string, number>>({
+        magnitude: 1,
+        phase: 2,
+        coherence: 2,
+        impulse: 4,
+        step: 4,
+        spectrum: 1,
+        crest: 1,
+        gd: 4,
+    });
     sampleRate = $state(48000); // 44100 | 48000 | 96000
 
     // Estado del Generador de Audio

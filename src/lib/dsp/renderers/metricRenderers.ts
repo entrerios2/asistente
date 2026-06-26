@@ -388,7 +388,7 @@ export function drawPhasePath(
     ctx.setLineDash(style.lineDash || []);
     
     const cfg = metricConfigs["Phase"] || { rotate: 0, unwrapMode: "±180", yShift: 0 };
-    const magCfg = metricConfigs["Magnitude"] || { enableCoherence: false, coherenceThreshold: 0.5 };
+    const magCfg = metricConfigs["Magnitude"] || { enableCoherence: false };
 
     // Phase unwrap mode
     const phaseMode = cfg.unwrapMode || '±180';
@@ -429,7 +429,7 @@ export function drawPhasePath(
         if (x < -10 || x > width + 10) continue;
 
         // Coherence masking
-        if (interpCoherence && magCfg.enableCoherence && interpCoherence[bin] < (magCfg.coherenceThreshold ?? 0.5)) {
+        if (interpCoherence && magCfg.enableCoherence && interpCoherence[bin] < (metricConfigs["Coherence"]?.thresholdValue ?? 0.2)) {
             if (currentSegLen > 0) {
                 segStarts.push(currentSegStart);
                 segLengths.push(currentSegLen);

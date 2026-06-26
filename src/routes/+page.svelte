@@ -21,7 +21,17 @@
         if (config.audioOutDevice) uiStore.audioOutDevice = config.audioOutDevice;
         if (config.sampleRate) uiStore.sampleRate = config.sampleRate;
         if (config.fftSize) uiStore.fftSize = config.fftSize;
-        if (config.dspUpdateRate) uiStore.dspUpdateRate = config.dspUpdateRate;
+        if (config.dspBaseRate) uiStore.dspBaseRate = config.dspBaseRate;
+        else if (config.dspUpdateRate) uiStore.dspBaseRate = config.dspUpdateRate; // legacy
+        if (config.targetFpsMultiplier) uiStore.targetFpsMultiplier = config.targetFpsMultiplier;
+        else if (config.targetFps !== undefined) {
+            // legacy: infer multiplier from targetFps / base
+            const inferred = Math.round(config.targetFps / uiStore.dspBaseRate);
+            uiStore.targetFpsMultiplier = Math.max(1, Math.min(inferred, 4));
+        }
+        if (config.metricDecimation) {
+            Object.assign(uiStore.metricDecimation, config.metricDecimation);
+        }
         if (config.weightingType) uiStore.weightingType = config.weightingType as any;
         if (config.averagingType) uiStore.averagingType = config.averagingType as any;
         if (config.averagingDepth !== undefined) uiStore.averagingDepth = config.averagingDepth;
@@ -41,7 +51,6 @@
         if (config.generatorType) uiStore.generatorType = config.generatorType;
         if (config.genLevel !== undefined) uiStore.genLevel = config.genLevel;
         if (config.genRouting) uiStore.genRouting = config.genRouting as any;
-        if (config.targetFps !== undefined) uiStore.targetFps = config.targetFps;
         if (config.linkGeneratorToMeasurement !== undefined) uiStore.linkGeneratorToMeasurement = config.linkGeneratorToMeasurement;
         if (config.enableLeq !== undefined) uiStore.enableLeq = config.enableLeq;
         if (config.enableSourceWindow !== undefined) uiStore.enableSourceWindow = config.enableSourceWindow;
@@ -109,7 +118,10 @@
             audioOutDevice: uiStore.audioOutDevice,
             sampleRate: uiStore.sampleRate,
             fftSize: uiStore.fftSize,
-            dspUpdateRate: uiStore.dspUpdateRate,
+            dspUpdateRate: uiStore.dspBaseRate,
+            dspBaseRate: uiStore.dspBaseRate,
+            targetFpsMultiplier: uiStore.targetFpsMultiplier,
+            metricDecimation: uiStore.metricDecimation,
             // DSP advanced
             weightingType: uiStore.weightingType,
             averagingType: uiStore.averagingType,
@@ -130,7 +142,7 @@
             generatorType: uiStore.generatorType,
             genLevel: uiStore.genLevel,
             genRouting: uiStore.genRouting,
-            targetFps: uiStore.targetFps,
+            targetFps: uiStore.currentFps,
             linkGeneratorToMeasurement: uiStore.linkGeneratorToMeasurement,
             enableLeq: uiStore.enableLeq,
             enableSourceWindow: uiStore.enableSourceWindow,

@@ -94,6 +94,9 @@ export interface RenderFrameParams {
     hReal: Float32Array;
     hImag: Float32Array;
     outputCrestFactor: Float32Array;
+
+    // Measurement state
+    isMeasuring: boolean;
 }
 
 /**
@@ -185,6 +188,7 @@ export function executeDraw(p: RenderFrameParams): RenderFrameResult | null {
             interpEngine: p.interpEngine,
             liveData,
             frequencyLUT: p.frequencyLUT,
+            isMeasuring: p.isMeasuring,
             smoothedMagnitude: p.smoothedMagnitude,
             smoothedSpectrum: p.smoothedSpectrum,
             getPPOSmoothedValue: p.getPPOSmoothedValue,
