@@ -302,7 +302,7 @@
             refreshEQCache: () => mathOrchestrator.refreshEQCache(),
             updateCalculatedLayers: () => traceManager.updateCalculatedLayers(),
             orchestratorVersion: mathOrchestrator.version,
-            liveData: traceManager.liveFrequencyData, frequencyLUT,
+            liveData: interpEngine.interpSpectrum, frequencyLUT,
             myLayers, quadrantLayers, instantaneas: traceManager.instantaneas,
             eqBands: eqStore.activeBands, hoveringEQNode, draggingEQNode, selectedEQNode,
             eqScoreBadge, eqScoreHover,

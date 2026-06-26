@@ -12,6 +12,7 @@ export class InterpolationEngine {
     public interpCrestFactor: Float32Array;
     public interpHReal: Float32Array;
     public interpHImag: Float32Array;
+    public interpSpectrum: Float32Array;
 
     public prevMagnitude: Float32Array;
     public prevPhase: Float32Array;
@@ -20,6 +21,7 @@ export class InterpolationEngine {
     public prevCrestFactor: Float32Array;
     public prevHReal: Float32Array;
     public prevHImag: Float32Array;
+    public prevSpectrum: Float32Array;
 
     // Timestamp de cuando se guardó el snapshot previo (para cálculo de intervalo real)
     public historyTime: number = 0;
@@ -34,6 +36,7 @@ export class InterpolationEngine {
         this.interpCrestFactor = new Float32Array(this.BINS);
         this.interpHReal = new Float32Array(this.BINS);
         this.interpHImag = new Float32Array(this.BINS);
+        this.interpSpectrum = new Float32Array(this.BINS);
 
         this.prevMagnitude = new Float32Array(this.BINS);
         this.prevPhase = new Float32Array(this.BINS);
@@ -42,6 +45,7 @@ export class InterpolationEngine {
         this.prevCrestFactor = new Float32Array(this.BINS);
         this.prevHReal = new Float32Array(this.BINS);
         this.prevHImag = new Float32Array(this.BINS);
+        this.prevSpectrum = new Float32Array(this.BINS);
 
         this.reset();
     }
@@ -55,6 +59,7 @@ export class InterpolationEngine {
             this.interpCrestFactor[i] = 0;
             this.interpHReal[i] = 0;
             this.interpHImag[i] = 0;
+            this.interpSpectrum[i] = -120;
 
             this.prevMagnitude[i] = -50;
             this.prevPhase[i] = 0;
@@ -63,6 +68,7 @@ export class InterpolationEngine {
             this.prevCrestFactor[i] = 0;
             this.prevHReal[i] = 0;
             this.prevHImag[i] = 0;
+            this.prevSpectrum[i] = -120;
         }
         for (let i = 0; i < this.FFT_SIZE; i++) {
             this.interpImpulse[i] = 0;
@@ -121,6 +127,7 @@ export class InterpolationEngine {
             mathOrchestrator.outputCoherence?.length ?? this.BINS,
             mathOrchestrator.outputGroupDelay?.length ?? this.BINS,
             mathOrchestrator.outputCrestFactor?.length ?? this.BINS,
+            mathOrchestrator.outputSpectrum?.length ?? this.BINS,
             mathOrchestrator.hReal?.length ?? this.BINS,
             mathOrchestrator.hImag?.length ?? this.BINS,
         );
@@ -132,6 +139,7 @@ export class InterpolationEngine {
             this.interpCrestFactor[i] = this.prevCrestFactor[i] * (1 - t) + (mathOrchestrator.outputCrestFactor?.[i] ?? 0) * t;
             this.interpHReal[i] = this.prevHReal[i] * (1 - t) + (mathOrchestrator.hReal?.[i] ?? 0) * t;
             this.interpHImag[i] = this.prevHImag[i] * (1 - t) + (mathOrchestrator.hImag?.[i] ?? 0) * t;
+            this.interpSpectrum[i] = this.prevSpectrum[i] * (1 - t) + (mathOrchestrator.outputSpectrum?.[i] ?? -120) * t;
         }
 
         const factor = snap ? 1.0 : this.SMOOTHING_FACTOR;
@@ -157,5 +165,6 @@ export class InterpolationEngine {
         this.prevCrestFactor.set(this.interpCrestFactor);
         this.prevHReal.set(this.interpHReal);
         this.prevHImag.set(this.interpHImag);
+        this.prevSpectrum.set(this.interpSpectrum);
     }
 }

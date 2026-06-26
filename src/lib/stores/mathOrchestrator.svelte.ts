@@ -50,6 +50,7 @@ class MathOrchestrator {
     outputImpulse = $state.raw(new Float32Array(this.FFT_SIZE));
     outputStep = $state.raw(new Float32Array(this.FFT_SIZE));
     outputCrestFactor = $state.raw(new Float32Array(this.BINS));
+    outputSpectrum = $state.raw(new Float32Array(this.BINS));
 
     hReal = $state.raw(new Float32Array(this.BINS));
     hImag = $state.raw(new Float32Array(this.BINS));
@@ -233,6 +234,7 @@ class MathOrchestrator {
             // Spectrum del worker → liveFrequencyData para el rendering
             if (data.outputSpectrum) {
                 const specData = new Float32Array(data.outputSpectrum);
+                this.outputSpectrum = specData;
                 // Reasignar referencia para reactividad Svelte 5 (trigger $derived)
                 traceManager.liveFrequencyData = specData;
             }
