@@ -1,0 +1,465 @@
+{
+  "_version": 6,
+  "layout": "1x1",
+  "themeMode": "dark",
+  "audioInDevice": "default",
+  "audioOutDevice": "default",
+  "sampleRate": 48000,
+  "fftSize": 8192,
+  "dspBaseRate": 15,
+  "targetFpsMultiplier": 4,
+  "metricDecimation": {
+    "magnitude": 1,
+    "phase": 2,
+    "coherence": 2,
+    "impulse": 4,
+    "step": 4,
+    "spectrum": 1,
+    "crest": 1,
+    "gd": 4
+  },
+  "weightingType": "Z",
+  "averagingType": "LPF",
+  "averagingDepth": 8,
+  "averagingAlpha": 0.1,
+  "besselSpeed": "Slow",
+  "ppoSmoothing": 12,
+  "fftOverlap": 50,
+  "windowType": "Hann",
+  "inputGain": 0,
+  "displayOffset": 0,
+  "polarity": false,
+  "inputFilter": "None",
+  "compensationDelayMs": 0,
+  "autoDelayCompensation": true,
+  "refChannel": -1,
+  "measChannel": 1,
+  "generatorType": "pink",
+  "genLevel": 0,
+  "genRouting": "Stereo",
+  "targetFps": 60,
+  "linkGeneratorToMeasurement": true,
+  "enableLeq": false,
+  "enableSourceWindow": false,
+  "sourceWindowWidthMs": 10,
+  "sourceWindowOffsetMs": 0,
+  "genFreq": 1000,
+  "autoSaveSnapshotOnStop": true,
+  "measurementMode": "manual",
+  "leqWindowSeconds": 10,
+  "averagingThresholdDb": -60,
+  "showAdvanced": true,
+  "showMinorGrid": true,
+  "palette": "ocean",
+  "canvasTheme": "dark",
+  "quadrants": {
+    "q-1": {
+      "activeMetrics": [
+        "Magnitude",
+        "Spectrum",
+        "Coherence"
+      ],
+      "metricStyles": {
+        "Spectrum": {
+          "color": "#a855f7",
+          "lineWidth": 1,
+          "lineDash": []
+        },
+        "Magnitude": {
+          "color": "#ff4444",
+          "lineWidth": 1.8,
+          "lineDash": []
+        },
+        "Phase": {
+          "color": "#d946ef",
+          "lineWidth": 1,
+          "lineDash": []
+        },
+        "Coherence": {
+          "color": "#08e792",
+          "lineWidth": 1,
+          "lineDash": []
+        },
+        "Group Delay": {
+          "color": "#10b981",
+          "lineWidth": 1,
+          "lineDash": []
+        },
+        "Impulse": {
+          "color": "#3b82f6",
+          "lineWidth": 1,
+          "lineDash": []
+        },
+        "Step": {
+          "color": "#f97316",
+          "lineWidth": 1,
+          "lineDash": []
+        },
+        "Simulated Magnitude": {
+          "color": "#00ffff",
+          "lineWidth": 1,
+          "lineDash": [
+            4,
+            4
+          ]
+        }
+      },
+      "metricConfigs": {
+        "Spectrum": {
+          "modeY": "dB",
+          "sensorResistance": 10,
+          "smoothingPPO": 48,
+          "invertY": false,
+          "enableCoherence": false,
+          "coherenceMode": "attenuate",
+          "coherenceColor": "#666666",
+          "yShift": 0
+        },
+        "Magnitude": {
+          "modeY": "dB",
+          "sensorResistance": 10,
+          "smoothingPPO": 48,
+          "invertY": false,
+          "enableCoherence": true,
+          "coherenceMode": "attenuate",
+          "coherenceColor": "#666666",
+          "yShift": 0
+        },
+        "Simulated Magnitude": {
+          "modeY": "dB",
+          "sensorResistance": 10,
+          "smoothingPPO": 48,
+          "invertY": false,
+          "enableCoherence": false,
+          "coherenceMode": "attenuate",
+          "coherenceColor": "#666666",
+          "yShift": 0
+        },
+        "Phase": {
+          "unwrapMode": "±180",
+          "rotate": 0,
+          "range": 360,
+          "yShift": 0
+        },
+        "Coherence": {
+          "cohType": "normal",
+          "showLine": true,
+          "showBackground": false,
+          "bgPalette": "Hot",
+          "showThresholdLine": true,
+          "thresholdColor": "#08e79d",
+          "thresholdValue": 0.2,
+          "yShift": 0
+        },
+        "Spectrogram": {
+          "palette": "Magma"
+        }
+      }
+    },
+    "q-2": {
+      "activeMetrics": [
+        "Magnitude"
+      ],
+      "metricStyles": {
+        "Spectrum": {
+          "color": "#a855f7",
+          "lineWidth": 1,
+          "lineDash": []
+        },
+        "Magnitude": {
+          "color": "#ff4444",
+          "lineWidth": 1,
+          "lineDash": []
+        },
+        "Phase": {
+          "color": "#d946ef",
+          "lineWidth": 1,
+          "lineDash": []
+        },
+        "Coherence": {
+          "color": "#eab308",
+          "lineWidth": 1,
+          "lineDash": []
+        },
+        "Group Delay": {
+          "color": "#10b981",
+          "lineWidth": 1,
+          "lineDash": []
+        },
+        "Impulse": {
+          "color": "#3b82f6",
+          "lineWidth": 1,
+          "lineDash": []
+        },
+        "Step": {
+          "color": "#f97316",
+          "lineWidth": 1,
+          "lineDash": []
+        },
+        "Simulated Magnitude": {
+          "color": "#00ffff",
+          "lineWidth": 1,
+          "lineDash": [
+            4,
+            4
+          ]
+        }
+      },
+      "metricConfigs": {
+        "Spectrum": {
+          "modeY": "dB",
+          "sensorResistance": 10,
+          "smoothingPPO": 48,
+          "invertY": false,
+          "enableCoherence": false,
+          "coherenceMode": "attenuate",
+          "coherenceColor": "#666666",
+          "yShift": 0
+        },
+        "Magnitude": {
+          "modeY": "dB",
+          "sensorResistance": 10,
+          "smoothingPPO": 48,
+          "invertY": false,
+          "enableCoherence": true,
+          "coherenceMode": "attenuate",
+          "coherenceColor": "#666666",
+          "yShift": 0
+        },
+        "Simulated Magnitude": {
+          "modeY": "dB",
+          "sensorResistance": 10,
+          "smoothingPPO": 48,
+          "invertY": false,
+          "enableCoherence": false,
+          "coherenceMode": "attenuate",
+          "coherenceColor": "#666666",
+          "yShift": 0
+        },
+        "Phase": {
+          "unwrapMode": "±180",
+          "rotate": 0,
+          "range": 360,
+          "yShift": 0
+        },
+        "Coherence": {
+          "cohType": "normal",
+          "showLine": true,
+          "showBackground": true,
+          "bgPalette": "RedTransparent",
+          "showThresholdLine": true,
+          "thresholdColor": "#eab308",
+          "thresholdValue": 0.2,
+          "yShift": 0
+        },
+        "Spectrogram": {
+          "palette": "Magma"
+        }
+      }
+    }
+  },
+  "eqType": "parametrico",
+  "eqShowEQ": true,
+  "eqGraphicBands": [
+    {
+      "freq": 20,
+      "gain": 0
+    },
+    {
+      "freq": 43,
+      "gain": 0
+    },
+    {
+      "freq": 93,
+      "gain": 0
+    },
+    {
+      "freq": 200,
+      "gain": 0
+    },
+    {
+      "freq": 431,
+      "gain": 0
+    },
+    {
+      "freq": 928,
+      "gain": 0
+    },
+    {
+      "freq": 2000,
+      "gain": -3.2
+    },
+    {
+      "freq": 4309,
+      "gain": 0
+    },
+    {
+      "freq": 9283,
+      "gain": 0
+    },
+    {
+      "freq": 20000,
+      "gain": 0
+    }
+  ],
+  "eqParametricFilters": [
+    {
+      "id": 1,
+      "freq": 60,
+      "gain": 0,
+      "q": 1,
+      "type": "peaking",
+      "supportedTypes": [
+        "peaking",
+        "lowpass",
+        "highpass",
+        "low_shelf",
+        "high_shelf",
+        "notch",
+        "bandpass"
+      ]
+    },
+    {
+      "id": 2,
+      "freq": 250,
+      "gain": 0,
+      "q": 1,
+      "type": "peaking",
+      "supportedTypes": [
+        "peaking",
+        "lowpass",
+        "highpass",
+        "low_shelf",
+        "high_shelf",
+        "notch",
+        "bandpass"
+      ]
+    },
+    {
+      "id": 3,
+      "freq": 1000,
+      "gain": 0,
+      "q": 1,
+      "type": "peaking",
+      "supportedTypes": [
+        "peaking",
+        "lowpass",
+        "highpass",
+        "low_shelf",
+        "high_shelf",
+        "notch",
+        "bandpass"
+      ]
+    },
+    {
+      "id": 4,
+      "freq": 3000,
+      "gain": 0,
+      "q": 1,
+      "type": "peaking",
+      "supportedTypes": [
+        "peaking",
+        "lowpass",
+        "highpass",
+        "low_shelf",
+        "high_shelf",
+        "notch",
+        "bandpass"
+      ]
+    },
+    {
+      "id": 5,
+      "freq": 8000,
+      "gain": 0,
+      "q": 1,
+      "type": "peaking",
+      "supportedTypes": [
+        "peaking",
+        "lowpass",
+        "highpass",
+        "low_shelf",
+        "high_shelf",
+        "notch",
+        "bandpass"
+      ]
+    },
+    {
+      "id": 6,
+      "freq": 14000,
+      "gain": 0,
+      "q": 1,
+      "type": "peaking",
+      "supportedTypes": [
+        "peaking",
+        "lowpass",
+        "highpass",
+        "low_shelf",
+        "high_shelf",
+        "notch",
+        "bandpass"
+      ]
+    }
+  ],
+  "autoEQAlgorithm": "greedy",
+  "autoEQCostDomain": "dB",
+  "autoEQMaxBoost": 6,
+  "autoEQMaxCut": -12,
+  "autoEQMinQ": 0.2,
+  "autoEQMaxQ": 6,
+  "autoEQMaxIterations": 200,
+  "autoEQCoherenceThreshold": 0.3,
+  "autoEQTrebleAveraging": true,
+  "autoEQTrebleFreq": 10000,
+  "autoEQOnlyCorrectPeaks": false,
+  "autoEQPSOPopulation": 30,
+  "autoEQPSOInertia": 0.7,
+  "autoEQPSOCognitive": 1.5,
+  "autoEQPSOSocial": 1.5,
+  "autoEQGAPopulation": 50,
+  "autoEQGAMutationRate": 0.1,
+  "autoEQGACrossoverRate": 0.8,
+  "autoEQGAElitism": 2,
+  "targetPoints": [
+    {
+      "f": 20,
+      "g": 0
+    },
+    {
+      "f": 20000,
+      "g": 0
+    }
+  ],
+  "targetVisible": false,
+  "targetColor": "#00ff00",
+  "targetOpacity": 0.5,
+  "targetOffset": 0,
+  "targetName": "Flat",
+  "calibrationPoints": [],
+  "calibrationFilename": "",
+  "tagPresets": {
+    "ubicacion": [
+      "Principal",
+      "Delay 1",
+      "Delay 2",
+      "Delay 3",
+      "Relleno",
+      "Subwoofer"
+    ],
+    "posicion": [
+      "Izquierda",
+      "Centro",
+      "Derecha",
+      "Arriba",
+      "Abajo"
+    ]
+  },
+  "metricsToCapture": {
+    "Magnitude": true,
+    "Phase": true,
+    "Coherence": true,
+    "Impulse": false,
+    "GroupDelay": false,
+    "Step": false
+  },
+  "_exportedAt": 1782857415742
+}
