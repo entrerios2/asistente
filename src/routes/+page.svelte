@@ -9,6 +9,7 @@
     import { mathOrchestrator } from '$lib/stores/mathOrchestrator.svelte';
     import { loadConfig, saveConfig, loadDefaults } from "$lib/utils/configPersistence";
     import { eqStore } from '$lib/stores/eqStore.svelte';
+    import { quadrantConfigStore } from '$lib/stores/quadrantConfigStore.svelte';
     import { targetTrace } from '$lib/stores/targetTrace.svelte';
     import { calibrationStore } from '$lib/stores/calibrationStore.svelte';
     import { base } from '$app/paths';
@@ -69,6 +70,7 @@
         targetTrace.loadFromConfig(config);
         calibrationStore.loadFromConfig(config);
         traceManager.loadFromConfig(config);
+        quadrantConfigStore.loadFromConfig(config);
     }
 
     onMount(() => {
@@ -110,8 +112,9 @@
     });
 
     $effect(() => {
+        quadrantConfigStore.saveVersion; // fuerza re-run ante cualquier cambio en cuadrantes
         saveConfig({
-            _version: 5,
+            _version: 6,
             layout: uiStore.layout,
             themeMode: uiStore.themeMode,
             audioInDevice: uiStore.audioInDevice,
@@ -164,6 +167,7 @@
             ...targetTrace.toConfig(),
             ...calibrationStore.toConfig(),
             ...traceManager.toConfig(),
+            ...quadrantConfigStore.toConfig(),
         });
     });
     // Detectar si estamos en modo Tauri (datos simulados)

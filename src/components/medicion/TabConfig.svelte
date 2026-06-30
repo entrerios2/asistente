@@ -7,6 +7,7 @@
     import { eqStore } from "$lib/stores/eqStore.svelte";
     import { targetTrace } from "$lib/stores/targetTrace.svelte";
     import { traceManager } from "$lib/stores/traceManager.svelte";
+    import { quadrantConfigStore } from "$lib/stores/quadrantConfigStore.svelte";
     import { exportConfig, importConfig, type PersistedConfig } from "$lib/utils/configPersistence";
 
     const provider = getAudioProvider();
@@ -102,7 +103,7 @@
 
     function buildCurrentConfig(): PersistedConfig {
         return {
-            _version: 5,
+            _version: 6,
             layout: uiStore.layout,
             themeMode: uiStore.themeMode,
             audioInDevice: uiStore.audioInDevice,
@@ -146,6 +147,7 @@
             showMinorGrid: uiStore.showMinorGrid,
             palette: uiStore.palette,
             canvasTheme: uiStore.canvasTheme,
+            ...quadrantConfigStore.toConfig(),
             ...eqStore.toConfig(),
             ...targetTrace.toConfig(),
             ...calibrationStore.toConfig(),
@@ -224,6 +226,7 @@
             if (c.showMinorGrid !== undefined) uiStore.showMinorGrid = c.showMinorGrid;
             if (c.palette) uiStore.setPalette(c.palette);
             if (c.canvasTheme) uiStore.setCanvasTheme(c.canvasTheme);
+            quadrantConfigStore.loadFromConfig(c);
             eqStore.loadFromConfig(c);
             targetTrace.loadFromConfig(c);
             calibrationStore.loadFromConfig(c);
@@ -298,6 +301,7 @@
             uiStore.dspBaseRate = 30;
             uiStore.autoSaveSnapshotOnStop = false;
             uiStore.measurementMode = 'manual';
+            quadrantConfigStore.resetQuadrants();
         }
         showResetModal = false;
         // Reset checkboxes

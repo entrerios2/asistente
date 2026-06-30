@@ -3,6 +3,7 @@
     import { traceManager } from "$lib/stores/traceManager.svelte";
     import { eqStore } from "$lib/stores/eqStore.svelte";
     import { uiStore } from "$lib/stores/ui.svelte";
+    import { quadrantConfigStore } from "$lib/stores/quadrantConfigStore.svelte";
     import { meterStore } from "$lib/stores/meterStore.svelte";
     import { mathOrchestrator } from "$lib/stores/mathOrchestrator.svelte";
     import { targetTrace } from "$lib/stores/targetTrace.svelte";
@@ -145,6 +146,53 @@
             interpEngine.BINS,
             uiStore.sampleRate,
         );
+    });
+
+    // Sincronización inversa (PRIMERO): store → local (cuando se carga o resetea configuración)
+    // Debe ejecutarse ANTES del write effect para que los datos persistidos
+    // no sean sobrescritos por defaults al recrearse el cuadrante (ej. cambio de layout).
+    function sanitizeStyles(styles: Record<string, { color: string; lineWidth: number; lineDash: number[] }>) {
+        for (const key of Object.keys(styles)) {
+            const s = styles[key];
+            if (!Array.isArray(s.lineDash)) s.lineDash = [];
+        }
+        return styles;
+    }
+    $effect(() => {
+        const v = quadrantConfigStore.loadVersion;
+        untrack(() => {
+            const data = quadrantConfigStore.quadrants[id];
+            if (data) {
+                activeMetrics = data.activeMetrics;
+                metricStyles = sanitizeStyles(JSON.parse(JSON.stringify(data.metricStyles)));
+                metricConfigs = JSON.parse(JSON.stringify(data.metricConfigs));
+            } else if (v > 0) {
+                // Store fue reseteado: re-inicializar con defaults
+                activeMetrics = ["Magnitude"];
+                metricStyles = JSON.parse(JSON.stringify(defaultMetricStyles));
+                metricConfigs = JSON.parse(JSON.stringify(defaultMetricConfigs));
+            }
+        });
+    });
+
+    // Sincronización (SEGUNDO): local → store
+    // Usamos JSON.stringify para tracking profundo (metricStyles["Phase"].range, etc.)
+    $effect(() => {
+        const mSnapshot = JSON.stringify(activeMetrics);
+        const sSnapshot = JSON.stringify(metricStyles);
+        const cSnapshot = JSON.stringify(metricConfigs);
+        untrack(() => {
+            const styles = JSON.parse(sSnapshot) as Record<string, { color: string; lineWidth: number; lineDash: number[] }>;
+            // Sanitizar lineDash: $state([]) puede serializar como {} en Svelte 5
+            for (const key of Object.keys(styles)) {
+                if (!Array.isArray(styles[key].lineDash)) styles[key].lineDash = [];
+            }
+            quadrantConfigStore.syncFromQuadrant(id, {
+                activeMetrics: JSON.parse(mSnapshot),
+                metricStyles: styles,
+                metricConfigs: JSON.parse(cSnapshot),
+            });
+        });
     });
 
     let localLastVersion = 0;

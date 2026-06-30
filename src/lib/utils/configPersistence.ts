@@ -3,7 +3,7 @@
  */
 
 const CONFIG_KEY = 'asistente_config';
-const CONFIG_VERSION = 5;
+const CONFIG_VERSION = 6;
 const SAVE_DEBOUNCE_MS = 1000;
 
 export interface PersistedConfig {
@@ -104,6 +104,13 @@ export interface PersistedConfig {
     autoEQGAMutationRate?: number;
     autoEQGACrossoverRate?: number;
     autoEQGAElitism?: number;
+
+    // ─── v6: Estado por cuadrante ───
+    quadrants?: Record<string, {
+        activeMetrics: string[];
+        metricStyles?: Record<string, { color: string; lineWidth: number; lineDash: number[] }>;
+        metricConfigs?: Record<string, Record<string, unknown>>;
+    }>;
 
     // Legacy (kept for migration)
     inChannels?: boolean[];
