@@ -297,6 +297,12 @@
             activeMetrics = activeMetrics.filter((m) => m !== name);
         } else {
             activeMetrics.push(name);
+            if (!metricStyles[name]) {
+                metricStyles[name] = { ...(defaultMetricStyles[name] || { color: "#888", lineWidth: 1, lineDash: [] }) };
+            }
+            if (!metricConfigs[name]) {
+                metricConfigs[name] = { ...(defaultMetricConfigs[name] || {}) };
+            }
         }
     }
 

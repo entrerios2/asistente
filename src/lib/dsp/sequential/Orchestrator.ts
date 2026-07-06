@@ -8,6 +8,7 @@ import { SegmentF } from './analyse/SegmentF';
 import { SegmentT } from './analyse/SegmentT';
 import { SegmentN } from './analyse/SegmentN';
 import { SegmentX } from './analyse/SegmentX';
+import { SegmentP } from './analyse/SegmentP';
 
 export type OrchestratorState = 
     | 'IDLE'
@@ -48,12 +49,13 @@ export interface OrchestratorEvent {
 
 const LONG_SEGMENTS = new Set(['F', 'T', 'S']);
 
-const DUAL_CHANNEL_TOKENS = new Set(['F', 'T', 'X']);
+const DUAL_CHANNEL_TOKENS = new Set(['F', 'T', 'X', 'P']);
 
 const ANALYZERS: Record<string, (meas: Float32Array, ref: Float32Array | undefined, sr: number) => SegmentAnalysis> = {
     F: (meas, ref, sr) => SegmentF.process(ref || meas, meas, sr) as SegmentAnalysis,
     T: (meas, ref, sr) => SegmentT.process(ref || meas, meas, sr) as SegmentAnalysis,
     X: (meas, ref, sr) => SegmentX.process(ref || meas, meas, sr) as SegmentAnalysis,
+    P: (meas, ref, sr) => SegmentP.process(ref || meas, meas, sr) as SegmentAnalysis,
     N: (meas, _ref, sr) => SegmentN.process(meas, sr) as SegmentAnalysis,
     M: (meas, _ref, sr) => SegmentM.process(meas, sr) as SegmentAnalysis,
     D: (meas, _ref, sr) => SegmentD.process(meas, sr) as SegmentAnalysis,
