@@ -445,6 +445,32 @@ export class WebAudioProvider implements AudioProvider {
 		});
 	}
 
+	async playBuffer(buffer: Float32Array, sampleRate: number): Promise<void> {
+		if (!this.audioContext) {
+			this.audioContext = new AudioContext({ sampleRate });
+		}
+
+		if (this.audioContext.state === 'suspended') {
+			await this.audioContext.resume();
+		}
+
+		const audioBuffer = this.audioContext.createBuffer(1, buffer.length, sampleRate);
+		audioBuffer.getChannelData(0).set(buffer);
+
+		return new Promise((resolve) => {
+			const source = this.audioContext!.createBufferSource();
+			source.buffer = audioBuffer;
+			source.connect(this.audioContext!.destination);
+
+			source.onended = () => {
+				source.disconnect();
+				resolve();
+			};
+
+			source.start(0);
+		});
+	}
+
 	onMessage(callback: (message: any) => void): void {
 		if (this.workletNode) {
 			this.workletNode.port.onmessage = (event) => {

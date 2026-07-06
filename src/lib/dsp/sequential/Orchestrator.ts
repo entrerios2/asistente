@@ -1,4 +1,3 @@
-import type { Player } from './Player';
 import type { AudioProvider } from '../../hal/types';
 import { measureEventLoopLag } from '../../utils/tierDetector';
 
@@ -18,7 +17,8 @@ export interface OrchestratorEvent {
 }
 
 /**
- * APST Orchestrator: Coordina la secuencia de medición acústica.
+ * Orchestrator: Coordina la secuencia de medición secuencial.
+ * Fase 2: reemplazará el stub de reproducción por SegmentBuffer + playBuffer.
  */
 export class Orchestrator {
     private state: OrchestratorState = 'IDLE';
@@ -31,7 +31,6 @@ export class Orchestrator {
     private isAborted: boolean = false;
 
     constructor(
-        private player: Player,
         private hal: AudioProvider
     ) {
         if (this.hal.onMessage) {
@@ -67,9 +66,10 @@ export class Orchestrator {
     }
 
     private async processToken(token: string): Promise<void> {
-        // 1. Reproducir audio
+        // 1. Generar y reproducir buffer del segmento (stub: duración simulada)
         this.emit('REPRODUCIENDO_AUDIO', token);
-        await this.player.playSequence(`segmento_${token}`, 48000, 'HF');
+        const durationMs = token === 'S' ? 20000 : token === 'F' ? 15000 : token === 'N' ? 12000 : token === 'R' ? 15000 : 5000;
+        await new Promise(r => setTimeout(r, durationMs));
 
         // 2. Esperar cabecera
         this.emit('ESPERANDO_CABECERA', token);

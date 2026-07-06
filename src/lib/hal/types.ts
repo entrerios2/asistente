@@ -21,6 +21,7 @@ export interface AudioProvider {
 	stopCapture(): void;
 	playGenerator(type: SignalType, active: boolean, freq: number, level: number, routing: 'L' | 'R' | 'Stereo'): void | Promise<void>;
 	playSample?(url: string): Promise<void>;
+	playBuffer?(buffer: Float32Array, sampleRate: number): Promise<void>;
 	onMessage?(callback: (message: any) => void): void;
     listDevices?(): Promise<AudioDevice[]>;
     selectDevice?(id: string, direction: 'input' | 'output'): Promise<void>;

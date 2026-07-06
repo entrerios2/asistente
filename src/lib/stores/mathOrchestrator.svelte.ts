@@ -104,7 +104,7 @@ class MathOrchestrator {
             $effect(() => {
                 this.startTimer(uiStore.dspBaseRate);
             });
-            // Enviar FSK enable/disable al worklet cuando cambia measurementMode
+            // Encender/apagar detección de cabeceras (Goertzel) según modo
             $effect(() => {
                 const mode = uiStore.measurementMode;
                 untrack(() => {

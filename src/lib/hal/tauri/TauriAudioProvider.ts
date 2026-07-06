@@ -32,6 +32,10 @@ export class TauriAudioProvider implements AudioProvider {
 		console.warn(`[TauriAudioProvider] ⚠️ Generador no implementado en modo Tauri [${type}]: ${active ? 'ON' : 'OFF'}`);
 	}
 
+	async playBuffer(_buffer: Float32Array, _sampleRate: number): Promise<void> {
+		console.warn('[TauriAudioProvider] ⚠️ playBuffer no implementado en modo Tauri');
+	}
+
     async listDevices(): Promise<AudioDevice[]> {
         return await invoke<AudioDevice[]>('list_audio_devices');
     }

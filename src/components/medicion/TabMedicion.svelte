@@ -117,7 +117,7 @@
 
 
     function calculateDelay() {
-        statusText = "⚠️ Cálculo de retardo no implementado — requiere módulo APST";
+        statusText = "⚠️ Cálculo de retardo no implementado — requiere medición secuencial";
     }
 
     function useCalculatedDelay() {
@@ -433,7 +433,7 @@
                 <div class="flex flex-col gap-1">
                     <label
                         class="text-[10px] font-bold text-[var(--text-muted)] uppercase"
-                        >Presets APST</label
+                        >Presets</label
                     >
                     <select
                         bind:value={selectedPreset}
