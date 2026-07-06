@@ -35,6 +35,8 @@ export {
     drawPhasePath,
     drawCrestFactor,
     drawPhaseDelay,
+    drawHarmonics,
+    drawBarChart,
 } from './renderers/metricRenderers';
 
 export {

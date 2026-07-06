@@ -547,6 +547,137 @@ export function drawCrestFactor(
     }
 }
 
+export function drawHarmonics(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    harmonics: { h2: Float32Array; h3: Float32Array; h4: Float32Array; h5: Float32Array },
+    frequencies: Float32Array,
+    state: InteractionState,
+    metricConfigs: Record<string, MetricConfig>,
+) {
+    const cfg = metricConfigs["Harmonics"] || {};
+    const HARMONIC_COLORS = [
+        cfg.harmonicColorH2 || '#ff4444',
+        cfg.harmonicColorH3 || '#f97316',
+        cfg.harmonicColorH4 || '#eab308',
+        cfg.harmonicColorH5 || '#a855f7',
+    ];
+    const LABELS = ['H₂', 'H₃', 'H₄', 'H₅'];
+    const arrays = [harmonics.h2, harmonics.h3, harmonics.h4, harmonics.h5];
+
+    const freqMinVis = 10;
+    const freqMaxVis = frequencies.length > 0 ? frequencies[frequencies.length - 1] * 2 : 48000;
+    const logMin = Math.log10(freqMinVis);
+    const logMax = Math.log10(freqMaxVis);
+
+    for (let h = 0; h < 4; h++) {
+        const data = arrays[h];
+        const binWidth = freqMaxVis / data.length;
+
+        type Seg = { start: number; end: number };
+        const segs: Seg[] = [];
+        let segStart = -1;
+        for (let bin = 0; bin < data.length; bin++) {
+            if (data[bin] < -200) {
+                if (segStart >= 0) {
+                    segs.push({ start: segStart, end: bin - 1 });
+                    segStart = -1;
+                }
+            } else if (segStart < 0) {
+                segStart = bin;
+            }
+        }
+        if (segStart >= 0) segs.push({ start: segStart, end: data.length - 1 });
+        if (segs.length === 0) continue;
+
+        ctx.strokeStyle = HARMONIC_COLORS[h];
+        ctx.lineWidth = 1;
+        ctx.setLineDash([]);
+
+        let lastLabeledX = -1;
+
+        for (const seg of segs) {
+            const len = seg.end - seg.start + 1;
+            if (len === 0) continue;
+
+            const step = Math.max(1, Math.floor(len / 500));
+
+            ctx.beginPath();
+            let started = false;
+
+            for (let i = 0; i < len; i += step) {
+                const bin = seg.start + i;
+                const freq = bin * binWidth;
+                if (freq < freqMinVis || freq > freqMaxVis) continue;
+                const x = (Math.log10(freq) - logMin) / (logMax - logMin) * width;
+
+                const val = data[bin];
+                if (val < -200) continue;
+                const y = valToY(val, height, 'Spectrum', metricConfigs, state);
+
+                if (!started) {
+                    ctx.moveTo(x, y);
+                    started = true;
+                } else {
+                    ctx.lineTo(x, y);
+                }
+                lastLabeledX = x;
+            }
+
+            if (started) ctx.stroke();
+        }
+
+        if (lastLabeledX >= 0) {
+            const lastBin = segs[segs.length - 1].end;
+            const lastVal = data[lastBin];
+            const lx = Math.min(width - 35, lastLabeledX + 4);
+            const ly = valToY(lastVal, height, 'Spectrum', metricConfigs, state);
+            ctx.font = '10px system-ui, sans-serif';
+            ctx.fillStyle = HARMONIC_COLORS[h];
+            ctx.textAlign = 'left';
+            ctx.fillText(LABELS[h], lx, ly);
+        }
+    }
+}
+
+export function drawBarChart(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    octaveBands: { frequencies: Float32Array; levels: Float32Array },
+    state: InteractionState,
+    metricConfigs: Record<string, MetricConfig>,
+) {
+    if (octaveBands.frequencies.length === 0 || octaveBands.frequencies.length !== octaveBands.levels.length) return;
+
+    const cfg = metricConfigs["Octave Bands"] || {};
+    const colorMode = cfg.octaveColorMode || 'pass_warn_fail';
+    const solidColor = metricConfigs["Octave Bands"]?.harmonicColorH2 || '#22c55e';
+
+    for (let i = 0; i < octaveBands.frequencies.length; i++) {
+        const freq = octaveBands.frequencies[i];
+        const level = octaveBands.levels[i];
+        if (freq < 10 || freq > 24000) continue;
+
+        const x = (freq / 24000) * width;
+        const y = valToY(level, height, 'Spectrum', metricConfigs, state);
+        const yZero = valToY(-100, height, 'Spectrum', metricConfigs, state);
+
+        const freqNext = i < octaveBands.frequencies.length - 1 ? octaveBands.frequencies[i + 1] : freq * 1.5;
+        const freqPrev = i > 0 ? octaveBands.frequencies[i - 1] : freq / 1.5;
+        const halfBand = ((freqNext - freqPrev) / 2) / 24000 * width;
+        const barWidth = Math.max(2, halfBand * 0.8);
+
+        if (colorMode === 'solid') {
+            ctx.fillStyle = solidColor;
+        } else {
+            ctx.fillStyle = level > -18 ? '#22c55e' : level > -30 ? '#eab308' : '#ef4444';
+        }
+        ctx.fillRect(x - barWidth / 2, y, barWidth, yZero - y);
+    }
+}
+
 export function drawPhaseDelay(
     ctx: CanvasRenderingContext2D,
     phaseData: Float32Array,

@@ -60,6 +60,8 @@ const FREQ_DOMAIN_METRICS = [
     "Coherence",
     "Group Delay",
     "Spectrogram",
+    "Harmonics",
+    "Octave Bands",
 ];
 
 const TIME_DOMAIN_METRICS = ["Impulse", "Step"];

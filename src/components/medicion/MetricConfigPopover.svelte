@@ -258,6 +258,79 @@
             </div>
         {/if}
 
+        {#if activeConfigMetric === "Harmonics"}
+            <div class="flex flex-col gap-2">
+                <span class="text-[var(--text-secondary)] font-medium">Colores por armónico</span>
+                <div class="flex items-center justify-between">
+                    <span style="color:#ff4444" class="font-mono text-[10px]">H₂</span>
+                    <input type="color" value={metricConfigs["Harmonics"]?.harmonicColorH2 ?? '#ff4444'}
+                           oninput={e => {
+                               if (!metricConfigs["Harmonics"]) metricConfigs["Harmonics"] = {};
+                               metricConfigs["Harmonics"].harmonicColorH2 = e.currentTarget.value;
+                           }}
+                           class="w-6 h-6 border-none cursor-pointer rounded bg-transparent" />
+                </div>
+                <div class="flex items-center justify-between">
+                    <span style="color:#f97316" class="font-mono text-[10px]">H₃</span>
+                    <input type="color" value={metricConfigs["Harmonics"]?.harmonicColorH3 ?? '#f97316'}
+                           oninput={e => {
+                               if (!metricConfigs["Harmonics"]) metricConfigs["Harmonics"] = {};
+                               metricConfigs["Harmonics"].harmonicColorH3 = e.currentTarget.value;
+                           }}
+                           class="w-6 h-6 border-none cursor-pointer rounded bg-transparent" />
+                </div>
+                <div class="flex items-center justify-between">
+                    <span style="color:#eab308" class="font-mono text-[10px]">H₄</span>
+                    <input type="color" value={metricConfigs["Harmonics"]?.harmonicColorH4 ?? '#eab308'}
+                           oninput={e => {
+                               if (!metricConfigs["Harmonics"]) metricConfigs["Harmonics"] = {};
+                               metricConfigs["Harmonics"].harmonicColorH4 = e.currentTarget.value;
+                           }}
+                           class="w-6 h-6 border-none cursor-pointer rounded bg-transparent" />
+                </div>
+                <div class="flex items-center justify-between">
+                    <span style="color:#a855f7" class="font-mono text-[10px]">H₅</span>
+                    <input type="color" value={metricConfigs["Harmonics"]?.harmonicColorH5 ?? '#a855f7'}
+                           oninput={e => {
+                               if (!metricConfigs["Harmonics"]) metricConfigs["Harmonics"] = {};
+                               metricConfigs["Harmonics"].harmonicColorH5 = e.currentTarget.value;
+                           }}
+                           class="w-6 h-6 border-none cursor-pointer rounded bg-transparent" />
+                </div>
+            </div>
+        {/if}
+
+        {#if activeConfigMetric === "Octave Bands"}
+            <div class="flex flex-col gap-2">
+                <span class="text-[var(--text-secondary)] font-medium">Modo de color</span>
+                <select class="bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded px-2 py-1 text-xs text-[var(--text-primary)] focus:outline-none"
+                        value={metricConfigs["Octave Bands"]?.octaveColorMode ?? 'pass_warn_fail'}
+                        onchange={e => {
+                            if (!metricConfigs["Octave Bands"]) metricConfigs["Octave Bands"] = {};
+                            metricConfigs["Octave Bands"].octaveColorMode = e.currentTarget.value as 'pass_warn_fail' | 'solid';
+                        }}>
+                    <option value="pass_warn_fail">PASS / WARN / FAIL</option>
+                    <option value="solid">Color sólido</option>
+                </select>
+                {#if (metricConfigs["Octave Bands"]?.octaveColorMode ?? 'pass_warn_fail') === 'pass_warn_fail'}
+                    <div class="flex flex-col gap-1 text-[10px] text-[var(--text-muted)]">
+                        <div class="flex items-center gap-2">
+                            <span class="w-3 h-2" style="background:#22c55e"></span>
+                            <span>Dentro de tolerancia (±3 dB)</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="w-3 h-2" style="background:#eab308"></span>
+                            <span>Desviación moderada</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="w-3 h-2" style="background:#ef4444"></span>
+                            <span>Fuera de tolerancia</span>
+                        </div>
+                    </div>
+                {/if}
+            </div>
+        {/if}
+
         <!-- Editor de estilos de curva -->
         {#if activeConfigMetric && metricStyles[activeConfigMetric]}
             <div class="border-t pt-2 mt-1 flex flex-col gap-2" style="border-color: var(--border-primary)">

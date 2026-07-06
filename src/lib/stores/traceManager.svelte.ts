@@ -25,6 +25,10 @@ export interface MeasurementLayer {
     multiMetricData?: Record<string, Float32Array>;
     color?: string;
     dashPattern?: number[];
+    // Etapa 3: datos espectrales estructurados (no Float32Array planos)
+    harmonicsData?: { h2: Float32Array; h3: Float32Array; h4: Float32Array; h5: Float32Array };
+    octaveBandsData?: { frequencies: Float32Array; levels: Float32Array };
+    spectralFrequencies?: Float32Array;
 }
 
 export interface InstantaneaTags {
@@ -715,10 +719,13 @@ class TraceManager {
             layer.instantaneaId = undefined;
             layer.color = undefined;
             layer.dashPattern = undefined;
+            layer.harmonicsData = undefined;
+            layer.octaveBandsData = undefined;
+            layer.spectralFrequencies = undefined;
         }
     }
 
-    updateSpectralLayer(spectral: { magnitude?: Float32Array; phase?: Float32Array; coherence?: Float32Array;
+    updateSpectralLayer(spectral: { frequencies?: Float32Array; magnitude?: Float32Array; phase?: Float32Array; coherence?: Float32Array;
         impulse?: Float32Array; groupDelay?: Float32Array; phaseDelay?: Float32Array;
         spectrum?: Float32Array; harmonics?: { h2: Float32Array; h3: Float32Array; h4: Float32Array; h5: Float32Array };
         octaveBands?: { frequencies: Float32Array; levels: Float32Array } }) {
@@ -732,6 +739,10 @@ class TraceManager {
         if (spectral.groupDelay) layer.multiMetricData['Group Delay'] = spectral.groupDelay;
         if (spectral.phaseDelay) layer.multiMetricData['Phase Delay'] = spectral.phaseDelay;
         if (spectral.spectrum) layer.multiMetricData['Spectrum'] = spectral.spectrum;
+
+        if (spectral.harmonics) layer.harmonicsData = spectral.harmonics;
+        if (spectral.octaveBands) layer.octaveBandsData = spectral.octaveBands;
+        if (spectral.frequencies) layer.spectralFrequencies = spectral.frequencies;
 
         if (spectral.magnitude) {
             layer.data = spectral.magnitude;

@@ -16,6 +16,8 @@ import {
     drawScope,
     drawCrestFactor,
     drawPhaseDelay,
+    drawHarmonics,
+    drawBarChart,
     drawEQOverlayPath,
     drawEQPhaseOverlayPath,
     drawIndividualFilterCurve
@@ -260,10 +262,24 @@ export function drawQuadrant(p: DrawParams): void {
                 if (!p.hasTimeDomainActive && ["Impulse", "Step"].includes(metric)) return;
                 if (metric === "Coherence" && p.metricConfigs["Coherence"]?.showLine === false) return;
 
+                p.ctx.globalAlpha = alpha * p.getMetricAlpha(metric);
+
+                // Harmonics y Octave Bands se renderizan desde datos estructurados, no de multiMetricData
+                if (metric === "Harmonics") {
+                    if (layer.harmonicsData && layer.spectralFrequencies) {
+                        drawHarmonics(p.ctx, p.width, p.height, layer.harmonicsData, layer.spectralFrequencies, p.interactionState, p.metricConfigs);
+                    }
+                    return;
+                }
+                if (metric === "Octave Bands") {
+                    if (layer.octaveBandsData) {
+                        drawBarChart(p.ctx, p.width, p.height, layer.octaveBandsData, p.interactionState, p.metricConfigs);
+                    }
+                    return;
+                }
+
                 const bufferToDraw = layer.multiMetricData![metric];
                 if (!bufferToDraw || bufferToDraw.length === 0) return;
-
-                p.ctx.globalAlpha = alpha * p.getMetricAlpha(metric);
 
                 // Aplicar offsetY: crear buffer ajustado si hay offset
                 let adjustedBuffer = bufferToDraw;

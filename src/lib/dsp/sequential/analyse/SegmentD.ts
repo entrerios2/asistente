@@ -50,6 +50,24 @@ export class SegmentD {
             message = `THD+N: ${thdnDb.toFixed(1)}dB (${thdnPercent.toFixed(2)}%) — posible saturación o ruido excesivo`;
         }
 
+        const frequencies = new Float32Array(half);
+        for (let k = 0; k < half; k++) {
+            frequencies[k] = (k * sampleRate) / fftSize;
+        }
+
+        const h2 = new Float32Array(half);
+        const h3 = new Float32Array(half);
+        const h4 = new Float32Array(half);
+        const h5 = new Float32Array(half);
+        for (let h = 2; h <= 5; h++) {
+            const bin = Math.round((signalFreq * h / sampleRate) * fftSize);
+            if (bin >= 0 && bin < half) {
+                const target = h === 2 ? h2 : h === 3 ? h3 : h === 4 ? h4 : h5;
+                const magDb = 20 * Math.log10(Math.max(mag[bin], 1e-12));
+                target[bin] = magDb;
+            }
+        }
+
         return {
             status,
             values: {
@@ -58,6 +76,11 @@ export class SegmentD {
                 fundamentalEnergy: +fundamentalEnergy.toFixed(3),
             },
             message,
+            spectral: {
+                frequencies,
+                harmonics: { h2, h3, h4, h5 },
+                sampleRate,
+            },
         };
     }
 }

@@ -6,46 +6,55 @@ const THIRD_OCTAVE_FREQS = [
     6300, 8000, 10000, 12500, 16000, 20000,
 ];
 
-const TONE_DURATION = 0.5;
-
-const FFT_SIZE = 8192;
-
-function rmsBlock(buf: Float32Array): number {
-    let sum = 0;
-    for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
-    return Math.sqrt(sum / buf.length);
-}
-
 export class SegmentM {
     static process(buffer: Float32Array, sampleRate: number) {
-        const toneSamples = Math.round(TONE_DURATION * sampleRate);
+        const fftSize = 1 << Math.floor(Math.log2(buffer.length));
+        if (fftSize < 64) {
+            return {
+                status: 'ERROR' as const,
+                values: {} as Record<string, number | string>,
+                message: 'Buffer demasiado corto para análisis FFT',
+            };
+        }
+        const half = fftSize / 2;
+
+        const result = fft(buffer);
+        const mag = magnitude(result.real, result.imag);
+
+        const binWidth = sampleRate / fftSize;
+        const freqCount = THIRD_OCTAVE_FREQS.length;
+        const freqs = new Float32Array(freqCount);
+        const levels = new Float32Array(freqCount);
+
         const values: Record<string, number | string> = {};
         let worstDelta = 0;
         let worstBand = '';
 
-        for (let b = 0; b < THIRD_OCTAVE_FREQS.length; b++) {
-            const start = b * toneSamples;
-            const end = start + toneSamples;
-            if (end > buffer.length) break;
+        for (let b = 0; b < freqCount; b++) {
+            const centerFreq = THIRD_OCTAVE_FREQS[b];
+            freqs[b] = centerFreq;
 
-            const chunk = buffer.slice(start, end);
-            const rms = rmsBlock(chunk);
-            const expectedFreq = THIRD_OCTAVE_FREQS[b];
+            const lower = centerFreq / Math.pow(2, 1 / 6);
+            const upper = centerFreq * Math.pow(2, 1 / 6);
+            const binLow = Math.max(0, Math.round(lower / binWidth));
+            const binHigh = Math.min(half - 1, Math.round(upper / binWidth));
 
-            const fftResult = fft(chunk);
-            const magArr = magnitude(fftResult.real, fftResult.imag);
-            const binFreq = (expectedFreq / sampleRate) * FFT_SIZE;
-            const binIdx = Math.round(binFreq);
-            const mag = binIdx < magArr.length ? magArr[binIdx] : 0;
-            const magDb = 20 * Math.log10(Math.max(mag, 1e-12));
+            let sumSq = 0;
+            for (let k = binLow; k <= binHigh; k++) {
+                sumSq += mag[k] * mag[k];
+            }
+            const rms = Math.sqrt(sumSq / (binHigh - binLow + 1));
+            const levelDb = 20 * Math.log10(Math.max(rms, 1e-12));
+
+            levels[b] = levelDb;
 
             const expectedDb = -18;
-            const delta = magDb - expectedDb;
-            values[`${expectedFreq}Hz`] = delta.toFixed(1);
+            const delta = levelDb - expectedDb;
+            values[`${centerFreq}Hz`] = delta.toFixed(1);
 
             if (Math.abs(delta) > Math.abs(worstDelta)) {
                 worstDelta = delta;
-                worstBand = `${expectedFreq}Hz`;
+                worstBand = `${centerFreq}Hz`;
             }
         }
 
@@ -63,6 +72,15 @@ export class SegmentM {
             message = `Desviación severa (${worstDelta.toFixed(1)}dB en ${worstBand})`;
         }
 
-        return { status, values: { ...values, worstDelta: +worstDelta.toFixed(1), worstBand }, message };
+        return {
+            status,
+            values: { ...values, worstDelta: +worstDelta.toFixed(1), worstBand },
+            message,
+            spectral: {
+                frequencies: freqs,
+                octaveBands: { frequencies: freqs, levels },
+                sampleRate,
+            },
+        };
     }
 }

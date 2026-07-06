@@ -207,6 +207,18 @@ export const allMetrics: Metric[] = [
         color: "#60a5fa",
         label: "Crest Factor",
     },
+    {
+        name: "Harmonics",
+        type: "frequency",
+        color: "#ff4444",
+        label: "Harmonics (H₂–H₅)",
+    },
+    {
+        name: "Octave Bands",
+        type: "frequency",
+        color: "#22c55e",
+        label: "Octave Bands 1/3",
+    },
 ];
 
 export interface MetricConfig {
@@ -235,6 +247,13 @@ export interface MetricConfig {
     thresholdValue?: number;
     // Spectrogram
     palette?: PaletteType;
+    // Harmonics — colores individuales por armónico
+    harmonicColorH2?: string;
+    harmonicColorH3?: string;
+    harmonicColorH4?: string;
+    harmonicColorH5?: string;
+    // Octave Bands — modo de color
+    octaveColorMode?: 'pass_warn_fail' | 'solid';
 }
 
 export interface MetricStyle {
@@ -252,6 +271,8 @@ export const defaultMetricStyles: Record<string, MetricStyle> = {
     "Impulse": { color: "#3b82f6", lineWidth: 1, lineDash: [] },
     "Step": { color: "#f97316", lineWidth: 1, lineDash: [] },
     "Simulated Magnitude": { color: "#00ffff", lineWidth: 1, lineDash: [4, 4] },
+    "Harmonics": { color: "#ff4444", lineWidth: 1, lineDash: [] },
+    "Octave Bands": { color: "#22c55e", lineWidth: 1, lineDash: [] },
 };
 
 export const defaultMetricConfigs: Record<string, MetricConfig> = {
@@ -261,4 +282,6 @@ export const defaultMetricConfigs: Record<string, MetricConfig> = {
     "Phase": { unwrapMode: "±180", rotate: 0, range: 360, yShift: 0 },
     "Coherence": { cohType: "normal", showLine: true, showBackground: true, bgPalette: "RedTransparent", showThresholdLine: true, thresholdColor: "#eab308", thresholdValue: 0.2, yShift: 0 },
     "Spectrogram": { palette: "Magma" as PaletteType },
+    "Harmonics": { smoothingPPO: 48, harmonicColorH2: "#ff4444", harmonicColorH3: "#f97316", harmonicColorH4: "#eab308", harmonicColorH5: "#a855f7" },
+    "Octave Bands": { smoothingPPO: 48, octaveColorMode: "pass_warn_fail" },
 };
