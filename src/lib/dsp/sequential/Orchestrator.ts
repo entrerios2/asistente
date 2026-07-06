@@ -4,6 +4,7 @@ import { uiStore } from '../../stores/ui.svelte';
 import { SegmentM } from './analyse/SegmentM';
 import { SegmentD } from './analyse/SegmentD';
 import { SegmentR } from './analyse/SegmentR';
+import { SegmentF } from './analyse/SegmentF';
 
 export type OrchestratorState = 
     | 'IDLE'
@@ -14,10 +15,25 @@ export type OrchestratorState =
     | 'ABORTADO'
     | 'COMPLETADO';
 
+export interface SpectralData {
+    frequencies?: Float32Array;
+    magnitude?: Float32Array;
+    phase?: Float32Array;
+    coherence?: Float32Array;
+    impulse?: Float32Array;
+    groupDelay?: Float32Array;
+    phaseDelay?: Float32Array;
+    harmonics?: { h2: Float32Array; h3: Float32Array; h4: Float32Array; h5: Float32Array };
+    octaveBands?: { frequencies: Float32Array; levels: Float32Array };
+    spectrum?: Float32Array;
+    sampleRate: number;
+}
+
 export interface SegmentAnalysis {
     status: 'PASS' | 'WARN' | 'FAIL' | 'ERROR';
     values: Record<string, number | string>;
     message?: string;
+    spectral?: SpectralData;
 }
 
 export interface OrchestratorEvent {
@@ -29,10 +45,13 @@ export interface OrchestratorEvent {
 
 const LONG_SEGMENTS = new Set(['F', 'T', 'S']);
 
-const ANALYZERS: Record<string, (buf: Float32Array, sr: number) => SegmentAnalysis> = {
-    M: (buf, sr) => SegmentM.process(buf, sr) as SegmentAnalysis,
-    D: (buf, sr) => SegmentD.process(buf, sr) as SegmentAnalysis,
-    R: (buf, sr) => SegmentR.process(buf, sr) as SegmentAnalysis,
+const DUAL_CHANNEL_TOKENS = new Set(['F']);
+
+const ANALYZERS: Record<string, (meas: Float32Array, ref: Float32Array | undefined, sr: number) => SegmentAnalysis> = {
+    F: (meas, ref, sr) => SegmentF.process(ref || meas, meas, sr) as SegmentAnalysis,
+    M: (meas, _ref, sr) => SegmentM.process(meas, sr) as SegmentAnalysis,
+    D: (meas, _ref, sr) => SegmentD.process(meas, sr) as SegmentAnalysis,
+    R: (meas, _ref, sr) => SegmentR.process(meas, sr) as SegmentAnalysis,
 };
 
 export class Orchestrator {
@@ -139,7 +158,8 @@ export class Orchestrator {
         if (segmentBuffer.length > 0) {
             const analyze = ANALYZERS[token];
             if (analyze) {
-                const result = analyze(segmentBuffer, uiStore.sampleRate);
+                const ref = DUAL_CHANNEL_TOKENS.has(token) ? segment.buffer : undefined;
+                const result = analyze(segmentBuffer, ref, uiStore.sampleRate);
                 this.emit('PROCESANDO_SEGMENTO', token, result.message, result);
             } else {
                 this.emit('PROCESANDO_SEGMENTO', token);

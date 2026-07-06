@@ -38,6 +38,9 @@ class SequentialStore {
 
         if (event.state === 'PROCESANDO_SEGMENTO' && event.currentHeader && event.analysis) {
             this.results[event.currentHeader] = event.analysis;
+            if (event.analysis.spectral) {
+                traceManager.updateSpectralLayer(event.analysis.spectral);
+            }
         }
 
         if (event.state === 'COMPLETADO' || event.state === 'ABORTADO') {
@@ -46,14 +49,14 @@ class SequentialStore {
             if (event.state === 'COMPLETADO' && this.sequentialTokens.length > 0) {
                 this.progress = 100;
                 uiStore.showToast('Secuencia completada');
-                if (uiStore.autoSaveSnapshotOnStop) {
-                    traceManager.captureInstantaneaFromLive(
-                        'Secuencia automática',
-                        'secuencial',
-                        this.results,
-                        { segments: this.sequentialTokens, preset: '', sampleRate: uiStore.sampleRate },
-                    );
-                }
+                const seqLayer = traceManager.layers.find(l => l.name === 'secuencial');
+                const spectralData = seqLayer?.multiMetricData || {};
+                traceManager.captureInstantaneaFromSequential(
+                    'Secuencia automática',
+                    spectralData as Record<string, Float32Array>,
+                    this.results,
+                    { segments: this.sequentialTokens, preset: '', sampleRate: uiStore.sampleRate },
+                );
             }
         }
     }
@@ -65,6 +68,7 @@ class SequentialStore {
         this.progress = 0;
         this.currentSegment = null;
         this.results = {};
+        traceManager.clearSequentialLayer();
 
         try {
             await this.orchestrator.runSequence(tokens.join(' '));

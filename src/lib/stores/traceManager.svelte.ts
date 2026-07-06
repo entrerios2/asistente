@@ -685,6 +685,119 @@ class TraceManager {
         return this.captureInstantanea(name, metricList, undefined, undefined, segmentResults, sequenceConfig);
     }
 
+    getOrCreateSequentialLayer(): MeasurementLayer {
+        let layer = this.layers.find(l => l.name === 'secuencial');
+        if (!layer) {
+            const activeLayer = uiStore.activeLayerId
+                ? this.layers.find(l => l.id === uiStore.activeLayerId)
+                : null;
+            const quadrantId = activeLayer?.quadrantId || 'q-1';
+            layer = {
+                id: crypto.randomUUID(),
+                name: 'secuencial',
+                visible: true,
+                isMeasuring: false,
+                quadrantId,
+                sourceType: 'snapshot',
+                data: new Float32Array(0),
+                multiMetricData: {},
+            };
+            this.layers.push(layer);
+        }
+        return layer;
+    }
+
+    clearSequentialLayer() {
+        const layer = this.layers.find(l => l.name === 'secuencial');
+        if (layer) {
+            layer.multiMetricData = {};
+            layer.data = new Float32Array(0);
+            layer.instantaneaId = undefined;
+            layer.color = undefined;
+            layer.dashPattern = undefined;
+        }
+    }
+
+    updateSpectralLayer(spectral: { magnitude?: Float32Array; phase?: Float32Array; coherence?: Float32Array;
+        impulse?: Float32Array; groupDelay?: Float32Array; phaseDelay?: Float32Array;
+        spectrum?: Float32Array; harmonics?: { h2: Float32Array; h3: Float32Array; h4: Float32Array; h5: Float32Array };
+        octaveBands?: { frequencies: Float32Array; levels: Float32Array } }) {
+        const layer = this.getOrCreateSequentialLayer();
+        if (!layer.multiMetricData) layer.multiMetricData = {};
+
+        if (spectral.magnitude) layer.multiMetricData['Magnitude'] = spectral.magnitude;
+        if (spectral.phase) layer.multiMetricData['Phase'] = spectral.phase;
+        if (spectral.coherence) layer.multiMetricData['Coherence'] = spectral.coherence;
+        if (spectral.impulse) layer.multiMetricData['Impulse'] = spectral.impulse;
+        if (spectral.groupDelay) layer.multiMetricData['Group Delay'] = spectral.groupDelay;
+        if (spectral.phaseDelay) layer.multiMetricData['Phase Delay'] = spectral.phaseDelay;
+        if (spectral.spectrum) layer.multiMetricData['Spectrum'] = spectral.spectrum;
+
+        if (spectral.magnitude) {
+            layer.data = spectral.magnitude;
+        }
+    }
+
+    async captureInstantaneaFromSequential(
+        name: string,
+        multiMetricData: Record<string, Float32Array>,
+        segmentResults?: Record<string, SegmentResultData>,
+        sequenceConfig?: SequenceConfig,
+    ) {
+        const id = crypto.randomUUID();
+        const data: Record<string, Float32Array> = {};
+
+        for (const [metric, buf] of Object.entries(multiMetricData)) {
+            if (buf && buf.length > 0) {
+                data[metric] = new Float32Array(buf);
+            }
+        }
+
+        const ins: Instantanea = {
+            id,
+            name,
+            timestamp: Date.now(),
+            data,
+            visible: true,
+            color: '#00ff88',
+            source: 'secuencial',
+            metric: 'Multimétrica',
+            offsetY: 0,
+            tags: { custom: [] },
+            segmentResults,
+            sequenceConfig,
+        };
+
+        this.instantaneas.push(ins);
+
+        try {
+            const { saveInstantanea } = await import('../utils/db');
+            const serializedData: Record<string, ArrayBufferLike> = {};
+            for (const metric in data) {
+                serializedData[metric] = data[metric].buffer;
+            }
+            await saveInstantanea({
+                id: ins.id,
+                name: ins.name,
+                timestamp: ins.timestamp,
+                data: serializedData,
+                visible: ins.visible,
+                color: ins.color,
+                source: ins.source,
+                metric: ins.metric,
+                offsetY: ins.offsetY,
+                tags: ins.tags,
+                sessionId: ins.sessionId,
+                metadata: ins.metadata,
+            });
+        } catch (e) {
+            console.error('[TraceManager] Error guardando instantánea secuencial:', e);
+        }
+
+        this.pendingCaptureForModal = ins;
+        return ins;
+    }
+
     toConfig() {
         return {
             tagPresets: { ubicacion: [...this.tagPresets.ubicacion], posicion: [...this.tagPresets.posicion] },
