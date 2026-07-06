@@ -52,6 +52,9 @@ export class WebAudioProvider implements AudioProvider {
 	// Noise worklet loading state
 	private noiseWorkletLoaded: Promise<void> | null = null;
 
+	// Stored external message handler (re-applied when workletNode is created)
+	private pendingMessageHandler: ((message: any) => void) | null = null;
+
 	async startCapture(listener: AudioListener): Promise<void> {
 		if (!this.audioContext) {
 			this.audioContext = new AudioContext({ sampleRate: uiStore.sampleRate });
@@ -160,6 +163,12 @@ export class WebAudioProvider implements AudioProvider {
 				hasNewData = true;
 			}
 		});
+		// Re-aplicar el handler externo (FSK_HEADER, etc.) si se registró antes de startCapture
+		if (this.pendingMessageHandler) {
+			this.workletNode.port.addEventListener('message', (event) => {
+				this.pendingMessageHandler!(event.data);
+			});
+		}
 		this.workletNode.port.start();
 
 		source.connect(this.workletNode, 0, 0); // Mic → worklet input 0
@@ -462,6 +471,11 @@ export class WebAudioProvider implements AudioProvider {
 			source.buffer = audioBuffer;
 			source.connect(this.audioContext!.destination);
 
+			// Conectar también al worklet (input 1) para detección FSK en loopback
+			if (this.workletNode) {
+				source.connect(this.workletNode, 0, 1);
+			}
+
 			source.onended = () => {
 				source.disconnect();
 				resolve();
@@ -472,12 +486,11 @@ export class WebAudioProvider implements AudioProvider {
 	}
 
 	onMessage(callback: (message: any) => void): void {
+		this.pendingMessageHandler = callback;
 		if (this.workletNode) {
-			this.workletNode.port.onmessage = (event) => {
+			this.workletNode.port.addEventListener('message', (event) => {
 				callback(event.data);
-			};
-		} else {
-			console.warn('WebAudioProvider: No se puede registrar el callback porque el workletNode no ha sido inicializado.');
+			});
 		}
 	}
 

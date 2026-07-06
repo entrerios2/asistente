@@ -246,8 +246,8 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
 
         const char = String.fromCharCode(charCode);
         
-        // Emitimos si es un caracter válido (ej. cabecera 'V')
-        if (char === 'V') {
+        // Emitimos si es una letra mayúscula (cabecera V, A, M, N, F, P, T, D, X, R)
+        if (char >= 'A' && char <= 'Z') {
             this.port.postMessage({ type: 'FSK_HEADER', payload: char });
         }
     }

@@ -34,19 +34,6 @@ const SIGNAL_GENERATORS: Record<string, (sr: number) => Float32Array> = {
     R: generateSignalR,
 };
 
-const SEGMENT_DURATIONS: Record<string, number> = {
-    V: 7,
-    A: 5,
-    M: 15.5,
-    N: 12,
-    F: 15,
-    P: 15,
-    T: 5,
-    D: 8,
-    X: 10,
-    R: 15,
-};
-
 /**
  * Builds a complete segment buffer: FSK header + payload signal.
  */

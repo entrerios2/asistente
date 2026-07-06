@@ -1,5 +1,6 @@
 import type { AudioProvider } from '../../hal/types';
-import { measureEventLoopLag } from '../../utils/tierDetector';
+import { buildSegment } from './SegmentBuffer';
+import { uiStore } from '../../stores/ui.svelte';
 
 export type OrchestratorState = 
     | 'IDLE'
@@ -16,19 +17,20 @@ export interface OrchestratorEvent {
     message?: string;
 }
 
-/**
- * Orchestrator: Coordina la secuencia de medición secuencial.
- * Fase 2: reemplazará el stub de reproducción por SegmentBuffer + playBuffer.
- */
+const LONG_SEGMENTS = new Set(['F', 'T', 'S']);
+
 export class Orchestrator {
-    private state: OrchestratorState = 'IDLE';
+    private _state: OrchestratorState = 'IDLE';
     private onEvent?: (event: OrchestratorEvent) => void;
+
+    get state(): OrchestratorState { return this._state; }
     private resolveHeader?: (value: boolean) => void;
     private expectedHeader?: string;
-    
+
     private isBlindMode: boolean = false;
     private fastPathWorker: Worker | null = null;
     private isAborted: boolean = false;
+    private captureStarted: boolean = false;
 
     constructor(
         private hal: AudioProvider
@@ -47,6 +49,14 @@ export class Orchestrator {
         console.info(`Orchestrator: Iniciando secuencia [${tokens.join(', ')}]`);
         this.isAborted = false;
 
+        if (this.hal.startCapture) {
+            await this.hal.startCapture({
+                onAudioData: () => {},
+                onTimeDomainData: () => {},
+            });
+            this.captureStarted = true;
+        }
+
         for (const token of tokens) {
             if (this.isAborted) break;
             try {
@@ -62,72 +72,73 @@ export class Orchestrator {
         if (!this.isAborted) {
             this.emit('COMPLETADO', undefined, 'Secuencia terminada con éxito.');
         }
-        this.state = 'IDLE';
+
+        this.endCapture();
+        this._state = 'IDLE';
+    }
+
+    private endCapture() {
+        if (this.captureStarted) {
+            this.hal.stopCapture?.();
+            this.captureStarted = false;
+        }
     }
 
     private async processToken(token: string): Promise<void> {
-        // 1. Generar y reproducir buffer del segmento (stub: duración simulada)
         this.emit('REPRODUCIENDO_AUDIO', token);
-        const durationMs = token === 'S' ? 20000 : token === 'F' ? 15000 : token === 'N' ? 12000 : token === 'R' ? 15000 : 5000;
-        await new Promise(r => setTimeout(r, durationMs));
 
-        // 2. Esperar cabecera
+        const segment = buildSegment(token, uiStore.sampleRate, 'HF');
+
+        const headerTimeout = Math.max(3000, segment.durationSec * 1000 + 2000);
+        const headerPromise = this.waitForHeader(token, headerTimeout);
+
+        const isLong = LONG_SEGMENTS.has(token);
+
+        if (isLong) {
+            this.startDualProcessing();
+        }
+
+        if (this.hal.playBuffer) {
+            await this.hal.playBuffer(segment.buffer, segment.sampleRate);
+        }
+
+        if (isLong) {
+            this.stopDualProcessing();
+        }
+
         this.emit('ESPERANDO_CABECERA', token);
-        const detected = await this.waitForHeader(token, 3000);
+        const detected = await headerPromise;
 
         if (!detected) {
             throw new Error(`Timeout esperando cabecera ${token}`);
         }
 
-        // --- Inicio de Procesamiento Dual ---
-        
-        // Evaluación de Modo Ciego (Lag del hilo principal)
-        // Lo hacemos en los primeros 500ms del primer segmento real o periódicamente
-        if (token === 'V' || token === 'F') {
-            const lag = await measureEventLoopLag(500);
-            if (lag > 20) {
-                console.warn(`Orchestrator: Modo Ciego activado (Lag = ${lag.toFixed(2)}ms). Fast-Path desactivado.`);
-                this.isBlindMode = true;
-            }
-        }
-
         this.emit('PROCESANDO_SEGMENTO', token);
 
-        // Si es un segmento largo, activar monitoreo y grabación
-        const isLong = ['F', 'T', 'S'].includes(token);
-        if (isLong) {
-            await this.startDualProcessing(token);
-        } else {
-            await new Promise(r => setTimeout(r, 500)); // Simulación para cortos
+        if (!isLong) {
+            await new Promise(r => setTimeout(r, 500));
         }
     }
 
-    private async startDualProcessing(token: string): Promise<void> {
+    private startDualProcessing(): void {
         const sab = this.hal.getSharedBuffer?.();
-        
-        // Instanciar Fast-Path Worker (Monitoreo de Clipping y RMS)
+
         if (!this.isBlindMode && sab) {
-            this.fastPathWorker = new Worker(new URL('./workers/FastPathWorker.ts', import.meta.url), { type: 'module' });
-            this.fastPathWorker.onmessage = (e) => {
-                if (e.data.type === 'CLIPPING_DETECTED') {
-                    this.abortSequence("Clipping sostenido detectado. Reduzca la ganancia.");
-                }
-            };
-            this.fastPathWorker.postMessage({ sab, sampleRate: 48000 });
+            try {
+                this.fastPathWorker = new Worker(
+                    new URL('./workers/FastPathWorker.ts', import.meta.url),
+                    { type: 'module' }
+                );
+                this.fastPathWorker.onmessage = (e) => {
+                    if (e.data.type === 'CLIPPING_DETECTED') {
+                        this.abortSequence("Clipping sostenido detectado. Reduzca la ganancia.");
+                    }
+                };
+                this.fastPathWorker.postMessage({ sab, sampleRate: uiStore.sampleRate });
+            } catch (e) {
+                console.warn('[Orchestrator] No se pudo iniciar FastPathWorker:', e);
+            }
         }
-
-        // Slow-Path (Grabación de largo aliento en SharedArrayBuffer)
-        // Aquí el worklet sigue escribiendo en el SAB. En el futuro, un SlowPathWorker 
-        // leería de aquí para acumular en un buffer persistente.
-        const durationMs = token === 'S' ? 20000 : 15000;
-        
-        // Esperamos la duración del segmento o el aborto
-        await new Promise((resolve) => {
-            const timeout = setTimeout(resolve, durationMs);
-            // Si se aborta externamente, necesitamos limpiar este timeout (simplificado aquí)
-        });
-
-        this.stopDualProcessing();
     }
 
     private stopDualProcessing() {
@@ -141,12 +152,13 @@ export class Orchestrator {
         console.warn(`Orchestrator: Abortando secuencia. Razón: ${reason}`);
         this.isAborted = true;
         this.stopDualProcessing();
+        this.endCapture();
         this.emit('ABORTADO', undefined, reason);
     }
 
     private waitForHeader(header: string, timeoutMs: number): Promise<boolean> {
         this.expectedHeader = header;
-        
+
         return new Promise((resolve) => {
             const timeout = setTimeout(() => {
                 this.resolveHeader = undefined;
@@ -173,7 +185,7 @@ export class Orchestrator {
     }
 
     private emit(state: OrchestratorState, currentHeader?: string, message?: string) {
-        this.state = state;
+        this._state = state;
         if (this.onEvent) {
             this.onEvent({ state, currentHeader, message });
         }
