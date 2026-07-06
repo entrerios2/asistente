@@ -1,6 +1,6 @@
-import { computeTransferFunction } from './utils';
+import { computeTransferFunction, computeImpulseResponse, computeGroupDelay, computePhaseDelay } from './utils';
 
-export class SegmentF {
+export class SegmentT {
     static process(refBuffer: Float32Array, measBuffer: Float32Array, sampleRate: number) {
         const tf = computeTransferFunction(refBuffer, measBuffer, sampleRate);
         if (!tf) {
@@ -11,15 +11,21 @@ export class SegmentF {
             };
         }
 
+        const impulse = computeImpulseResponse(tf.hReal, tf.hImag, tf.fftSize);
+        const groupDelay = computeGroupDelay(tf.hReal, tf.hImag, sampleRate, tf.fftSize);
+        const phaseRad = new Float32Array(tf.phase.length);
+        for (let i = 0; i < tf.phase.length; i++) phaseRad[i] = tf.phase[i] * Math.PI / 180;
+        const phaseDelay = computePhaseDelay(phaseRad, tf.frequencies);
+
         return {
             status: 'PASS' as const,
             values: { bins: tf.bins, windows: tf.numWindows } as Record<string, number | string>,
             message: `FFT de ${tf.fftSize} pts, ${tf.numWindows} ventanas`,
             spectral: {
                 frequencies: tf.frequencies,
-                magnitude: tf.magnitude,
-                phase: tf.phase,
-                coherence: tf.coherence,
+                impulse,
+                groupDelay,
+                phaseDelay,
                 sampleRate,
             },
         };
