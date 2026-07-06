@@ -1,5 +1,6 @@
 <script lang="ts">
     import { uiStore } from "$lib/stores/ui.svelte";
+    import { sequentialStore } from "$lib/stores/sequentialStore.svelte";
 
 
     let { statusText = $bindable("Listo para medir") } = $props();
@@ -109,15 +110,35 @@
         }
     });
 
-    // Wrapper para uso desde botones del Sidebar (toggle seguro)
-    async function toggleMeasurement() {
-        uiStore.isMeasuring = !uiStore.isMeasuring;
-    }
-
-
+    // Reactive: sidebar's Medir/Detener toggle → start/stop sequence
+    let seqStarted = $state(false);
+    $effect(() => {
+        if (uiStore.measurementMode !== 'secuencial') {
+            seqStarted = false;
+            return;
+        }
+        if (uiStore.isMeasuring && !seqStarted) {
+            seqStarted = true;
+            const tokens = segments.filter(s => s.checked).map(s => s.id);
+            sequentialStore.runSequence(tokens).finally(() => {
+                seqStarted = false;
+                uiStore.isMeasuring = false;
+            });
+        } else if (!uiStore.isMeasuring && seqStarted) {
+            sequentialStore.stopSequence();
+            seqStarted = false;
+        }
+    });
 
     function calculateDelay() {
-        statusText = "⚠️ Cálculo de retardo no implementado — requiere medición secuencial";
+        if (uiStore.measurementMode === 'secuencial' && !sequentialStore.isRunning) {
+            statusText = "Ejecutando segmento T para cálculo de retardo...";
+            sequentialStore.runSequence(['T']).finally(() => {
+                statusText = "Cálculo de retardo completado";
+            });
+        } else {
+            statusText = "⚠️ Detenga la medición actual para calcular retardo";
+        }
     }
 
     function useCalculatedDelay() {
@@ -145,7 +166,10 @@
                 : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}"
             onclick={() => {
                 uiStore.measurementMode = "manual";
-                if (uiStore.isMeasuring) toggleMeasurement();
+                if (uiStore.isMeasuring) {
+                    sequentialStore.stopSequence();
+                    uiStore.isMeasuring = false;
+                }
             }}
         >
             Manual
@@ -157,7 +181,10 @@
                 : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}"
             onclick={() => {
                 uiStore.measurementMode = "secuencial";
-                if (uiStore.isMeasuring) toggleMeasurement();
+                if (uiStore.isMeasuring) {
+                    sequentialStore.stopSequence();
+                    uiStore.isMeasuring = false;
+                }
             }}
         >
             Secuencial
@@ -447,6 +474,24 @@
                 </div>
             </div>
 
+            <!-- Progreso -->
+            {#if sequentialStore.isRunning || sequentialStore.progress > 0}
+                <div class="flex flex-col gap-1">
+                    <div class="flex justify-between text-[10px] text-[var(--text-muted)]">
+                        <span>Progreso: {sequentialStore.progress}%</span>
+                        {#if sequentialStore.currentSegment}
+                            <span>Segmento: {sequentialStore.currentSegment}</span>
+                        {/if}
+                    </div>
+                    <div class="w-full h-1.5 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
+                        <div
+                            class="h-full rounded-full transition-all duration-300"
+                            style="width: {sequentialStore.progress}%; background: var(--accent)"
+                        ></div>
+                    </div>
+                </div>
+            {/if}
+
             <!-- Tabla de Segmentos Compacta -->
             <div class="flex flex-col gap-1">
                 <label
@@ -459,6 +504,7 @@
                     <table class="w-full border-collapse">
                         <tbody>
                             {#each segments as seg}
+                                {@const storeResult = sequentialStore.results[seg.id]}
                                 <tr
                                     class="border-b border-[color-mix(in_srgb,var(--border-primary)_30%,transparent)] hover:bg-[var(--bg-tertiary)]/30 transition-colors"
                                 >
@@ -470,6 +516,7 @@
                                             bind:checked={
                                                 seg.checked
                                             }
+                                            disabled={sequentialStore.isRunning}
                                             onclick={() =>
                                                 (selectedPreset =
                                                     "custom")}
@@ -477,20 +524,25 @@
                                         />
                                     </td>
                                     <td class="p-2 align-middle">
-                                        <div class="flex flex-col">
-                                            <span
-                                                class="text-xs font-semibold text-[var(--text-primary)] cursor-help"
-                                                title={seg.desc}
-                                            >
-                                                {seg.name}
-                                            </span>
-                                            {#if seg.result}
-                                                <div
-                                                    class="text-[10px] font-mono text-[#10b981] mt-0.5 bg-[#10b981]/5 px-1.5 py-0.5 rounded border border-[#10b981]/10 w-fit"
-                                                >
-                                                    Resultado: {seg.result}
-                                                </div>
+                                        <div class="flex items-center gap-2">
+                                            {#if sequentialStore.currentSegment === seg.id}
+                                                <span class="material-symbols-outlined text-sm text-[var(--accent)] animate-pulse">graphic_eq</span>
                                             {/if}
+                                            <div class="flex flex-col">
+                                                <span
+                                                    class="text-xs font-semibold text-[var(--text-primary)] cursor-help"
+                                                    title={seg.desc}
+                                                >
+                                                    {seg.name}
+                                                </span>
+                                                {#if storeResult}
+                                                    <div
+                                                        class="text-[10px] font-mono mt-0.5 px-1.5 py-0.5 rounded border w-fit {storeResult.status === 'OK' ? 'bg-[#10b981]/5 border-[#10b981]/10 text-[#10b981]' : storeResult.status === 'WARN' ? 'bg-[#eab308]/5 border-[#eab308]/10 text-[#eab308]' : 'bg-[#ef4444]/5 border-[#ef4444]/10 text-[#ef4444]'}"
+                                                    >
+                                                        {storeResult.message || storeResult.status}
+                                                    </div>
+                                                {/if}
+                                            </div>
                                         </div>
                                     </td>
                                 </tr>
@@ -532,6 +584,10 @@
                         </select>
                         <button
                             class="flex-1 min-h-[36px] bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--text-primary)] rounded-md text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow"
+                            onclick={() => {
+                                const tokens = segments.filter(s => s.checked).map(s => s.id);
+                                sequentialStore.downloadSequence(tokens, downloadFormat as 'wav' | 'flac');
+                            }}
                         >
                             <span
                                 class="material-symbols-outlined text-sm"

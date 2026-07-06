@@ -114,7 +114,7 @@ class MathOrchestrator {
                 });
             });
 
-            // Auto-detección: al recibir cabecera FSK en modo manual → cambiar a secuencial
+            // Auto-detección: al recibir cabecera FSK en modo manual → cambiar a secuencial e iniciar
             {
                 const provider = getAudioProvider();
                 if (provider.onMessage) {
@@ -124,6 +124,7 @@ class MathOrchestrator {
                             console.info(`[FSK] Cabecera '${header}' detectada en modo Manual → cambiando a Secuencial`);
                             uiStore.measurementMode = 'secuencial';
                             uiStore.showToast(`Cabecera FSK '${header}' detectada — cambiando a modo Secuencial`);
+                            uiStore.isMeasuring = true;
                         }
                     });
                 }
@@ -213,9 +214,9 @@ class MathOrchestrator {
         const provider = getAudioProvider();
         if (uiStore.measurementMode === "manual") {
             provider.stopCapture();
-        }
-        if (uiStore.autoSaveSnapshotOnStop) {
-            traceManager.captureInstantaneaFromLive('Auto-snapshot', 'manual');
+            if (uiStore.autoSaveSnapshotOnStop) {
+                traceManager.captureInstantaneaFromLive('Auto-snapshot', 'manual');
+            }
         }
         if (uiStore.linkGeneratorToMeasurement) {
             uiStore.genActive = false;
