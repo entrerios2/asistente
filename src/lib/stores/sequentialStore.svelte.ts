@@ -1,4 +1,4 @@
-import { Orchestrator } from '../dsp/sequential/Orchestrator';
+import { Orchestrator, type OrchestratorEvent } from '../dsp/sequential/Orchestrator';
 import { buildSequence } from '../dsp/sequential/SegmentBuffer';
 import { encodeFlac } from '../dsp/sequential/FlacEncoder';
 import { getAudioProvider } from '../hal';
@@ -22,7 +22,7 @@ class SequentialStore {
         return this._orchestrator;
     }
 
-    private handleEvent(event: { state: string; currentHeader?: string; message?: string }) {
+    private handleEvent(event: OrchestratorEvent) {
         if (event.currentHeader && event.state !== 'COMPLETADO' && event.state !== 'ABORTADO') {
             this.currentSegment = event.currentHeader;
         }
@@ -34,6 +34,10 @@ class SequentialStore {
 
         if (event.state === 'ERROR_TIMEOUT' && event.currentHeader) {
             this.results[event.currentHeader] = { status: 'ERROR', values: {}, message: event.message || 'Timeout' };
+        }
+
+        if (event.state === 'PROCESANDO_SEGMENTO' && event.currentHeader && event.analysis) {
+            this.results[event.currentHeader] = event.analysis;
         }
 
         if (event.state === 'COMPLETADO' || event.state === 'ABORTADO') {

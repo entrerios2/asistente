@@ -1,6 +1,9 @@
 import type { AudioProvider } from '../../hal/types';
 import { buildSegment } from './SegmentBuffer';
 import { uiStore } from '../../stores/ui.svelte';
+import { SegmentM } from './analyse/SegmentM';
+import { SegmentD } from './analyse/SegmentD';
+import { SegmentR } from './analyse/SegmentR';
 
 export type OrchestratorState = 
     | 'IDLE'
@@ -11,13 +14,26 @@ export type OrchestratorState =
     | 'ABORTADO'
     | 'COMPLETADO';
 
+export interface SegmentAnalysis {
+    status: 'PASS' | 'WARN' | 'FAIL' | 'ERROR';
+    values: Record<string, number | string>;
+    message?: string;
+}
+
 export interface OrchestratorEvent {
     state: OrchestratorState;
     currentHeader?: string;
     message?: string;
+    analysis?: SegmentAnalysis;
 }
 
 const LONG_SEGMENTS = new Set(['F', 'T', 'S']);
+
+const ANALYZERS: Record<string, (buf: Float32Array, sr: number) => SegmentAnalysis> = {
+    M: (buf, sr) => SegmentM.process(buf, sr) as SegmentAnalysis,
+    D: (buf, sr) => SegmentD.process(buf, sr) as SegmentAnalysis,
+    R: (buf, sr) => SegmentR.process(buf, sr) as SegmentAnalysis,
+};
 
 export class Orchestrator {
     private _state: OrchestratorState = 'IDLE';
@@ -31,6 +47,8 @@ export class Orchestrator {
     private fastPathWorker: Worker | null = null;
     private isAborted: boolean = false;
     private captureStarted: boolean = false;
+    private captureChunks: Float32Array[] = [];
+    private captureBeforeSegment: number = 0;
 
     constructor(
         private hal: AudioProvider
@@ -48,10 +66,11 @@ export class Orchestrator {
         const tokens = sequenceString.split(/\s+/);
         console.info(`Orchestrator: Iniciando secuencia [${tokens.join(', ')}]`);
         this.isAborted = false;
+        this.captureChunks = [];
 
         if (this.hal.startCapture) {
             await this.hal.startCapture({
-                onAudioData: () => {},
+                onAudioData: (data) => { this.captureChunks.push(data); },
                 onTimeDomainData: () => {},
             });
             this.captureStarted = true;
@@ -86,6 +105,7 @@ export class Orchestrator {
 
     private async processToken(token: string): Promise<void> {
         this.emit('REPRODUCIENDO_AUDIO', token);
+        this.captureBeforeSegment = this.totalCapturedSamples();
 
         const segment = buildSegment(token, uiStore.sampleRate, 'HF');
 
@@ -106,6 +126,9 @@ export class Orchestrator {
             this.stopDualProcessing();
         }
 
+        const segmentEnd = this.totalCapturedSamples();
+        const segmentBuffer = this.extractSegmentBuffer(segmentEnd);
+
         this.emit('ESPERANDO_CABECERA', token);
         const detected = await headerPromise;
 
@@ -113,11 +136,50 @@ export class Orchestrator {
             throw new Error(`Timeout esperando cabecera ${token}`);
         }
 
-        this.emit('PROCESANDO_SEGMENTO', token);
+        if (segmentBuffer.length > 0) {
+            const analyze = ANALYZERS[token];
+            if (analyze) {
+                const result = analyze(segmentBuffer, uiStore.sampleRate);
+                this.emit('PROCESANDO_SEGMENTO', token, result.message, result);
+            } else {
+                this.emit('PROCESANDO_SEGMENTO', token);
+            }
+        } else {
+            this.emit('PROCESANDO_SEGMENTO', token);
+        }
 
         if (!isLong) {
             await new Promise(r => setTimeout(r, 500));
         }
+    }
+
+    private totalCapturedSamples(): number {
+        return this.captureChunks.reduce((a, c) => a + c.length, 0);
+    }
+
+    private extractSegmentBuffer(endSample: number): Float32Array {
+        const startSample = this.captureBeforeSegment;
+        if (startSample >= endSample) return new Float32Array(0);
+
+        const result = new Float32Array(endSample - startSample);
+        let offset = 0;
+        let accumulated = 0;
+        for (const ch of this.captureChunks) {
+            const chEnd = accumulated + ch.length;
+            if (chEnd > startSample && accumulated < endSample) {
+                const copyStart = Math.max(0, startSample - accumulated);
+                const copyEnd = Math.min(ch.length, endSample - accumulated);
+                const len = copyEnd - copyStart;
+                if (len > 0) {
+                    result.set(ch.subarray(copyStart, copyEnd), offset);
+                    offset += len;
+                }
+            }
+            accumulated = chEnd;
+            if (accumulated >= endSample) break;
+        }
+
+        return result.slice(0, offset);
     }
 
     private startDualProcessing(): void {
@@ -184,10 +246,10 @@ export class Orchestrator {
         }
     }
 
-    private emit(state: OrchestratorState, currentHeader?: string, message?: string) {
+    private emit(state: OrchestratorState, currentHeader?: string, message?: string, analysis?: SegmentAnalysis) {
         this._state = state;
         if (this.onEvent) {
-            this.onEvent({ state, currentHeader, message });
+            this.onEvent({ state, currentHeader, message, analysis });
         }
     }
 }
