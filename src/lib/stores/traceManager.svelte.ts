@@ -39,6 +39,18 @@ export interface InstantaneaMetadata {
     averagingDepth: number;
 }
 
+export interface SegmentResultData {
+    status: 'PASS' | 'WARN' | 'FAIL' | 'ERROR';
+    values: Record<string, number | string>;
+    message?: string;
+}
+
+export interface SequenceConfig {
+    segments: string[];
+    preset: string;
+    sampleRate: number;
+}
+
 export interface Instantanea {
     id: string;
     name: string;
@@ -49,11 +61,12 @@ export interface Instantanea {
     source: 'manual' | 'secuencial';
     metric: string;
     offsetY: number;
-    // Fase 1a: tags, sesión y metadata
     tags: InstantaneaTags;
     notes?: string;
     sessionId?: string;
     metadata?: InstantaneaMetadata;
+    segmentResults?: Record<string, SegmentResultData>;
+    sequenceConfig?: SequenceConfig;
 }
 
 export interface Session {
@@ -238,14 +251,15 @@ class TraceManager {
         name?: string,
         metricsToCapture?: string[],
         tags?: InstantaneaTags,
-        metadata?: InstantaneaMetadata
+        metadata?: InstantaneaMetadata,
+        segmentResults?: Record<string, SegmentResultData>,
+        sequenceConfig?: SequenceConfig,
     ) {
         const id = crypto.randomUUID();
         const data: Record<string, Float32Array> = {};
 
         const list = metricsToCapture || Object.keys(this.metricsToCapture).filter(k => this.metricsToCapture[k]);
 
-        // Capturar los buffers activos elegidos en las configuraciones
         for (const metric of list) {
             let src: Float32Array | null = null;
             if (metric === "Magnitude") src = mathOrchestrator.outputMagnitude;
@@ -276,11 +290,12 @@ class TraceManager {
             tags: resolvedTags,
             sessionId: this.activeSessionId || undefined,
             metadata,
+            segmentResults,
+            sequenceConfig,
         };
 
         this.instantaneas.push(ins);
 
-        // Guardar en la DB
         try {
             const { saveInstantanea } = await import('../utils/db');
             const serializedData: Record<string, ArrayBufferLike> = {};
@@ -660,9 +675,14 @@ class TraceManager {
         }
     }
 
-    async captureInstantaneaFromLive(name?: string, _source: 'manual' | 'secuencial' = 'manual') {
+    async captureInstantaneaFromLive(
+        name?: string,
+        _source: 'manual' | 'secuencial' = 'manual',
+        segmentResults?: Record<string, SegmentResultData>,
+        sequenceConfig?: SequenceConfig,
+    ) {
         const metricList = Object.keys(this.metricsToCapture).filter(k => this.metricsToCapture[k]);
-        return this.captureInstantanea(name, metricList);
+        return this.captureInstantanea(name, metricList, undefined, undefined, segmentResults, sequenceConfig);
     }
 
     toConfig() {

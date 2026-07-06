@@ -495,6 +495,36 @@
                                         <span>{snap.source === "manual" ? "Manual" : "Secuencial"}</span>
                                     </div>
 
+                                    <!-- Sequential segment results -->
+                                    {#if snap.source === 'secuencial' && snap.segmentResults}
+                                        {#each Object.entries(snap.segmentResults) as [segId, result]}
+                                            <div class="flex items-center gap-2 px-2 py-1 rounded bg-[var(--bg-deep)]/50">
+                                                <span class="text-[10px] font-bold font-mono text-[var(--text-secondary)] w-5">{segId}</span>
+                                                <span class="text-[8px] px-1.5 py-0.5 rounded-sm font-bold
+                                                    {result.status === 'PASS' ? 'bg-[#10b981]/10 text-[#10b981]' : ''}
+                                                    {result.status === 'WARN' ? 'bg-[#eab308]/10 text-[#eab308]' : ''}
+                                                    {result.status === 'FAIL' || result.status === 'ERROR' ? 'bg-[#ef4444]/10 text-[#ef4444]' : ''}">
+                                                    {result.status}
+                                                </span>
+                                                {#if result.message}
+                                                    <span class="text-[8px] text-[var(--text-muted)] truncate">{result.message}</span>
+                                                {/if}
+                                                {#if result.values && Object.keys(result.values).length > 0}
+                                                    <div class="flex gap-1 ml-auto">
+                                                        {#each Object.entries(result.values) as [key, val]}
+                                                            <span class="text-[8px] font-mono text-[var(--text-disabled)]">{key}={val}</span>
+                                                        {/each}
+                                                    </div>
+                                                {/if}
+                                            </div>
+                                        {/each}
+                                        {#if snap.sequenceConfig}
+                                            <div class="text-[8px] text-[var(--text-disabled)] font-mono px-1">
+                                                {snap.sequenceConfig.segments.join(' → ')}
+                                            </div>
+                                        {/if}
+                                    {/if}
+
                                     <!-- Action buttons -->
                                     <div class="flex gap-2">
                                         <button class="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-[10px] font-semibold cursor-pointer transition-all min-h-[28px]

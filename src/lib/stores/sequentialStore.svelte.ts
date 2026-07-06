@@ -3,18 +3,13 @@ import { buildSequence } from '../dsp/sequential/SegmentBuffer';
 import { encodeFlac } from '../dsp/sequential/FlacEncoder';
 import { getAudioProvider } from '../hal';
 import { uiStore } from './ui.svelte';
-import { traceManager } from './traceManager.svelte';
-
-export interface SegmentResult {
-    status: 'OK' | 'WARN' | 'ERROR';
-    message?: string;
-}
+import { traceManager, type SegmentResultData } from './traceManager.svelte';
 
 class SequentialStore {
     isRunning = $state(false);
     currentSegment = $state<string | null>(null);
     progress = $state(0);
-    results = $state<Record<string, SegmentResult>>({});
+    results = $state<Record<string, SegmentResultData>>({});
     sequentialTokens: string[] = [];
 
     private _orchestrator: Orchestrator | null = null;
@@ -38,7 +33,7 @@ class SequentialStore {
         }
 
         if (event.state === 'ERROR_TIMEOUT' && event.currentHeader) {
-            this.results[event.currentHeader] = { status: 'ERROR', message: event.message || 'Timeout' };
+            this.results[event.currentHeader] = { status: 'ERROR', values: {}, message: event.message || 'Timeout' };
         }
 
         if (event.state === 'COMPLETADO' || event.state === 'ABORTADO') {
@@ -47,9 +42,13 @@ class SequentialStore {
             if (event.state === 'COMPLETADO' && this.sequentialTokens.length > 0) {
                 this.progress = 100;
                 uiStore.showToast('Secuencia completada');
-                // Auto-capture instantánea si está activado
                 if (uiStore.autoSaveSnapshotOnStop) {
-                    traceManager.captureInstantaneaFromLive('Secuencia automática', 'secuencial');
+                    traceManager.captureInstantaneaFromLive(
+                        'Secuencia automática',
+                        'secuencial',
+                        this.results,
+                        { segments: this.sequentialTokens, preset: '', sampleRate: uiStore.sampleRate },
+                    );
                 }
             }
         }

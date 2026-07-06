@@ -130,6 +130,12 @@
         }
     });
 
+    function resultClass(status: string): string {
+        if (status === 'PASS') return 'bg-[#10b981]/5 border-[#10b981]/10 text-[#10b981]';
+        if (status === 'WARN') return 'bg-[#eab308]/5 border-[#eab308]/10 text-[#eab308]';
+        return 'bg-[#ef4444]/5 border-[#ef4444]/10 text-[#ef4444]';
+    }
+
     function calculateDelay() {
         if (uiStore.measurementMode === 'secuencial' && !sequentialStore.isRunning) {
             statusText = "Ejecutando segmento T para cálculo de retardo...";
@@ -537,7 +543,7 @@
                                                 </span>
                                                 {#if storeResult}
                                                     <div
-                                                        class="text-[10px] font-mono mt-0.5 px-1.5 py-0.5 rounded border w-fit {storeResult.status === 'OK' ? 'bg-[#10b981]/5 border-[#10b981]/10 text-[#10b981]' : storeResult.status === 'WARN' ? 'bg-[#eab308]/5 border-[#eab308]/10 text-[#eab308]' : 'bg-[#ef4444]/5 border-[#ef4444]/10 text-[#ef4444]'}"
+                                                        class="text-[10px] font-mono mt-0.5 px-1.5 py-0.5 rounded border w-fit {resultClass(storeResult.status)}"
                                                     >
                                                         {storeResult.message || storeResult.status}
                                                     </div>
