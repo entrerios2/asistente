@@ -1,5 +1,6 @@
 import { Orchestrator } from '../dsp/sequential/Orchestrator';
 import { buildSequence } from '../dsp/sequential/SegmentBuffer';
+import { encodeFlac } from '../dsp/sequential/FlacEncoder';
 import { getAudioProvider } from '../hal';
 import { uiStore } from './ui.svelte';
 import { traceManager } from './traceManager.svelte';
@@ -82,14 +83,25 @@ class SequentialStore {
         try {
             const sampleRate = uiStore.sampleRate;
             const buffer = buildSequence(tokens, sampleRate);
-            const wav = this.encodeWav(buffer, sampleRate);
-            const blob = new Blob([wav], { type: 'audio/wav' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `secuencia-${tokens.join('-')}.wav`;
-            a.click();
-            URL.revokeObjectURL(url);
+            if (format === 'flac') {
+                const flac = encodeFlac(buffer, sampleRate);
+                const blob = new Blob([flac.buffer as ArrayBuffer], { type: 'audio/flac' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `secuencia-${tokens.join('-')}.flac`;
+                a.click();
+                URL.revokeObjectURL(url);
+            } else {
+                const wav = this.encodeWav(buffer, sampleRate);
+                const blob = new Blob([wav], { type: 'audio/wav' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `secuencia-${tokens.join('-')}.wav`;
+                a.click();
+                URL.revokeObjectURL(url);
+            }
         } catch (e) {
             console.error('[SequentialStore] Error al descargar:', e);
             uiStore.showToast('Error al generar el archivo');
