@@ -19,7 +19,7 @@
 
 <aside
     class="w-[380px] h-full border-r flex flex-col select-none"
-    style="background: var(--bg-secondary); border-color: var(--border-primary); color: var(--text-primary)"
+    style="background: var(--bg-secondary); border-color: var(--border-primary); color: var(--text-primary); position: relative"
 >
     <!-- CABECERA DE PESTAÑAS Y CONTROL (PROMPT 11) -->
     <div class="flex items-center border-b px-2 py-1.5 gap-0.5 h-[60px] flex-shrink-0" style="background: var(--bg-primary); border-color: var(--border-primary)">
@@ -107,6 +107,13 @@
             {/if}
         </div>
     {/if}
+    <!-- Toast notification -->
+    {#if uiStore.toastMessage}
+        <div class="sidebar-toast">
+            <span class="material-symbols-outlined text-sm">info</span>
+            <span>{uiStore.toastMessage}</span>
+        </div>
+    {/if}
 </aside>
 
 <style>
@@ -171,5 +178,30 @@
         width: 22px;
         height: 22px;
         flex-shrink: 0;
+    }
+
+    .sidebar-toast {
+        position: absolute;
+        bottom: 72px;
+        left: 8px;
+        right: 8px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        border-radius: 10px;
+        font-size: 11px;
+        font-weight: 600;
+        z-index: 50;
+        animation: toastIn 0.25s ease-out;
+        background: color-mix(in srgb, var(--accent) 20%, var(--bg-primary));
+        color: var(--accent);
+        border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+    }
+
+    @keyframes toastIn {
+        from { opacity: 0; transform: translateY(12px); }
+        to   { opacity: 1; transform: translateY(0); }
     }
 </style>

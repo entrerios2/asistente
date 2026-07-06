@@ -92,6 +92,16 @@ class UIStore {
     refChannel = $state(-1);          // -1=Loop (generador), 0=L, 1=R
     measChannel = $state(1);          // Canal físico para medición (0=L, 1=R)
 
+    // Toast notification
+    toastMessage = $state('');
+    private toastTimer: ReturnType<typeof setTimeout> | null = null;
+
+    showToast(message: string, durationMs = 4000) {
+        this.toastMessage = message;
+        if (this.toastTimer) clearTimeout(this.toastTimer);
+        this.toastTimer = setTimeout(() => { this.toastMessage = ''; }, durationMs);
+    }
+
     // Input filter pre-FFT (como OSM)
     inputFilter = $state<'None' | 'Notch1k' | 'BP100' | 'LP200'>('None');
 

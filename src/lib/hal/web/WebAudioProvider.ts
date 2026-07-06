@@ -52,8 +52,8 @@ export class WebAudioProvider implements AudioProvider {
 	// Noise worklet loading state
 	private noiseWorkletLoaded: Promise<void> | null = null;
 
-	// Stored external message handler (re-applied when workletNode is created)
-	private pendingMessageHandler: ((message: any) => void) | null = null;
+	// Stored external message handlers (re-applied when workletNode is created)
+	private pendingMessageHandlers: ((message: any) => void)[] = [];
 
 	async startCapture(listener: AudioListener): Promise<void> {
 		if (!this.audioContext) {
@@ -163,10 +163,10 @@ export class WebAudioProvider implements AudioProvider {
 				hasNewData = true;
 			}
 		});
-		// Re-aplicar el handler externo (FSK_HEADER, etc.) si se registró antes de startCapture
-		if (this.pendingMessageHandler) {
+		// Re-aplicar todos los handlers externos al nuevo workletNode
+		for (const handler of this.pendingMessageHandlers) {
 			this.workletNode.port.addEventListener('message', (event) => {
-				this.pendingMessageHandler!(event.data);
+				handler(event.data);
 			});
 		}
 		this.workletNode.port.start();
@@ -486,7 +486,7 @@ export class WebAudioProvider implements AudioProvider {
 	}
 
 	onMessage(callback: (message: any) => void): void {
-		this.pendingMessageHandler = callback;
+		this.pendingMessageHandlers.push(callback);
 		if (this.workletNode) {
 			this.workletNode.port.addEventListener('message', (event) => {
 				callback(event.data);

@@ -104,16 +104,30 @@ class MathOrchestrator {
             $effect(() => {
                 this.startTimer(uiStore.dspBaseRate);
             });
-            // Encender/apagar detección de cabeceras (Goertzel) según modo
+            // Goertzel siempre activo para auto-detección FSK (Fase 3)
             $effect(() => {
-                const mode = uiStore.measurementMode;
+                const provider = getAudioProvider();
                 untrack(() => {
-                    const provider = getAudioProvider();
                     if (provider.sendWorkletMessage) {
-                        provider.sendWorkletMessage({ type: 'setFskEnabled', enabled: mode === 'secuencial' });
+                        provider.sendWorkletMessage({ type: 'setFskEnabled', enabled: true });
                     }
                 });
             });
+
+            // Auto-detección: al recibir cabecera FSK en modo manual → cambiar a secuencial
+            {
+                const provider = getAudioProvider();
+                if (provider.onMessage) {
+                    provider.onMessage((msg: any) => {
+                        if (msg.type === 'FSK_HEADER' && uiStore.measurementMode === 'manual') {
+                            const header = msg.payload as string;
+                            console.info(`[FSK] Cabecera '${header}' detectada en modo Manual → cambiando a Secuencial`);
+                            uiStore.measurementMode = 'secuencial';
+                            uiStore.showToast(`Cabecera FSK '${header}' detectada — cambiando a modo Secuencial`);
+                        }
+                    });
+                }
+            }
             // Enviar refChannel al worklet cuando cambia (-1=loop, 0=L, 1=R)
             $effect(() => {
                 const ch = uiStore.refChannel;
