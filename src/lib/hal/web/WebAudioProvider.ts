@@ -145,12 +145,13 @@ export class WebAudioProvider implements AudioProvider {
 			this.workletNode.port.postMessage({
 				type: 'init',
 				fftSize,
+				sampleRate: this.audioContext.sampleRate,
 				refSab: this.refSab,
 				measSab: this.measSab,
 				flagSab: this.flagSab
 			});
 		} else {
-			this.workletNode.port.postMessage({ type: 'init', fftSize });
+			this.workletNode.port.postMessage({ type: 'init', fftSize, sampleRate: this.audioContext.sampleRate });
 		}
 
 		// Flag para evitar re-procesar el mismo bloque en cada rAF tick (fallback postMessage)

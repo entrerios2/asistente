@@ -66,6 +66,12 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
             if (event.data && event.data.type === 'init') {
                 this.fftSize = event.data.fftSize || 8192;
                 this.bufferSize = this.fftSize;
+                if (event.data.sampleRate) {
+                    this.sampleRate = event.data.sampleRate;
+                    this.samplesPerBit = Math.round(this.sampleRate / this.baudRate);
+                    this.markDetector = new Goertzel(1650, this.sampleRate, this.blockSize);
+                    this.spaceDetector = new Goertzel(1850, this.sampleRate, this.blockSize);
+                }
                 // Ring buffers locales (siempre locales, nunca SAB)
                 this.ringRef = new Float32Array(this.bufferSize);
                 this.ringMeas = new Float32Array(this.bufferSize);
@@ -182,7 +188,7 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
 
         // FSK/Goertzel solo en modo secuencial
         if (this.fskEnabled) {
-            const channelData = input[0];
+            const channelData = measCh;
             for (let i = 0; i < len; i++) {
                 this.samplesCount++;
                 if (this.samplesCount % this.blockSize === 0) {
