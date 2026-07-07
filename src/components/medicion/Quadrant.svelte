@@ -140,12 +140,17 @@
 
 
     $effect(() => {
-        frequencyLUT = rebuildFrequencyLUT(
-            containerWidth,
-            interactionState,
-            interpEngine.BINS,
-            uiStore.sampleRate,
-        );
+        // Track only zoom/pan properties — NOT mouseX/Y which change on every mousemove
+        void interactionState.offsetX;
+        void interactionState.offsetY;
+        void interactionState.zoomX;
+        void interactionState.zoomY;
+        const w = containerWidth;
+        const bins = interpEngine.BINS;
+        const sr = uiStore.sampleRate;
+        untrack(() => {
+            frequencyLUT = rebuildFrequencyLUT(w, interactionState, bins, sr);
+        });
     });
 
     // Sincronización inversa (PRIMERO): store → local (cuando se carga o resetea configuración)

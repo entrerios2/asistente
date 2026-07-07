@@ -5,6 +5,7 @@
  */
 import {
     valToX,
+    xToVal,
     valToY,
     timeMin,
     timeMax,
@@ -52,11 +53,42 @@ export function drawMetricPath(
     ctx.setLineDash(lineDash || []);
     
     const cfg = metricConfigs[metricType];
+    const binWidth = (sampleRate / 2) / dataArray.length;
+
+    // Fast path: sparse check for flat buffer (no real data)
+    const SPARSE_STEP = 128;
+    let isFlat = dataArray.length > 0;
+    const firstVal = dataArray[0];
+    if (isFlat) {
+        for (let i = SPARSE_STEP; i < dataArray.length; i += SPARSE_STEP) {
+            if (dataArray[i] !== firstVal) { isFlat = false; break; }
+        }
+    }
+    if (isFlat) {
+        // Compute visible bin range analytically (O(1) instead of O(n))
+        const firstRaw = Math.max(0, Math.ceil(freqMin / binWidth));
+        const lastRaw = Math.min(dataArray.length - 1, Math.floor(freqMax / binWidth));
+        // X-clipping: invert valToX to find frequencies at X boundaries
+        const freqAtMinX = xToVal(-10, width, false, state);
+        const freqAtMaxX = xToVal(width + 10, width, false, state);
+        const firstBin = Math.max(firstRaw, Math.ceil(Math.max(freqMin, freqAtMinX) / binWidth));
+        const lastBin = Math.min(lastRaw, Math.floor(Math.min(freqMax, freqAtMaxX) / binWidth));
+        if (firstBin <= lastBin) {
+            const x0 = valToX(firstBin * binWidth, width, false, state);
+            const x1 = valToX(lastBin * binWidth, width, false, state);
+            const y = valToY(firstVal, height, metricType, metricConfigs, state) + (cfg?.yShift || 0);
+            ctx.beginPath();
+            ctx.moveTo(x0, y);
+            ctx.lineTo(x1, y);
+            ctx.stroke();
+        }
+        ctx.setLineDash([]);
+        return;
+    }
 
     // Construir array de puntos (un punto por bin FFT visible)
     ensureCapacity(dataArray.length);
     let pointCount = 0;
-    const binWidth = (sampleRate / 2) / dataArray.length;
 
     for (let bin = 0; bin < dataArray.length; bin++) {
         const freq = bin * binWidth;
@@ -95,15 +127,15 @@ export function drawMetricPath(
 
     // Single Path2D with quadratic spline — coherence masking handled externally
     if (pointCount > 1) {
-        const path = new Path2D();
-        path.moveTo(_xs[0], _ys[0]);
+        ctx.beginPath();
+        ctx.moveTo(_xs[0], _ys[0]);
         for (let i = 1; i < pointCount - 1; i++) {
             const midX = (_xs[i] + _xs[i + 1]) / 2;
             const midY = (_ys[i] + _ys[i + 1]) / 2;
-            path.quadraticCurveTo(_xs[i], _ys[i], midX, midY);
+            ctx.quadraticCurveTo(_xs[i], _ys[i], midX, midY);
         }
-        path.lineTo(_xs[pointCount - 1], _ys[pointCount - 1]);
-        ctx.stroke(path);
+        ctx.lineTo(_xs[pointCount - 1], _ys[pointCount - 1]);
+        ctx.stroke();
     }
 
     ctx.setLineDash([]);
@@ -151,11 +183,40 @@ export function drawSpectrumPath(
     const hasLive = liveData && liveData.length > 0;
     const dataArray = hasLive ? liveData : interpMagnitude;
     const offset = hasLive ? 0 : 68;
+    const binWidth = (sampleRate / 2) / dataArray.length;
+
+    // Fast path: sparse check for flat buffer
+    const SPARSE_STEP = 128;
+    let isFlat = dataArray.length > 0;
+    const firstVal = dataArray[0];
+    if (isFlat) {
+        for (let i = SPARSE_STEP; i < dataArray.length; i += SPARSE_STEP) {
+            if (dataArray[i] !== firstVal) { isFlat = false; break; }
+        }
+    }
+    if (isFlat) {
+        const firstRaw = Math.max(0, Math.ceil(freqMin / binWidth));
+        const lastRaw = Math.min(dataArray.length - 1, Math.floor(freqMax / binWidth));
+        const freqAtMinX = xToVal(-10, width, false, state);
+        const freqAtMaxX = xToVal(width + 10, width, false, state);
+        const firstBin = Math.max(firstRaw, Math.ceil(Math.max(freqMin, freqAtMinX) / binWidth));
+        const lastBin = Math.min(lastRaw, Math.floor(Math.min(freqMax, freqAtMaxX) / binWidth));
+        if (firstBin <= lastBin) {
+            const x0 = valToX(firstBin * binWidth, width, false, state);
+            const x1 = valToX(lastBin * binWidth, width, false, state);
+            const y = valToY(firstVal + (hasLive ? 0 : offset), height, "Spectrum", metricConfigs, state) + (cfg.yShift || 0);
+            ctx.beginPath();
+            ctx.moveTo(x0, y);
+            ctx.lineTo(x1, y);
+            ctx.stroke();
+        }
+        ctx.setLineDash([]);
+        return;
+    }
 
     // Construir array de puntos
     ensureCapacity(dataArray.length);
     let pointCount = 0;
-    const binWidth = (sampleRate / 2) / dataArray.length;
 
     for (let bin = 0; bin < dataArray.length; bin++) {
         const freq = bin * binWidth;
@@ -181,15 +242,15 @@ export function drawSpectrumPath(
 
     // Single Path2D with quadratic spline — coherence masking handled externally
     if (pointCount > 1) {
-        const path = new Path2D();
-        path.moveTo(_xs[0], _ys[0]);
+        ctx.beginPath();
+        ctx.moveTo(_xs[0], _ys[0]);
         for (let i = 1; i < pointCount - 1; i++) {
             const midX = (_xs[i] + _xs[i + 1]) / 2;
             const midY = (_ys[i] + _ys[i + 1]) / 2;
-            path.quadraticCurveTo(_xs[i], _ys[i], midX, midY);
+            ctx.quadraticCurveTo(_xs[i], _ys[i], midX, midY);
         }
-        path.lineTo(_xs[pointCount - 1], _ys[pointCount - 1]);
-        ctx.stroke(path);
+        ctx.lineTo(_xs[pointCount - 1], _ys[pointCount - 1]);
+        ctx.stroke();
     }
 
     ctx.setLineDash([]);
@@ -251,15 +312,15 @@ export function drawTimeDomainPath(
 
     // Draw with quadratic spline
     if (pointCount > 1) {
-        const path = new Path2D();
-        path.moveTo(_xs[0], _ys[0]);
+        ctx.beginPath();
+        ctx.moveTo(_xs[0], _ys[0]);
         for (let i = 1; i < pointCount - 1; i++) {
             const midX = (_xs[i] + _xs[i + 1]) / 2;
             const midY = (_ys[i] + _ys[i + 1]) / 2;
-            path.quadraticCurveTo(_xs[i], _ys[i], midX, midY);
+            ctx.quadraticCurveTo(_xs[i], _ys[i], midX, midY);
         }
-        path.lineTo(_xs[pointCount - 1], _ys[pointCount - 1]);
-        ctx.stroke(path);
+        ctx.lineTo(_xs[pointCount - 1], _ys[pointCount - 1]);
+        ctx.stroke();
     }
     ctx.setLineDash([]);
 }
@@ -317,15 +378,15 @@ export function drawSimulatedMagnitudePath(
     }
 
     if (pointCount > 1) {
-        const path = new Path2D();
-        path.moveTo(_xs[0], _ys[0]);
+        ctx.beginPath();
+        ctx.moveTo(_xs[0], _ys[0]);
         for (let i = 1; i < pointCount - 1; i++) {
             const midX = (_xs[i] + _xs[i + 1]) / 2;
             const midY = (_ys[i] + _ys[i + 1]) / 2;
-            path.quadraticCurveTo(_xs[i], _ys[i], midX, midY);
+            ctx.quadraticCurveTo(_xs[i], _ys[i], midX, midY);
         }
-        path.lineTo(_xs[pointCount - 1], _ys[pointCount - 1]);
-        ctx.stroke(path);
+        ctx.lineTo(_xs[pointCount - 1], _ys[pointCount - 1]);
+        ctx.stroke();
     }
 
     ctx.setLineDash([]);
@@ -359,15 +420,15 @@ export function drawNyquistPath(
 
     // Draw with quadratic spline
     if (pointCount > 1) {
-        const path = new Path2D();
-        path.moveTo(_xs[0], _ys[0]);
+        ctx.beginPath();
+        ctx.moveTo(_xs[0], _ys[0]);
         for (let i = 1; i < pointCount - 1; i++) {
             const midX = (_xs[i] + _xs[i + 1]) / 2;
             const midY = (_ys[i] + _ys[i + 1]) / 2;
-            path.quadraticCurveTo(_xs[i], _ys[i], midX, midY);
+            ctx.quadraticCurveTo(_xs[i], _ys[i], midX, midY);
         }
-        path.lineTo(_xs[pointCount - 1], _ys[pointCount - 1]);
-        ctx.stroke(path);
+        ctx.lineTo(_xs[pointCount - 1], _ys[pointCount - 1]);
+        ctx.stroke();
     }
 }
 
@@ -479,28 +540,28 @@ export function drawPhasePath(
     }
 
     // Draw each segment with quadratic spline
-    const path = new Path2D();
+    ctx.beginPath();
     for (let s = 0; s < segStarts.length; s++) {
         const start = segStarts[s];
         const len = segLengths[s];
         if (len < 2) {
             if (len === 1) {
-                path.moveTo(_xs[start], _ys[start]);
-                path.lineTo(_xs[start] + 0.5, _ys[start]);
+                ctx.moveTo(_xs[start], _ys[start]);
+                ctx.lineTo(_xs[start] + 0.5, _ys[start]);
             }
             continue;
         }
-        path.moveTo(_xs[start], _ys[start]);
+        ctx.moveTo(_xs[start], _ys[start]);
         for (let i = 1; i < len - 1; i++) {
             const idx = start + i;
             const midX = (_xs[idx] + _xs[idx + 1]) / 2;
             const midY = (_ys[idx] + _ys[idx + 1]) / 2;
-            path.quadraticCurveTo(_xs[idx], _ys[idx], midX, midY);
+            ctx.quadraticCurveTo(_xs[idx], _ys[idx], midX, midY);
         }
         const endIdx = start + len - 1;
-        path.lineTo(_xs[endIdx], _ys[endIdx]);
+        ctx.lineTo(_xs[endIdx], _ys[endIdx]);
     }
-    ctx.stroke(path);
+    ctx.stroke();
     ctx.setLineDash([]);
 }
 
@@ -535,15 +596,15 @@ export function drawCrestFactor(
 
     // Draw with quadratic spline
     if (pointCount > 1) {
-        const path = new Path2D();
-        path.moveTo(_xs[0], _ys[0]);
+        ctx.beginPath();
+        ctx.moveTo(_xs[0], _ys[0]);
         for (let i = 1; i < pointCount - 1; i++) {
             const midX = (_xs[i] + _xs[i + 1]) / 2;
             const midY = (_ys[i] + _ys[i + 1]) / 2;
-            path.quadraticCurveTo(_xs[i], _ys[i], midX, midY);
+            ctx.quadraticCurveTo(_xs[i], _ys[i], midX, midY);
         }
-        path.lineTo(_xs[pointCount - 1], _ys[pointCount - 1]);
-        ctx.stroke(path);
+        ctx.lineTo(_xs[pointCount - 1], _ys[pointCount - 1]);
+        ctx.stroke();
     }
 }
 
@@ -557,7 +618,7 @@ export function drawHarmonics(
     metricConfigs: Record<string, MetricConfig>,
 ) {
     const cfg = metricConfigs["Harmonics"] || {};
-    const HARMONIC_COLORS = [
+    const COLORS = [
         cfg.harmonicColorH2 || '#ff4444',
         cfg.harmonicColorH3 || '#f97316',
         cfg.harmonicColorH4 || '#eab308',
@@ -566,77 +627,50 @@ export function drawHarmonics(
     const LABELS = ['H₂', 'H₃', 'H₄', 'H₅'];
     const arrays = [harmonics.h2, harmonics.h3, harmonics.h4, harmonics.h5];
 
-    const freqMinVis = 10;
     const freqMaxVis = frequencies.length > 0 ? frequencies[frequencies.length - 1] * 2 : 48000;
-    const logMin = Math.log10(freqMinVis);
-    const logMax = Math.log10(freqMaxVis);
+    const logFreqMin = Math.log10(10);
+    const logFreqMax = Math.log10(freqMaxVis);
+
+    ctx.lineWidth = 1;
+    ctx.setLineDash([]);
 
     for (let h = 0; h < 4; h++) {
         const data = arrays[h];
         const binWidth = freqMaxVis / data.length;
 
-        type Seg = { start: number; end: number };
-        const segs: Seg[] = [];
-        let segStart = -1;
+        let lastX = -1;
+        let lastY = 0;
+        ctx.strokeStyle = COLORS[h];
+        ctx.beginPath();
+        let hasPath = false;
+
         for (let bin = 0; bin < data.length; bin++) {
-            if (data[bin] < -200) {
-                if (segStart >= 0) {
-                    segs.push({ start: segStart, end: bin - 1 });
-                    segStart = -1;
-                }
-            } else if (segStart < 0) {
-                segStart = bin;
+            const val = data[bin];
+            if (val < -200) continue;
+
+            const freq = bin * binWidth;
+            if (freq < 10 || freq > freqMaxVis) continue;
+            const x = (Math.log10(freq) - logFreqMin) / (logFreqMax - logFreqMin) * width;
+            if (x - lastX < 2 && lastX >= 0) continue;
+
+            const y = valToY(val, height, 'Spectrum', metricConfigs, state);
+            if (!hasPath) {
+                ctx.moveTo(x, y);
+                hasPath = true;
+            } else {
+                ctx.lineTo(x, y);
             }
-        }
-        if (segStart >= 0) segs.push({ start: segStart, end: data.length - 1 });
-        if (segs.length === 0) continue;
-
-        ctx.strokeStyle = HARMONIC_COLORS[h];
-        ctx.lineWidth = 1;
-        ctx.setLineDash([]);
-
-        let lastLabeledX = -1;
-
-        for (const seg of segs) {
-            const len = seg.end - seg.start + 1;
-            if (len === 0) continue;
-
-            const step = Math.max(1, Math.floor(len / 500));
-
-            ctx.beginPath();
-            let started = false;
-
-            for (let i = 0; i < len; i += step) {
-                const bin = seg.start + i;
-                const freq = bin * binWidth;
-                if (freq < freqMinVis || freq > freqMaxVis) continue;
-                const x = (Math.log10(freq) - logMin) / (logMax - logMin) * width;
-
-                const val = data[bin];
-                if (val < -200) continue;
-                const y = valToY(val, height, 'Spectrum', metricConfigs, state);
-
-                if (!started) {
-                    ctx.moveTo(x, y);
-                    started = true;
-                } else {
-                    ctx.lineTo(x, y);
-                }
-                lastLabeledX = x;
-            }
-
-            if (started) ctx.stroke();
+            lastX = x;
+            lastY = y;
         }
 
-        if (lastLabeledX >= 0) {
-            const lastBin = segs[segs.length - 1].end;
-            const lastVal = data[lastBin];
-            const lx = Math.min(width - 35, lastLabeledX + 4);
-            const ly = valToY(lastVal, height, 'Spectrum', metricConfigs, state);
+        if (hasPath) {
+            ctx.stroke();
+            const lx = Math.min(width - 35, lastX + 4);
             ctx.font = '10px system-ui, sans-serif';
-            ctx.fillStyle = HARMONIC_COLORS[h];
+            ctx.fillStyle = COLORS[h];
             ctx.textAlign = 'left';
-            ctx.fillText(LABELS[h], lx, ly);
+            ctx.fillText(LABELS[h], lx, lastY);
         }
     }
 }
@@ -649,31 +683,28 @@ export function drawBarChart(
     state: InteractionState,
     metricConfigs: Record<string, MetricConfig>,
 ) {
-    if (octaveBands.frequencies.length === 0 || octaveBands.frequencies.length !== octaveBands.levels.length) return;
+    const len = octaveBands.frequencies.length;
+    if (len === 0 || len !== octaveBands.levels.length) return;
 
     const cfg = metricConfigs["Octave Bands"] || {};
     const colorMode = cfg.octaveColorMode || 'pass_warn_fail';
     const solidColor = metricConfigs["Octave Bands"]?.harmonicColorH2 || '#22c55e';
+    const yZero = valToY(-100, height, 'Spectrum', metricConfigs, state);
 
-    for (let i = 0; i < octaveBands.frequencies.length; i++) {
+    for (let i = 0; i < len; i++) {
         const freq = octaveBands.frequencies[i];
         const level = octaveBands.levels[i];
         if (freq < 10 || freq > 24000) continue;
 
         const x = (freq / 24000) * width;
         const y = valToY(level, height, 'Spectrum', metricConfigs, state);
-        const yZero = valToY(-100, height, 'Spectrum', metricConfigs, state);
 
-        const freqNext = i < octaveBands.frequencies.length - 1 ? octaveBands.frequencies[i + 1] : freq * 1.5;
+        const freqNext = i < len - 1 ? octaveBands.frequencies[i + 1] : freq * 1.5;
         const freqPrev = i > 0 ? octaveBands.frequencies[i - 1] : freq / 1.5;
-        const halfBand = ((freqNext - freqPrev) / 2) / 24000 * width;
-        const barWidth = Math.max(2, halfBand * 0.8);
+        const barWidth = Math.max(2, ((freqNext - freqPrev) / 2) / 24000 * width * 0.8);
 
-        if (colorMode === 'solid') {
-            ctx.fillStyle = solidColor;
-        } else {
-            ctx.fillStyle = level > -18 ? '#22c55e' : level > -30 ? '#eab308' : '#ef4444';
-        }
+        ctx.fillStyle = colorMode === 'solid' ? solidColor
+            : level > -18 ? '#22c55e' : level > -30 ? '#eab308' : '#ef4444';
         ctx.fillRect(x - barWidth / 2, y, barWidth, yZero - y);
     }
 }
@@ -720,14 +751,14 @@ export function drawPhaseDelay(
 
     // Draw with quadratic spline
     if (pointCount > 1) {
-        const path = new Path2D();
-        path.moveTo(_xs[0], _ys[0]);
+        ctx.beginPath();
+        ctx.moveTo(_xs[0], _ys[0]);
         for (let i = 1; i < pointCount - 1; i++) {
             const midX = (_xs[i] + _xs[i + 1]) / 2;
             const midY = (_ys[i] + _ys[i + 1]) / 2;
-            path.quadraticCurveTo(_xs[i], _ys[i], midX, midY);
+            ctx.quadraticCurveTo(_xs[i], _ys[i], midX, midY);
         }
-        path.lineTo(_xs[pointCount - 1], _ys[pointCount - 1]);
-        ctx.stroke(path);
+        ctx.lineTo(_xs[pointCount - 1], _ys[pointCount - 1]);
+        ctx.stroke();
     }
 }

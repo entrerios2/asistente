@@ -316,15 +316,15 @@ export function drawTargetTrace(
 
     // Draw with quadratic spline
     if (points.length > 1) {
-        const path = new Path2D();
-        path.moveTo(points[0].x, points[0].y);
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
         for (let i = 1; i < points.length - 1; i++) {
             const midX = (points[i].x + points[i + 1].x) / 2;
             const midY = (points[i].y + points[i + 1].y) / 2;
-            path.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+            ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
         }
-        path.lineTo(points[points.length - 1].x, points[points.length - 1].y);
-        ctx.stroke(path);
+        ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+        ctx.stroke();
     }
     ctx.setLineDash([]);
     ctx.globalAlpha = 1.0;
@@ -352,14 +352,14 @@ export function drawScope(
 
     // Draw with quadratic spline
     if (points.length > 1) {
-        const path = new Path2D();
-        path.moveTo(points[0].x, points[0].y);
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
         for (let i = 1; i < points.length - 1; i++) {
             const midX = (points[i].x + points[i + 1].x) / 2;
             const midY = (points[i].y + points[i + 1].y) / 2;
-            path.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+            ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
         }
-        path.lineTo(points[points.length - 1].x, points[points.length - 1].y);
-        ctx.stroke(path);
+        ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+        ctx.stroke();
     }
 }

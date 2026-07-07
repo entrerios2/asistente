@@ -46,6 +46,55 @@ let _spectroRowWidth = 0;
 let _maskCanvas: HTMLCanvasElement | null = null;
 let _maskCtx: CanvasRenderingContext2D | null = null;
 
+// Grid cache: offscreen canvas per-quadrant, invalidated on zoom/pan/resize/theme/metric changes
+interface GridCache {
+    canvas: HTMLCanvasElement;
+    ctx: CanvasRenderingContext2D;
+    version: number;
+    dpr: number;
+    logicalW: number;
+    logicalH: number;
+}
+const _gridCaches = new Map<CanvasRenderingContext2D, GridCache>();
+
+function computeGridVersion(p: DrawParams): number {
+    const mainMetric = p.activeMetrics.find(m => m !== "Phase" && m !== "Level" && m !== "Numeric")
+        || p.activeMetrics[0] || "Magnitude";
+    const primaryYConfig = mainMetric ? p.metricConfigs[mainMetric] : null;
+    const key = `${p.width}|${p.height}|${p.interactionState.zoomX}|${p.interactionState.zoomY}|${p.interactionState.offsetX}|${p.interactionState.offsetY}|${p.hasTimeDomainActive}|${p.isDarkMode}|${uiStore.showMinorGrid}|${mainMetric}|${p.activeMetrics.includes("Phase")}|${p.activeMetrics.includes("Spectrum")}|${p.activeMetrics.includes("Spectrogram")}|${p.activeMetrics.includes("Nyquist")}|${primaryYConfig?.invertY ? 1 : 0}|${primaryYConfig?.modeY || ''}|${primaryYConfig?.range ?? ''}|${primaryYConfig?.smoothingPPO ?? ''}`;
+    let hash = 5381;
+    for (let i = 0; i < key.length; i++) {
+        hash = ((hash << 5) + hash) + key.charCodeAt(i);
+        hash |= 0;
+    }
+    return hash;
+}
+
+function ensureGridCache(p: DrawParams): GridCache | null {
+    if (!p.ctx.canvas || p.width <= 0 || p.height <= 0) return null;
+    const dpr = window.devicePixelRatio || 1;
+    const pixelW = Math.round(p.width * dpr);
+    const pixelH = Math.round(p.height * dpr);
+    let cache = _gridCaches.get(p.ctx);
+    if (!cache) {
+        const canvas = document.createElement('canvas');
+        canvas.width = pixelW;
+        canvas.height = pixelH;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+        cache = { canvas, ctx, version: -1, dpr, logicalW: p.width, logicalH: p.height };
+        _gridCaches.set(p.ctx, cache);
+    } else if (cache.logicalW !== p.width || cache.logicalH !== p.height || cache.dpr !== dpr) {
+        cache.canvas.width = pixelW;
+        cache.canvas.height = pixelH;
+        cache.logicalW = p.width;
+        cache.logicalH = p.height;
+        cache.dpr = dpr;
+        cache.version = -1; // force redraw
+    }
+    return cache;
+}
+
 export interface DrawParams {
     ctx: CanvasRenderingContext2D;
     width: number;
@@ -130,8 +179,22 @@ export function drawQuadrant(p: DrawParams): void {
         drawSpectrogram(p.ctx, p.offscreenCanvas, p.width, p.height);
     }
 
-    // 2. Dibujar Grilla de Fondo (encima)
-    drawGrid(p.ctx, p.width, p.height, p.hasTimeDomainActive, p.activeMetrics, p.metricConfigs, p.interactionState, p.isDarkMode, uiStore.showMinorGrid);
+    // 2. Dibujar Grilla de Fondo (encima) — cacheada en offscreen canvas
+    const cache = ensureGridCache(p);
+    if (cache) {
+        const version = computeGridVersion(p);
+        if (version !== cache.version) {
+            const dpr = cache.dpr;
+            cache.ctx.resetTransform();
+            cache.ctx.scale(dpr, dpr);
+            cache.ctx.clearRect(0, 0, p.width, p.height);
+            drawGrid(cache.ctx, p.width, p.height, p.hasTimeDomainActive, p.activeMetrics, p.metricConfigs, p.interactionState, p.isDarkMode, uiStore.showMinorGrid);
+            cache.version = version;
+        }
+        p.ctx.drawImage(cache.canvas, 0, 0, p.width, p.height);
+    } else {
+        drawGrid(p.ctx, p.width, p.height, p.hasTimeDomainActive, p.activeMetrics, p.metricConfigs, p.interactionState, p.isDarkMode, uiStore.showMinorGrid);
+    }
 
     // 2.5. Coherence background overlay — solo si Coherence es métrica activa
     const cohCfg = p.metricConfigs["Coherence"];
@@ -262,17 +325,17 @@ export function drawQuadrant(p: DrawParams): void {
                 if (!p.hasTimeDomainActive && ["Impulse", "Step"].includes(metric)) return;
                 if (metric === "Coherence" && p.metricConfigs["Coherence"]?.showLine === false) return;
 
-                p.ctx.globalAlpha = alpha * p.getMetricAlpha(metric);
-
                 // Harmonics y Octave Bands se renderizan desde datos estructurados, no de multiMetricData
                 if (metric === "Harmonics") {
                     if (layer.harmonicsData && layer.spectralFrequencies) {
+                        p.ctx.globalAlpha = alpha * p.getMetricAlpha(metric);
                         drawHarmonics(p.ctx, p.width, p.height, layer.harmonicsData, layer.spectralFrequencies, p.interactionState, p.metricConfigs);
                     }
                     return;
                 }
                 if (metric === "Octave Bands") {
                     if (layer.octaveBandsData) {
+                        p.ctx.globalAlpha = alpha * p.getMetricAlpha(metric);
                         drawBarChart(p.ctx, p.width, p.height, layer.octaveBandsData, p.interactionState, p.metricConfigs);
                     }
                     return;
@@ -280,6 +343,8 @@ export function drawQuadrant(p: DrawParams): void {
 
                 const bufferToDraw = layer.multiMetricData![metric];
                 if (!bufferToDraw || bufferToDraw.length === 0) return;
+
+                p.ctx.globalAlpha = alpha * p.getMetricAlpha(metric);
 
                 // Aplicar offsetY: crear buffer ajustado si hay offset
                 let adjustedBuffer = bufferToDraw;
